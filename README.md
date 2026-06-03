@@ -48,8 +48,8 @@ script stays runnable on its own.
 `setup.sh` (provision workspaces + users) and `import.sh` (clean + load) are
 thin wrappers over pragmata's native `annotation setup` / `annotation import`.
 The only workspace-specific bits are the password merge in `setup.sh` (see
-[Annotator roster](#annotator-roster)) and `clean_for_import.sh` (stripping
-run_bot.py extras). For anything non-standard, call the pragmata CLI directly.
+[Annotator roster](#annotator-roster)) and `import.sh`'s inline `jq` projection
+(stripping run_bot.py extras). For anything non-standard, call the pragmata CLI directly.
 
 ## Make targets
 
@@ -60,12 +60,41 @@ make help                                 # list targets
 make querygen                             # all specs   (SPECS=a,b to filter)
 make bot                                  # all specs   (SPEC=x to filter)
 make combine                              # all domains (DOMAINS="a b" to filter)
-make import DOMAIN=gesundheit             # one domain
+make setup DOMAIN=gesundheit              # provision one domain (workspaces + users)
+make import DOMAIN=gesundheit             # import one domain
 
 # or the orchestrated pipeline (preview any slice with `make plan ...`)
 make pipeline                             # full pipeline, all domains
 make pipeline TO=bot FILTER=gesundheit    # querygen + bot for one domain
 tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect
+```
+
+## Under the hood (native commands)
+
+Every stage is a thin wrapper. Here's the actual command each runs, per item -
+so you can run any stage by hand or see exactly what's executed:
+
+```bash
+# querygen (per spec) — native pragmata, after merging _runtime + spec
+python scripts/merge_yaml.py querygen_specs/_runtime.yaml querygen_specs/<spec>.yaml > /tmp/m.yaml
+pragmata querygen gen-queries --config-path /tmp/m.yaml --n-queries <N> --run-id <spec>
+
+# bot (per spec) — NOT pragmata; scrapes the publikationsbot /stream endpoint
+python scripts/run_bot.py --spec <spec>
+
+# combine — NOT pragmata; pools runs + intersperses edgecases
+python scripts/build_combined.py [<domain> ...]
+
+# setup (per domain) — native pragmata, after merging the password overlay
+jq --slurpfile s config/users.secrets.json \
+  '$s[0] as $x | map(if $x[.username] then . + {password:$x[.username]} else . end)' \
+  config/users.json > /tmp/u.json
+pragmata annotation setup --users /tmp/u.json --config annotation_configs/<domain>.yaml
+
+# import (per domain) — native pragmata, after stripping run_bot extras
+jq -c '{query,answer,chunks,context_set,language}' \
+  publikationsbot_output/<domain>_combined.jsonl > /tmp/c.jsonl
+pragmata annotation import /tmp/c.jsonl --config annotation_configs/<domain>.yaml
 ```
 
 ## Layout
@@ -82,7 +111,7 @@ scripts/
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
   run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh   (stages)
-  clean_for_import.sh  merge_yaml.py                                    (helpers)
+  merge_yaml.py                                                        (helper)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
@@ -94,7 +123,8 @@ side and `scripts/lib/workspace.py` for the python side.
 
 - **Secrets** live in `.env` (gitignored). Required keys:
   `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup);
-  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen). 
+  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen). For Azure, set `OPENAI_API_KEY`
+  to your Azure key and `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
 - **Operational tunables** live in `config/workspace.env` (queries-per-spec,
   bot concurrency, throttle, disk thresholds, the publikationsbot URL). 
 - **querygen runtime** (model, reasoning effort, batching) lives in
