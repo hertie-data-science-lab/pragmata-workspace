@@ -1,0 +1,21 @@
+# Annotation deployment config for the "Zentrum für Datenmanagement" program.
+dataset_id: ""
+partition_scope: ZFD
+locale: de
+calibration_fraction: 0.2
+calibration_max_records: 30
+constraint_severity:
+  evidence_requires_relevance: warn
+  evidence_excludes_misleading: warn
+  contradiction_requires_unsupported: warn
+  fabricated_requires_cited: warn
+workspaces:
+  Zentrum-fuer-Datenmanagement_retrieval:
+    tasks:
+      retrieval: {}
+  Zentrum-fuer-Datenmanagement_grounding:
+    tasks:
+      grounding: {}
+  Zentrum-fuer-Datenmanagement_generation:
+    tasks:
+      generation: {}

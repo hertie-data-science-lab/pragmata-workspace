@@ -1,0 +1,102 @@
+# pragmata querygen spec — "Center for data management" — RAG-stress / edge-case variant — language: German
+# Topics edge-case-rephrased from v3.0 baseline (currency, exceptions, scope, gaps).
+# Roles/intents/tasks/difficulty/formats: identical to bildung-und-next-generation_edgecase.yaml (domain-agnostic stress probes).
+# All weighted lists sum to 1.0.
+spec:
+  domain_context:
+    domains:
+      - value: "Zentrum für Datenmanagement"
+        weight: 1.0
+    roles:
+      - value: "internal management focused director"
+        weight: 0.12
+      - value: "external engagement and strategy-focused director"
+        weight: 0.13
+      - value: "knowledge-focused experts"
+        weight: 0.16
+      - value: "execution and governance-focused manager"
+        weight: 0.13
+      - value: "public-interest communications staff"
+        weight: 0.12
+      - value: "policy position communications staff"
+        weight: 0.14
+      - value: "content and research-support project assistant"
+        weight: 0.10
+      - value: "administration-focused project assistant"
+        weight: 0.10
+    languages:
+      - value: "german"
+        weight: 1.0
+
+  knowledge_scope:
+    topics:
+      - value: "data access frameworks and use-case exceptions"
+        weight: 0.5
+      - value: "open data uptake patterns and completeness gaps"
+        weight: 0.5
+
+  scenario:
+    intents:
+      - value: "ensure consistency with current communications"
+        weight: 0.11
+      - value: "clarify scope across adjacent subject areas"
+        weight: 0.12
+      - value: "gain an overview with gaps noted"
+        weight: 0.11
+      - value: "identify complete evidence for a decision"
+        weight: 0.15
+      - value: "prepare for a time-sensitive meeting"
+        weight: 0.12
+      - value: "reuse dated content without overclaiming"
+        weight: 0.13
+      - value: "strengthen arguments with cited data"
+        weight: 0.14
+      - value: "support planning with uncertainty and caveats"
+        weight: 0.12
+    tasks:
+      - value: "analyse trends across changing time periods"
+        weight: 0.10
+      - value: "compare recommendations across similar publications"
+        weight: 0.11
+      - value: "extract cited evidence supporting a claim"
+        weight: 0.09
+      - value: "extract cited evidence refuting a claim"
+        weight: 0.09
+      - value: "extract statistics with year and scope"
+        weight: 0.10
+      - value: "identify evidence gaps and limitations"
+        weight: 0.11
+      - value: "identify relevant publications and versions"
+        weight: 0.10
+      - value: "identify current recommendations and caveats"
+        weight: 0.10
+      - value: "map stakeholders, exceptions, and exclusions"
+        weight: 0.08
+      - value: "summarize methods with limits and assumptions"
+        weight: 0.06
+      - value: "summarize findings with source attribution"
+        weight: 0.06
+    difficulty:
+      - value: "easy but scope-sensitive"
+        weight: 0.10
+      - value: "medium multi-condition"
+        weight: 0.30
+      - value: "complex cross-document"
+        weight: 0.35
+      - value: "complex evidence-limited"
+        weight: 0.25
+
+  format_requests:
+    formats:
+      - value: "short answer with uncertainty note"
+        weight: 0.12
+      - value: "detailed report with sources and caveats"
+        weight: 0.18
+      - value: "bullet points with evidence status"
+        weight: 0.14
+      - value: "comparison table with exceptions"
+        weight: 0.18
+      - value: "executive summary with confidence limits"
+        weight: 0.16
+      - value: "timeline with dates and superseded claims"
+        weight: 0.22

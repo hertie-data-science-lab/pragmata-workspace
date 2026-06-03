@@ -1,0 +1,19 @@
+# --- secrets / credentials (never commit) ---
+.env
+config/users.json
+users.json
+
+# --- python virtualenv ---
+.venv/
+
+# --- data, outputs, run state (not version-controlled) ---
+/annotation/
+/publikationsbot_output/
+/querygen/
+/logs/
+*.log
+.run_overnight.lock
+
+# --- python caches ---
+__pycache__/
+*.py[cod]

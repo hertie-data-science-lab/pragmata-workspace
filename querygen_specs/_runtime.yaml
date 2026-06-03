@@ -1,0 +1,22 @@
+# Shared querygen runtime config.
+# Deep-merged with each spec YAML by scripts/_merge_yaml.py before pragmata
+# loads the result via --config-path. Spec values win on conflict.
+# Leading underscore keeps this file out of the querygen_specs/*.yaml glob.
+
+batch_size: 15
+near_duplicate_tolerance: 0.95
+enable_planning_memory: true
+
+llm:
+  model_provider: azure_openai
+  planning_model: gpt-5.4
+  realization_model: gpt-5.4
+  planning_model_kwargs:
+    reasoning_effort: high
+    # Per-call HTTP timeout (httpx). None = hang forever on stalled responses
+    # (observed 2026-05-27: 4h silent hang on a stuck Stage 2 batch). 1200s
+    # is ~5x average per-batch latency, generous for xhigh reasoning.
+    timeout: 1200
+  realization_model_kwargs:
+    reasoning_effort: high
+    timeout: 1200

@@ -1,0 +1,67 @@
+# pragmata querygen spec — "Digitalization and the common good" (Domain Board v3.0) — language: German
+spec:
+  domain_context:
+    domains:
+      - "Digitalisierung und Gemeinwohl"
+    roles:
+      - "internal management focused director"
+      - "external engagement and strategy-focused director"
+      - "knowledge-focused experts"
+      - "execution and governance-focused manager"
+      - "public-interest communications staff"
+      - "policy position communications staff"
+      - "content and research-support project assistant"
+      - "administration-focused project assistant"
+    languages:
+      - "german"
+
+  knowledge_scope:
+    topics:
+      - "digital technologies for the common good"
+      - "democratic resilience in digital spaces"
+      - "countering disinformation"
+      - "governance of algorithms and digital risks"
+      - "international exchange on digital-democracy solutions"
+      - "recognition of innovative sociopolitical solutions"
+
+  scenario:
+    intents:
+      - "ensure consistency across communications"
+      - "explore unfamiliar subject areas"
+      - "gain a quick overview of a topic"
+      - "identify relevant evidence for a decision"
+      - "prepare for a meeting"
+      - "reuse existing content for new outputs"
+      - "strengthen arguments with supporting data"
+      - "support planning and strategic thinking"
+    tasks:
+      - "analyse trends over time"
+      - "compare recommendations across publications"
+      - "extract evidence supporting a claim"
+      - "extract evidence refuting a claim"
+      - "extract key statistics and indicators"
+      - "identify gaps or limitations in the literature"
+      - "identify relevant publications on a topic"
+      - "identify policy recommendations"
+      - "map stakeholders and target groups"
+      - "summarize methodological approaches"
+      - "summarize key findings"
+    difficulty:
+      - "easy"
+      - "medium"
+      - "complex"
+
+  format_requests:
+    formats:
+      - value: "short explanation"
+        weight: 0.26
+      - value: "bullet points"
+        weight: 0.24
+      - value: "executive summary"
+        weight: 0.20
+      - value: "detailed report"
+        weight: 0.16
+      - value: "table"
+        weight: 0.08
+      - value: "timeline"
+        weight: 0.06

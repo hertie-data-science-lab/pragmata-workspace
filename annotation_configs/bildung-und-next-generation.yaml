@@ -1,0 +1,21 @@
+# Annotation deployment config for the "Bildung und Next Generation" program.
+dataset_id: ""
+partition_scope: BIL
+locale: de
+calibration_fraction: 0.2
+calibration_max_records: 30
+constraint_severity:
+  evidence_requires_relevance: warn
+  evidence_excludes_misleading: warn
+  contradiction_requires_unsupported: warn
+  fabricated_requires_cited: warn
+workspaces:
+  Bildung-und-Next-Generation_retrieval:
+    tasks:
+      retrieval: {}
+  Bildung-und-Next-Generation_grounding:
+    tasks:
+      grounding: {}
+  Bildung-und-Next-Generation_generation:
+    tasks:
+      generation: {}

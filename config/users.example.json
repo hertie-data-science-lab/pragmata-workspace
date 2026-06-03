@@ -1,0 +1,6 @@
+[
+  {"username": "firstname.lastname", "role": "owner", "password": "REPLACE_ME"},
+
+  {"username": "annotator.one", "role": "annotator", "password": "REPLACE_ME", "workspaces": ["Domain-Name_retrieval", "Domain-Name_grounding"]},
+  {"username": "annotator.two", "role": "annotator", "password": "REPLACE_ME", "workspaces": ["Domain-Name_generation"]}
+]

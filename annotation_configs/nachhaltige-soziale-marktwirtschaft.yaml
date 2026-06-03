@@ -1,0 +1,21 @@
+# Annotation deployment config for the "Nachhaltige Soziale Marktwirtschaft" program.
+dataset_id: ""
+partition_scope: NSM
+locale: de
+calibration_fraction: 0.2
+calibration_max_records: 30
+constraint_severity:
+  evidence_requires_relevance: warn
+  evidence_excludes_misleading: warn
+  contradiction_requires_unsupported: warn
+  fabricated_requires_cited: warn
+workspaces:
+  Nachhaltige-Soziale-Marktwirtschaft_retrieval:
+    tasks:
+      retrieval: {}
+  Nachhaltige-Soziale-Marktwirtschaft_grounding:
+    tasks:
+      grounding: {}
+  Nachhaltige-Soziale-Marktwirtschaft_generation:
+    tasks:
+      generation: {}

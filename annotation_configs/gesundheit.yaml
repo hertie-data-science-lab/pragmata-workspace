@@ -1,0 +1,21 @@
+# Annotation deployment config for the "Gesundheit" program.
+dataset_id: ""
+partition_scope: GES
+locale: de
+calibration_fraction: 0.2
+calibration_max_records: 30
+constraint_severity:
+  evidence_requires_relevance: warn
+  evidence_excludes_misleading: warn
+  contradiction_requires_unsupported: warn
+  fabricated_requires_cited: warn
+workspaces:
+  Gesundheit_retrieval:
+    tasks:
+      retrieval: {}
+  Gesundheit_grounding:
+    tasks:
+      grounding: {}
+  Gesundheit_generation:
+    tasks:
+      generation: {}
