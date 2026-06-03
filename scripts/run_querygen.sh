@@ -11,10 +11,6 @@
 # via --config-path. Azure is reached natively through pragmata's `openai`
 # provider pointed at the Azure v1 endpoint (set OPENAI_API_KEY + OPENAI_BASE_URL
 # in .env; model_provider: openai in _runtime.yaml) — no wrapper needed.
-#
-# Resume and the per-call timeout are pragmata's job now: it resumes by default
-# on the same run_id, and the HTTP timeout lives in _runtime.yaml. So this
-# script is just merge + loop + N. Continues past per-spec failures.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root

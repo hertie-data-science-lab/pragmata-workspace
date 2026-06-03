@@ -63,7 +63,7 @@ make combine                              # all domains (DOMAINS="a b" to filter
 make setup DOMAIN=gesundheit              # provision one domain (workspaces + users)
 make import DOMAIN=gesundheit             # import one domain
 
-# or the orchestrated pipeline (preview any slice with `make plan ...`)
+# or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
 make pipeline TO=bot FILTER=gesundheit    # querygen + bot for one domain
 tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect

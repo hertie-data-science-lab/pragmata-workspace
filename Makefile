@@ -35,9 +35,6 @@ help: ## Show this help
 pipeline: ## Run a pipeline slice (FROM= TO= ONLY= FILTER= JOBS=); no args = full
 	bash scripts/pipeline.sh $(PIPELINE_ARGS)
 
-plan: ## Preview a pipeline slice without running (same vars as pipeline)
-	bash scripts/pipeline.sh --dry-run $(PIPELINE_ARGS)
-
 querygen: ## Stage: generate synthetic queries (SPECS=a,b to filter)
 	bash scripts/run_querygen.sh "$(SPECS)"
 
@@ -54,6 +51,3 @@ setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
 import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/import.sh "$(DOMAIN)"
-
-probe: ## Single-query bot probe, no JSONL write (SPEC=x optional)
-	$(PY) scripts/run_bot.py --probe $(if $(SPEC),--spec $(SPEC),)
