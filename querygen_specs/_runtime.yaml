@@ -1,5 +1,5 @@
 # Shared querygen runtime config.
-# Deep-merged with each spec YAML by scripts/_merge_yaml.py before pragmata
+# Deep-merged with each spec YAML by scripts/merge_yaml.py before pragmata
 # loads the result via --config-path. Spec values win on conflict.
 # Leading underscore keeps this file out of the querygen_specs/*.yaml glob.
 

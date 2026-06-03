@@ -10,7 +10,7 @@ or outputs (those stay local and gitignored, see [Data & secrets](#data--secrets
 
 ```
 querygen_specs/ + _runtime.yaml
-   │  run_querygen.sh   pragmata querygen (via pragmata_azure.py wrapper)
+   │  run_querygen.sh   pragmata querygen (openai provider -> Azure v1 endpoint)
    ▼
 querygen/runs/<stem>/synthetic_queries.csv        [gitignored data]
    │  run_bot.py        publikationsbot /stream -> import-ready JSONL
@@ -26,7 +26,7 @@ Argilla datasets (3 tasks × {production, calibration})
 
 One orchestrator, `scripts/pipeline.sh`, runs any contiguous slice of the
 stages over an optional domain filter, owning the cross-cutting concerns the
-stage scripts don't: 
+stage scripts don't:
 - stage-aware pre-flight,
 - lockfile,
 - bot parallelism,
@@ -44,10 +44,10 @@ stage scripts don't:
 `<domain>_edgecase`); `--dry-run` prints the plan without running. Each stage
 script stays runnable on its own.
 
-The import stage (`setup_and_import.sh`) is a thin wrapper over
-pragmata's native `annotation setup` / `annotation import` - the only
-workspace-specific step is `clean_for_import.sh` (stripping run_bot.py extras).
-For non-standard imports, call the pragmata CLI directly with the flags you need.
+The import stage (`setup_and_import.sh`) is a thin wrapper over pragmata's
+native `annotation setup` / `annotation import` - the only workspace-specific
+step is `clean_for_import.sh` (stripping run_bot.py extras). For non-standard
+imports, call the pragmata CLI directly with the flags you need.
 
 ## Make targets
 
@@ -72,7 +72,6 @@ tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect
 config/
   workspace.env        operational tunables (committed; see below)
   users.json           Argilla users incl. passwords (gitignored)
-  users.example.json   template
 annotation_configs/    per-domain pragmata annotation configs (committed)
 querygen_specs/         per-domain querygen specs + _runtime.yaml (committed)
 scripts/
@@ -80,7 +79,7 @@ scripts/
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
   run_querygen.sh  run_bot.py  build_combined.py  setup_and_import.sh   (stages)
-  clean_for_import.sh  merge_yaml.py  pragmata_azure.py                 (helpers)
+  clean_for_import.sh  merge_yaml.py                                   (helpers)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
@@ -90,8 +89,9 @@ side and `scripts/lib/workspace.py` for the python side.
 
 ## Configuration
 
-- **Secrets** live in `.env` (Argilla + Azure OpenAI keys). Template:
-  `.env.example`.
+- **Secrets** live in `.env` (gitignored). Required keys:
+  `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup);
+  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen). See [Azure OpenAI](#azure-openai).
 - **Operational tunables** live in `config/workspace.env` (queries-per-spec,
   bot concurrency, throttle, disk thresholds, the publikationsbot URL). Override
   any of them for a single run by exporting first, e.g.
@@ -101,12 +101,19 @@ side and `scripts/lib/workspace.py` for the python side.
 - **The domain list** is derived from `annotation_configs/*.yaml` - add a domain
   by adding its config + spec, nothing else to update.
 
-## The pragmata_azure.py wrapper
+## Azure OpenAI
 
-pragmata's API-key registry does not yet include `azure_openai`.
-`scripts/pragmata_azure.py` monkey-patches that registry at import time, loads
-the workspace env, then dispatches to pragmata's CLI unchanged. Delete it once
-pragmata supports `azure_openai` natively (a one-line registry change upstream).
+querygen reaches Azure through pragmata's standard `openai` provider pointed at
+Azure's OpenAI-compatible **v1 endpoint** - no `azure_openai` provider, no
+`AzureChatOpenAI`, no api-version, no wrapper. Set in `.env`:
+
+```
+OPENAI_API_KEY=<your Azure key>
+OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1/
+```
+
+with `model_provider: openai` in `querygen_specs/_runtime.yaml`. The `model`
+fields there are your Azure deployment names.
 
 ## Data & secrets
 
