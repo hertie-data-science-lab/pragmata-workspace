@@ -122,17 +122,18 @@ preflight() {
   (( DO_PREFLIGHT )) || { log "pre-flight skipped (--no-preflight)"; return; }
   section "pre-flight"
   check_disk
-  if in_slice querygen || in_slice bot; then
-    [[ -f .env ]] || fatal ".env not found at workspace root" 4
-    require_env AZURE_OPENAI_ENDPOINT AZURE_OPENAI_API_KEY OPENAI_API_VERSION
-    az account show >/dev/null 2>&1 || fatal "az not authenticated; run 'az login --use-device-code'" 4
-    log "  az: $(az account show --query user.name -o tsv 2>/dev/null)"
+  if in_slice querygen; then
+    require_env OPENAI_API_KEY OPENAI_BASE_URL
     local sample; sample="$(ls querygen_specs/[!_]*.yaml | head -1)"
     "$PY" scripts/merge_yaml.py querygen_specs/_runtime.yaml "$sample" \
       | "$PY" -c "import sys,yaml; from pragmata.core.settings.querygen_settings import QueryGenRunSettings; QueryGenRunSettings.resolve(config=yaml.safe_load(sys.stdin))" \
         >/dev/null 2>&1 \
       || fatal "_runtime.yaml + $(basename "$sample") failed QueryGenRunSettings validation" 4
     log "  config: querygen schema validates"
+  fi
+  if in_slice bot; then
+    az account show >/dev/null 2>&1 || fatal "az not authenticated; run 'az login --use-device-code'" 4
+    log "  az: $(az account show --query user.name -o tsv 2>/dev/null)"
   fi
   if in_slice import; then
     require_env ARGILLA_API_URL ARGILLA_API_KEY

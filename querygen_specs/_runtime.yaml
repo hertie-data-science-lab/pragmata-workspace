@@ -8,7 +8,7 @@ near_duplicate_tolerance: 0.95
 enable_planning_memory: true
 
 llm:
-  model_provider: azure_openai
+  model_provider: openai
   planning_model: gpt-5.4
   realization_model: gpt-5.4
   planning_model_kwargs:

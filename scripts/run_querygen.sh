@@ -8,7 +8,9 @@
 #
 # Each spec is deep-merged with querygen_specs/_runtime.yaml (shared model /
 # batching / timeout knobs) via scripts/merge_yaml.py, then passed to pragmata
-# via --config-path. Azure is routed through scripts/pragmata_azure.py.
+# via --config-path. Azure is reached natively through pragmata's `openai`
+# provider pointed at the Azure v1 endpoint (set OPENAI_API_KEY + OPENAI_BASE_URL
+# in .env; model_provider: openai in _runtime.yaml) — no wrapper needed.
 #
 # Resume and the per-call timeout are pragmata's job now: it resumes by default
 # on the same run_id, and the HTTP timeout lives in _runtime.yaml. So this
@@ -17,7 +19,6 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root
 
-WRAPPER="scripts/pragmata_azure.py"
 MERGE="scripts/merge_yaml.py"
 RUNTIME="querygen_specs/_runtime.yaml"
 
@@ -49,7 +50,7 @@ for spec in "${specs[@]}"; do
   if ! "$PY" "$MERGE" "$RUNTIME" "$spec" > "$merged"; then
     warn "  failed to merge $RUNTIME + $spec"; failures+=("$stem (merge)"); continue
   fi
-  if ! "$PY" "$WRAPPER" -v querygen gen-queries \
+  if ! "$PRAGMATA" -v querygen gen-queries \
       --config-path "$merged" --n-queries "$n" --run-id "$stem"; then
     warn "  failed: $stem"; failures+=("$stem (gen-queries)")
   fi
