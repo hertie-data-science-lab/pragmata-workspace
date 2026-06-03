@@ -1,0 +1,22 @@
+[
+  {"username": "henry.baker", "role": "owner"},
+  {"username": "sascha.goebel", "role": "owner"},
+  {"username": "drew.dimmery", "role": "owner"},
+  {"username": "luis.ruiz", "role": "owner"},
+  {"username": "jakob.schober", "role": "owner"},
+  {"username": "helena.bakic", "role": "owner"},
+  {"username": "test.senior", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_generation"]},
+  {"username": "test.junior", "role": "annotator", "workspaces": ["Demokratie-und-Zusammenhalt_retrieval", "Demokratie-und-Zusammenhalt_grounding"]},
+  {"username": "felix.sieker", "role": "annotator", "workspaces": ["Digitalisierung-und-Gemeinwohl_generation"]},
+  {"username": "carlo.gress", "role": "annotator", "workspaces": ["Demokratie-und-Zusammenhalt_generation"]},
+  {"username": "stefan.roch", "role": "annotator", "workspaces": ["Demokratie-und-Zusammenhalt_generation"]},
+  {"username": "leander.berner", "role": "annotator", "workspaces": ["Demokratie-und-Zusammenhalt_retrieval", "Demokratie-und-Zusammenhalt_grounding"]},
+  {"username": "regina.blockhaus", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_generation"]},
+  {"username": "nils.mattern", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_retrieval", "Bildung-und-Next-Generation_grounding"]},
+  {"username": "jennifer.ehm", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_retrieval", "Bildung-und-Next-Generation_grounding"]},
+  {"username": "leonard.mandtler", "role": "annotator", "workspaces": ["Europas-Zukunft_retrieval", "Europas-Zukunft_grounding"]},
+  {"username": "nicolas.steinbrink", "role": "annotator", "workspaces": ["Europas-Zukunft_retrieval", "Europas-Zukunft_grounding"]},
+  {"username": "david.baerwald", "role": "annotator", "workspaces": ["Gesundheit_generation"]},
+  {"username": "sarah.muenkel", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_retrieval", "Zentrum-fuer-Nachhaltige-Kommunen_grounding"]},
+  {"username": "sandra.zillinger", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_generation"]}
+]

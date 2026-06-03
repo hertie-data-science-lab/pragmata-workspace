@@ -2,12 +2,12 @@
 # Run `make` or `make help` for the target list. Scripts remain runnable
 # directly; these targets just document the pipeline and wire up args.
 #
-# Pipeline order:  querygen -> bot -> combine -> import
+# Pipeline order:  querygen -> bot -> combine -> setup -> import
 #
 # Orchestrated (scripts/pipeline.sh) — runs a contiguous slice over a filter:
 #   make pipeline                      # full pipeline, all domains
 #   make pipeline TO=bot               # querygen + bot
-#   make pipeline FROM=combine         # combine + import
+#   make pipeline FROM=combine         # combine + setup + import
 #   make pipeline ONLY=bot FILTER=gesundheit JOBS=8
 #   make plan TO=bot                   # preview a slice without running
 #
@@ -15,6 +15,7 @@
 #   make querygen SPECS=demokratie-und-zusammenhalt,europas-zukunft
 #   make bot SPEC=gesundheit
 #   make combine DOMAINS="gesundheit europas-zukunft"
+#   make setup DOMAIN=gesundheit
 #   make import DOMAIN=gesundheit
 
 SHELL := /bin/bash
@@ -26,7 +27,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine import probe
+.PHONY: help pipeline plan querygen bot combine setup import probe
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -46,9 +47,13 @@ bot: ## Stage: run publikationsbot over generated queries (SPEC=x to filter)
 combine: ## Stage: pool runs + intersperse edgecases (DOMAINS="a b" to filter)
 	$(PY) scripts/build_combined.py $(DOMAINS)
 
-import: ## Stage: setup + import one domain (requires DOMAIN=)
+setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
+	@test -n "$(DOMAIN)" || { echo "usage: make setup DOMAIN=<domain>"; exit 2; }
+	bash scripts/setup.sh "$(DOMAIN)"
+
+import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
-	bash scripts/setup_and_import.sh "$(DOMAIN)"
+	bash scripts/import.sh "$(DOMAIN)"
 
 probe: ## Single-query bot probe, no JSONL write (SPEC=x optional)
 	$(PY) scripts/run_bot.py --probe $(if $(SPEC),--spec $(SPEC),)

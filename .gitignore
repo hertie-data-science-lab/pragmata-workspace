@@ -1,7 +1,6 @@
 # --- secrets / credentials (never commit) ---
 .env
-config/users.json
-users.json
+config/users.secrets.json
 
 # --- python virtualenv ---
 .venv/
@@ -12,7 +11,7 @@ users.json
 /querygen/
 /logs/
 *.log
-.run_overnight.lock
+.pipeline.lock
 
 # --- python caches ---
 __pycache__/

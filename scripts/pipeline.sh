@@ -4,7 +4,7 @@
 #
 # Runs a contiguous slice of the annotation pipeline:
 #
-#     querygen -> bot -> combine -> import
+#     querygen -> bot -> combine -> setup -> import
 #
 # over an optional domain filter, owning the cross-cutting concerns the atomic
 # stage scripts don't: stage-aware pre-flight, a lockfile, bot parallelism,
@@ -13,9 +13,10 @@
 # Stage scripts remain runnable on their own; this just orchestrates them.
 #
 #   pipeline.sh                          # full pipeline, all domains
-#   pipeline.sh --to bot                 # querygen + bot         (was run_overnight.sh)
-#   pipeline.sh --from combine           # combine + import       (was chain.sh)
-#   pipeline.sh --only import            # import every domain    (was setup_and_import_all.sh)
+#   pipeline.sh --to bot                 # querygen + bot
+#   pipeline.sh --from combine           # combine + setup + import
+#   pipeline.sh --only setup             # provision Argilla workspaces/users
+#   pipeline.sh --only import            # import every domain
 #   pipeline.sh --only bot --filter gesundheit --jobs 8
 #   pipeline.sh --from querygen --to combine --filter gesundheit,europas-zukunft
 #   pipeline.sh --dry-run                # print the plan and exit
@@ -29,7 +30,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root
 
-STAGES=(querygen bot combine import)
+STAGES=(querygen bot combine setup import)
 
 # --- args ---
 FROM="querygen"; TO="import"; FILTER=""; JOBS="${N_PARALLEL_BOTS:-4}"
@@ -109,10 +110,18 @@ stage_combine() {
   "$PY" scripts/build_combined.py "${doms[@]}"
 }
 
+stage_setup() {
+  local d rc=0
+  while IFS= read -r d; do
+    bash scripts/setup.sh "$d" || { warn "setup failed: $d"; rc=1; }
+  done < <(filter_domains)
+  return "$rc"
+}
+
 stage_import() {
   local d rc=0
   while IFS= read -r d; do
-    bash scripts/setup_and_import.sh "$d" || { warn "import failed: $d"; rc=1; }
+    bash scripts/import.sh "$d" || { warn "import failed: $d"; rc=1; }
   done < <(filter_domains)
   return "$rc"
 }
@@ -135,10 +144,12 @@ preflight() {
     az account show >/dev/null 2>&1 || fatal "az not authenticated; run 'az login --use-device-code'" 4
     log "  az: $(az account show --query user.name -o tsv 2>/dev/null)"
   fi
-  if in_slice import; then
+  if in_slice setup || in_slice import; then
     require_env ARGILLA_API_URL ARGILLA_API_KEY
-    [[ -f config/users.json ]] || fatal "config/users.json missing (copy config/users.example.json)" 4
-    log "  argilla: credentials + users.json present"
+  fi
+  if in_slice setup; then
+    [[ -f config/users.json ]] || fatal "config/users.json (roster) missing" 4
+    log "  argilla: credentials + roster present"
   fi
   log "pre-flight OK"
 }
@@ -153,7 +164,7 @@ if (( DRY_RUN )); then
   log "filter : ${FILTER:-<all>}"
   log "jobs   : $JOBS (bot parallelism)"
   { in_slice querygen || in_slice bot; } && log "specs  : $(filter_specs | paste -sd' ')"
-  { in_slice combine  || in_slice import; } && log "domains: $(filter_domains | paste -sd' ')"
+  { in_slice combine || in_slice setup || in_slice import; } && log "domains: $(filter_domains | paste -sd' ')"
   exit 0
 fi
 
