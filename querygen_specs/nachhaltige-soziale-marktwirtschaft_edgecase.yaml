@@ -1,7 +1,3 @@
-# pragmata querygen spec — "Sustainable social market economy" — RAG-stress / edge-case variant — language: German
-# Topics edge-case-rephrased from v3.0 baseline (currency, exceptions, scope, gaps).
-# Roles/intents/tasks/difficulty/formats: identical to bildung-und-next-generation_edgecase.yaml (domain-agnostic stress probes).
-# All weighted lists sum to 1.0.
 spec:
   domain_context:
     domains:

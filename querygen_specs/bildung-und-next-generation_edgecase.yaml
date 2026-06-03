@@ -1,6 +1,3 @@
-# pragmata querygen spec — "Education and next generation" — RAG-stress / edge-case variant — language: German
-# Designed to probe currency, citation, gaps, exceptions, and scope-sensitivity in retrieval+grounding.
-# All weighted lists sum to 1.0 (validated by pragmata's QueryGenSpec loader).
 spec:
   domain_context:
     domains:
