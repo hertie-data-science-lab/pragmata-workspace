@@ -1,7 +1,7 @@
 # pragmata-workspace
 
 Operational glue for running the [pragmata](https://github.com/) annotation
-pipeline against the BSt (Bertelsmann Stiftung) publikationsbot. This repo holds
+pipeline against the BSt (Bertelsmann Stiftung) publikationsbot. Holds
 **scripts, configs, and specs** that are specific to the BSt operational setup
 and deliberately do not belong in `pragmata` itself. It does **not** hold data
 or outputs (those stay local and gitignored, see [Data & secrets](#data--secrets)).
@@ -26,8 +26,12 @@ Argilla datasets (3 tasks × {production, calibration})
 
 One orchestrator, `scripts/pipeline.sh`, runs any contiguous slice of the
 stages over an optional domain filter, owning the cross-cutting concerns the
-stage scripts don't: stage-aware pre-flight, a lockfile, bot parallelism, tee
-logging, and continue-on-error.
+stage scripts don't: 
+- stage-aware pre-flight,
+- lockfile,
+- bot parallelism,
+- tee logging,
+- continue-on-error.
 
 | Invocation                   | Covers              |
 | ---------------------------- | ------------------- |
@@ -40,19 +44,14 @@ logging, and continue-on-error.
 `<domain>_edgecase`); `--dry-run` prints the plan without running. Each stage
 script stays runnable on its own.
 
-The import stage (`setup_and_import.sh`) is a deliberately thin wrapper over
-pragmata's native `annotation setup` / `annotation import` — the only
+The import stage (`setup_and_import.sh`) is a thin wrapper over
+pragmata's native `annotation setup` / `annotation import` - the only
 workspace-specific step is `clean_for_import.sh` (stripping run_bot.py extras).
 For non-standard imports, call the pragmata CLI directly with the flags you need.
 
-## Quickstart
+## Make targets
 
 ```bash
-# one-time setup
-cp .env.example .env                      # fill in Argilla + Azure OpenAI keys
-cp config/users.example.json config/users.json   # fill in real annotators
-az login --use-device-code                # publikationsbot auth (run_bot.py)
-
 make help                                 # list targets
 
 # single stages
@@ -99,7 +98,7 @@ side and `scripts/lib/workspace.py` for the python side.
   `N_PARALLEL_BOTS=8 make pipeline`, or pass `JOBS=8`.
 - **querygen runtime** (model, reasoning effort, batching) lives in
   `querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
-- **The domain list** is derived from `annotation_configs/*.yaml` — add a domain
+- **The domain list** is derived from `annotation_configs/*.yaml` - add a domain
   by adding its config + spec, nothing else to update.
 
 ## The pragmata_azure.py wrapper
