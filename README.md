@@ -82,7 +82,6 @@ scripts/
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
   run_querygen.sh  run_bot.py  build_combined.py  setup_and_import.sh   (stages)
   clean_for_import.sh  merge_yaml.py  pragmata_azure.py                 (helpers)
-docs/                  design notes / specs
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
