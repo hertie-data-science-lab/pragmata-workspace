@@ -7,15 +7,15 @@
 # It sets WORKSPACE_ROOT, defines logging / guard helpers, exposes the venv
 # binaries (PY, PRAGMATA), and loads tunables (config/workspace.env) then
 # secrets (.env). It does NOT cd anywhere on its own — call `cd_root` when a
-# script needs to run from the workspace root (every orchestrator does; the
-# stdin/stdout filters like clean_for_import deliberately don't).
+# script needs to run from the workspace root (every orchestrator does; a
+# pure stdin/stdout filter would skip it).
 #
 # Conventions (so every script behaves the same way):
 #   - We set `-u` and `pipefail` but NOT `-e`: the orchestrators must continue
 #     past per-item failures, so errors are handled explicitly via `|| fatal`,
 #     `|| { warn ...; continue; }`, or return-code checks.
 #   - All diagnostics (log/warn/fatal/section) go to STDERR, leaving stdout
-#     clean for scripts that emit data (clean_for_import, merge_yaml).
+#     clean for scripts that emit data (e.g. merge_yaml).
 #   - .env / config precedence is "existing environment wins", so per-run
 #     overrides (FOO=bar make ...) are never clobbered by the files.
 
