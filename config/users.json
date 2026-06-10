@@ -18,5 +18,11 @@
   {"username": "nicolas.steinbrink", "role": "annotator", "workspaces": ["Europas-Zukunft_retrieval", "Europas-Zukunft_grounding"]},
   {"username": "david.baerwald", "role": "annotator", "workspaces": ["Gesundheit_generation"]},
   {"username": "sarah.muenkel", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_retrieval", "Zentrum-fuer-Nachhaltige-Kommunen_grounding"]},
-  {"username": "sandra.zillinger", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_generation"]}
+  {"username": "sandra.zillinger", "role": "annotator", "workspaces": ["Bildung-und-Next-Generation_generation"]},
+  {"username": "maximilian.diegel", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_retrieval", "Zentrum-fuer-Nachhaltige-Kommunen_grounding"]},
+  {"username": "anna.baier", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_retrieval", "Zentrum-fuer-Nachhaltige-Kommunen_grounding"]},
+  {"username": "andreas.grau", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_generation"]},
+  {"username": "oliver.haubner", "role": "annotator", "workspaces": ["Zentrum-fuer-Nachhaltige-Kommunen_generation"]},
+  {"username": "anna.heckhausen", "role": "annotator", "workspaces": ["Europas-Zukunft_generation"]},
+  {"username": "joerg.artmann", "role": "annotator", "workspaces": ["Gesundheit_generation"]}
 ]
