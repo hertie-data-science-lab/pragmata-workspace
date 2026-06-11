@@ -107,6 +107,7 @@ pragmata annotation export --config annotation_configs/<domain>.yaml --export-id
 # monitor - NOT a stage; reads live Argilla, appends logs/monitor.jsonl
 scripts/monitor.py                 # all domains
 scripts/monitor.py --domain <d>    # one domain (smoke test)
+scripts/monitor.py --use-export    # reuse export.sh's per-domain CSVs for IAA
 scripts/monitor.py --self-check    # offline cadence-guard check, no network
 ```
 
@@ -114,8 +115,12 @@ scripts/monitor.py --self-check    # offline cadence-guard check, no network
 
 `scripts/monitor.py` reports annotation progress from the live Argilla state,
 rolled up task → domain → total, and appends one JSON line per run to
-`logs/monitor.jsonl`. It runs its own throwaway export to compute IAA; for the
-durable per-domain CSVs use `make export` (`scripts/export.sh`).
+`logs/monitor.jsonl`. Only the IAA metric needs an export (counts and cadence
+come straight from Argilla); by default the monitor runs its own throwaway export
+to feed it. Pass `--use-export` to reuse `scripts/export.sh`'s durable per-domain
+CSVs instead — pair the two in one nightly job (`export.sh && monitor.py
+--use-export`) to export once rather than twice. IAA degrades gracefully if the
+export is missing.
 
 Three metrics (production vs calibration where it applies):
 1. **Counts** — *submitted responses* (work units), *completed records* (met
@@ -132,9 +137,10 @@ NB:
   per-response submission times; the monitor reads each *response's* own `inserted_at` (nested in
   `responses[]`) + `user_id` - not the record-level `inserted_at` (the import
   time).
-- *Daily cron*
+- *Daily cron* — export once, then monitor reuses it (`&&` so a failed export
+  stops the monitor rather than feeding it stale CSVs):
   ```cron
-  0 2 * * * cd /home/azureuser/pragmata-workspace && .venv/bin/python scripts/monitor.py >> logs/monitor.log 2>&1
+  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/export.sh && .venv/bin/python scripts/monitor.py --use-export >> logs/monitor.log 2>&1
   ```
 
 ## Layout
