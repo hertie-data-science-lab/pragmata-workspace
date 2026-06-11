@@ -60,8 +60,9 @@ make help                                 # list targets
 make querygen                             # all specs   (SPECS=a,b to filter)
 make bot                                  # all specs   (SPEC=x to filter)
 make combine                              # all domains (DOMAINS="a b" to filter)
-make setup DOMAIN=gesundheit              # provision one domain (workspaces + users)
-make import DOMAIN=gesundheit             # import one domain
+make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
+make import                               # import one domain (DOMAIN= to filter)
+make monitor                              # annotation progress report (DOMAIN= to filter)
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
@@ -97,6 +98,39 @@ jq -c '{query,answer,chunks,context_set,language}' \
 pragmata annotation import /tmp/c.jsonl --config annotation_configs/<domain>.yaml
 ```
 
+```bash
+# monitor - NOT a stage; reads live Argilla, appends logs/monitor.jsonl
+scripts/monitor.py                 # all domains
+scripts/monitor.py --domain <d>    # one domain (smoke test)
+scripts/monitor.py --self-check    # offline cadence-guard check, no network
+```
+
+## Monitoring
+
+`scripts/monitor.py` reports annotation progress from the live Argilla state,
+rolled up task → domain → total, and appends one JSON line per run to
+`logs/monitor.jsonl`
+
+Three metrics (production vs calibration where it applies):
+1. **Counts** — *submitted responses* (work units), *completed records* (met
+   `min_submitted`), and *total records*. Record counts from Argilla
+   `dataset.progress()`; response counts from the REST endpoint.
+2. **Calibration agreement** — per-label Krippendorff α + an n_items-weighted
+   mean, from pragmata's IAA over the calibration overlap.
+3. **Cadence** — median seconds between consecutive submissions, **per-annotator**
+   (true individual pace) and **global** (team throughput). A **session guard**
+   drops gaps over `MONITOR_SESSION_GAP_MIN` (default 30 min) as pauses, listing
+   each under `excluded_gaps` so nothing vanishes silently.
+NB: 
+- *Timestamps come from the REST endpoint.* Whereas Argilla SDK and export CSVs drop
+  per-response submission times; the monitor reads each *response's* own `inserted_at` (nested in
+  `responses[]`) + `user_id` - not the record-level `inserted_at` (the import
+  time).
+- *Daily cron*
+  ```cron
+  0 2 * * * cd /home/azureuser/pragmata-workspace && .venv/bin/python scripts/monitor.py >> logs/monitor.log 2>&1
+  ```
+
 ## Layout
 
 ```
@@ -111,6 +145,7 @@ scripts/
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
   run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh   (stages)
+  monitor.py           annotation monitor: progress, IAA, cadence (standalone)
   merge_yaml.py                                                        (helper)
 ```
 
