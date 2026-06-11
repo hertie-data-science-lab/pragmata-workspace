@@ -60,8 +60,8 @@ make help                                 # list targets
 make querygen                             # all specs   (SPECS=a,b to filter)
 make bot                                  # all specs   (SPEC=x to filter)
 make combine                              # all domains (DOMAINS="a b" to filter)
-make setup DOMAIN=gesundheit              # provision one domain (workspaces + users)
-make import DOMAIN=gesundheit             # import one domain
+make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
+make import                               # import one domain (DOMAIN= to filter)
 make monitor                              # annotation progress report (DOMAIN= to filter)
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
@@ -96,8 +96,10 @@ pragmata annotation setup --users /tmp/u.json --config annotation_configs/<domai
 jq -c '{query,answer,chunks,context_set,language}' \
   publikationsbot_output/<domain>_combined.jsonl > /tmp/c.jsonl
 pragmata annotation import /tmp/c.jsonl --config annotation_configs/<domain>.yaml
+```
 
-# monitor — NOT a stage; reads live Argilla, appends logs/monitor.jsonl
+```bash
+# monitor - NOT a stage; reads live Argilla, appends logs/monitor.jsonl
 scripts/monitor.py                 # all domains
 scripts/monitor.py --domain <d>    # one domain (smoke test)
 scripts/monitor.py --self-check    # offline cadence-guard check, no network
@@ -107,8 +109,7 @@ scripts/monitor.py --self-check    # offline cadence-guard check, no network
 
 `scripts/monitor.py` reports annotation progress from the live Argilla state,
 rolled up task → domain → total, and appends one JSON line per run to
-`logs/monitor.jsonl` (`make monitor`, or run it directly — see
-[Under the hood](#under-the-hood-native-commands)).
+`logs/monitor.jsonl`
 
 Three metrics (production vs calibration where it applies):
 1. **Counts** — *submitted responses* (work units), *completed records* (met
