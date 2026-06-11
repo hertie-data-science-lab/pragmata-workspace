@@ -62,6 +62,7 @@ make bot                                  # all specs   (SPEC=x to filter)
 make combine                              # all domains (DOMAINS="a b" to filter)
 make setup DOMAIN=gesundheit              # provision one domain (workspaces + users)
 make import DOMAIN=gesundheit             # import one domain
+make monitor                              # annotation progress report (DOMAIN= to filter)
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
@@ -95,6 +96,47 @@ pragmata annotation setup --users /tmp/u.json --config annotation_configs/<domai
 jq -c '{query,answer,chunks,context_set,language}' \
   publikationsbot_output/<domain>_combined.jsonl > /tmp/c.jsonl
 pragmata annotation import /tmp/c.jsonl --config annotation_configs/<domain>.yaml
+```
+
+## Monitoring
+
+`scripts/monitor.py` reports annotation progress from the live Argilla state,
+rolled up **task → domain → total**, and appends one JSON line per run to
+`logs/monitor.jsonl` (trend history) while printing a summary to stdout:
+
+```bash
+make monitor                  # all domains
+make monitor DOMAIN=gesundheit
+scripts/monitor.py --self-check   # cadence-guard unit check, no network
+```
+
+Three metrics (production vs calibration where it applies):
+1. **Counts** — *submitted responses* (work units), *completed records* (met
+   `min_submitted`), and *total records*. Record counts from Argilla
+   `dataset.progress()`; response counts from the REST endpoint.
+2. **Calibration agreement** — per-label Krippendorff α + an n_items-weighted
+   mean, from pragmata's IAA over the calibration overlap.
+3. **Cadence** — median seconds between consecutive submissions, **per-annotator**
+   (true individual pace) and **global** (team throughput). A **session guard**
+   drops gaps over `MONITOR_SESSION_GAP_MIN` (default 30 min) as pauses, listing
+   each under `excluded_gaps` so nothing vanishes silently.
+
+Two things to know:
+- **Timestamps come from the REST endpoint.** The SDK and export CSVs drop
+  per-response submission times, and record `updated_at` is bumped by import/bulk
+  ops. The monitor reads each *response's* own `inserted_at` (nested in
+  `responses[]`) + `user_id` — not the record-level `inserted_at` (the import
+  time, days earlier). That equals the submit time bar the rare draft-then-submit
+  case, which is what makes per-annotator cadence real.
+- **Runs against the demo-branch pragmata.** It imports `pragmata.api` directly
+  (typed `IaaReport`/`ExportResult`) rather than shelling out like the other
+  stages, for its in-process analytics.
+
+Daily cron (cron loads no profile, so `cd` first; the script self-loads
+`config/workspace.env`, including `PRAGMATA_SRC`):
+
+```cron
+0 2 * * * cd /home/azureuser/pragmata-workspace && .venv/bin/python scripts/monitor.py >> logs/monitor.log 2>&1
 ```
 
 ## Layout
