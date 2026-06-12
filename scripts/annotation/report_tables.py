@@ -69,11 +69,6 @@ def _breakdown(counts: dict) -> str:
     return ", ".join(f"{k}×{v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
 
 
-def _bucket_frac(st) -> float | None:
-    n = (st or {}).get("n_panels", 0)
-    return st["n_complete"] / n if n else None
-
-
 def _pctc(done, total) -> str:
     """Completion percentage (completed / total records)."""
     return f"{100 * done / total:.0f}%" if total else "-"
@@ -228,23 +223,20 @@ def constraint_violations(domains: dict, total: dict) -> str:
 
 
 def completeness(domains: dict, total: dict) -> str:
-    """Retrieval panel completeness: fraction of K-chunk panels fully annotated, by K bucket."""
+    """Retrieval panel completeness: fraction of K-chunk panels fully annotated."""
     rows = []
 
     def emit(name, c):
         if not c:
             return
-        bk = c.get("by_k_bucket") or {}
-        rows.append([name, _int(c["n_panels"]), _int(c["n_complete"]), _pct(c["fraction_complete"]),
-                     *[_pct(_bucket_frac(bk.get(k))) for k in ("k_lt_5", "k_eq_5", "k_gt_5")]])
+        rows.append([name, _int(c["n_panels"]), _int(c["n_complete"]), _pct(c["fraction_complete"])])
 
     for name, v in sorted(domains.items()):
         emit(name, v.get("completeness"))
     emit("**TOTAL**", total.get("completeness"))
     if not rows:
         return ""
-    return _table(["Domain", "Panels", "Complete", "Frac", "K<5", "K=5", "K>5"],
-                  ["l", "r", "r", "r", "r", "r", "r"], rows)
+    return _table(["Domain", "Panels", "Complete", "Frac"], ["l", "r", "r", "r"], rows)
 
 
 def annotator_bias(domains: dict, top_n: int = 15) -> str:
@@ -319,10 +311,10 @@ def task_pace_collapsed(domains: dict) -> str:
             continue
         total_n = sum(n for _, n in pairs)
         wmean = sum(m * n for m, n in pairs) / total_n
-        rows.append((wmean, [task, _f(wmean, 1), str(len(pairs)), str(total_n)]))
+        rows.append((wmean, [task, _f(wmean, 1), str(len(pairs))]))
     rows.sort(key=lambda r: r[0])
-    return _table(["Task", "Weighted mean gap (s)", "Annotator-sessions", "Total gaps"],
-                  ["l", "r", "r", "r"], [r[1] for r in rows])
+    return _table(["Task", "Weighted mean gap (s)", "Annotator-sessions"],
+                  ["l", "r", "r"], [r[1] for r in rows])
 
 
 def task_x_domain_pace(domains: dict) -> str:
@@ -364,7 +356,7 @@ def render(snap: dict) -> str:
     parts += [
         "## Per-annotator activity & timing\n\n" + per_annotator_timing(total),
         "### Domain-level pace\n\n" + domain_pace(domains),
-        "### Task-level pace (collapsed across domains)\n\n" + task_pace_collapsed(domains),
+        "### Task-level pace\n\n" + task_pace_collapsed(domains),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
     ]
     return "\n\n".join(parts) + "\n"
