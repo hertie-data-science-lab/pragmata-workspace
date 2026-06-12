@@ -63,6 +63,7 @@ make combine                              # all domains (DOMAINS="a b" to filter
 make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
 make import                               # import one domain (DOMAIN= to filter)
 make monitor                              # annotation progress report (DOMAIN= to filter)
+make backup                               # status-preserving backup of all Argilla datasets
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
@@ -130,6 +131,25 @@ NB:
   ```cron
   0 2 * * * cd /home/azureuser/pragmata-workspace && .venv/bin/python scripts/monitor.py >> logs/monitor.log 2>&1
   ```
+
+## Backup & restore
+
+`scripts/argilla_backup.py` takes a status-preserving snapshot of **every**
+Argilla dataset - records, metadata, suggestions, and responses *with their
+`submitted`/`draft`/`discarded` status* (the SDK's own `to_disk` drops response
+status, so a naive dump can't faithfully restore annotations). Read-only against
+the server; writes a timestamped tree under `argilla_backup/<UTC-ts>/` plus a
+`manifest.json`.
+
+```bash
+make backup                                  # dump all datasets
+make backup ARGS="verify argilla_backup/<ts>"  # prove the dump restores faithfully
+```
+
+`verify` recreates a representative subset in a throwaway workspace, asserts the
+restored record + submitted-response counts match the manifest, then tears the
+throwaway down (guarded; asserts the global dataset count returns to baseline).
+Take a backup before any bulk or in-place edit of live annotation datasets.
 
 ## Layout
 
