@@ -338,8 +338,7 @@ def task_x_domain_pace(domains: dict) -> str:
 def render(snap: dict) -> str:
     total, domains = snap["total"], snap["domains"]
     parts = [
-        f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}** · "
-        f"session gap threshold {snap['session_gap_threshold_s'] // 60} min",
+        f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         "## Overall counts\n\n" + overall_counts(total),
         "## Progress",
         "### By domain\n\n" + progress_by_domain(domains),
@@ -364,6 +363,8 @@ def render(snap: dict) -> str:
         "### Domain-level pace\n\n" + domain_pace(domains),
         "### Task-level pace\n\n" + task_pace(domains, total),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
+        f"---\n\n_Session gap threshold: {snap['session_gap_threshold_s'] // 60} min "
+        "(longer gaps are treated as session breaks and excluded from cadence medians)._",
     ]
     return "\n\n".join(parts) + "\n"
 
