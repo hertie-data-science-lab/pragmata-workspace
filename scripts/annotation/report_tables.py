@@ -57,12 +57,6 @@ def _prev(lv) -> str:
     return f"{lv['prevalence'] * 100:.0f}%"
 
 
-def _flag(lv) -> str:
-    if not lv:
-        return ""
-    return "degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
-
-
 def _breakdown(counts: dict) -> str:
     if not counts:
         return "-"
@@ -154,24 +148,23 @@ def iaa_per_label(domains: dict) -> str:
             if n_items == 0:  # no overlapping items → no agreement to report
                 continue
             lab = (tv.get("labels") or {}).get("per_label") or {}
-            rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]),
-                     _prev(lab.get(lbl)), _flag(lab.get(lbl))]
+            rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]), _prev(lab.get(lbl))]
                     for lbl, lv in per_label.items()]
-            tbl = _table(["Label", "α", "% agreement", "Prev.", "Flag"],
-                         ["l", "r", "r", "r", "l"], rows)
+            tbl = _table(["Label", "α", "% agreement", "Prev."],
+                         ["l", "r", "r", "r"], rows)
             blocks.append(f"#### {name} / {task} (n = {n_items} items, {n_ann} annotators)\n\n{tbl}")
     return "\n\n".join(blocks)
 
 
 def label_distribution(domains: dict, total: dict) -> str:
-    """Class balance per (scope, task, label): prevalence + degeneracy flag."""
+    """Class balance per (scope, task, label): prevalence (fraction true) over n."""
     rows = []
 
     def emit(scope, task, per_label):
         for lbl, lv in per_label.items():
             if lv["n"] == 0:  # label with no submitted data yet — skip the empty row
                 continue
-            rows.append([scope, task, lbl, _int(lv["n"]), _prev(lv), _flag(lv)])
+            rows.append([scope, task, lbl, _int(lv["n"]), _prev(lv)])
 
     for name, v in sorted(domains.items()):
         for task in TASK_ORDER:
@@ -184,8 +177,8 @@ def label_distribution(domains: dict, total: dict) -> str:
             emit("**TOTAL**", task, pl)
     if not rows:
         return ""
-    return _table(["Scope", "Task", "Label", "n", "Prev.", "Flag"],
-                  ["l", "l", "l", "r", "r", "l"], rows)
+    return _table(["Scope", "Task", "Label", "n", "Prev."],
+                  ["l", "l", "l", "r", "r"], rows)
 
 
 def discards(domains: dict, total: dict) -> str:
