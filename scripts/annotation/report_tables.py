@@ -243,8 +243,9 @@ def completeness(domains: dict, total: dict) -> str:
 
 
 def annotator_bias(domains: dict, top_n: int = 15) -> str:
-    """Largest per-annotator deviations from the pool prevalence (≥2 annotators per task)."""
-    devs = []
+    """Per-annotator deviations from the pool prevalence (≥2 annotators per task), grouped
+    by annotator (most-deviating annotator first, biggest deviations first within each)."""
+    by_uuid: dict[str, list[tuple[float, list[str]]]] = {}
     for name, v in sorted(domains.items()):
         for task in TASK_ORDER:
             lab = (v.get("tasks", {}).get(task) or {}).get("labels")
@@ -256,13 +257,15 @@ def annotator_bias(domains: dict, top_n: int = 15) -> str:
                     d = lv.get("delta_vs_pool")
                     if d is None:
                         continue
-                    devs.append((abs(d), [_uid(uuid), name, task, lbl,
-                                          _pct(lv["prevalence"]), f"{d * 100:+.0f}", _int(lv["n"])]))
-    if not devs:
+                    by_uuid.setdefault(uuid, []).append((abs(d), [_uid(uuid), name, task, lbl,
+                        _pct(lv["prevalence"]), f"{d * 100:+.0f}", _int(lv["n"])]))
+    if not by_uuid:
         return ""
-    devs.sort(key=lambda r: -r[0])
+    rows = []
+    for uuid, lst in sorted(by_uuid.items(), key=lambda kv: -max(ad for ad, _ in kv[1])):
+        rows += [row for _, row in sorted(lst, key=lambda x: -x[0])]
     return _table(["Annotator", "Domain", "Task", "Label", "Prev.", "Δ pp", "n"],
-                  ["l", "l", "l", "l", "r", "r", "r"], [r[1] for r in devs[:top_n]])
+                  ["l", "l", "l", "l", "r", "r", "r"], rows[:top_n])
 
 
 def per_annotator_timing(total: dict) -> str:
