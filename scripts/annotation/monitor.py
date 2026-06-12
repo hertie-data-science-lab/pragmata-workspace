@@ -240,13 +240,12 @@ def label_summary(n_true: int, n: int) -> dict:
     """
     if n == 0:
         return {"n": 0, "n_true": 0, "prevalence": None,
-                "degenerate": False, "minority_frac": None, "near_degenerate": False}
+                "degenerate": False, "near_degenerate": False}
     p = n_true / n
     minority = min(p, 1 - p)
     degenerate = n_true == 0 or n_true == n
     return {
         "n": n, "n_true": n_true, "prevalence": round(p, 4), "degenerate": degenerate,
-        "minority_frac": round(minority, 4),
         "near_degenerate": (not degenerate) and minority < NEAR_DEGENERATE_FRAC,
     }
 
