@@ -18,8 +18,10 @@ and emits three progress metrics, rolled up task -> domain -> total:
      session-guarded (see below).
 
 Each run appends one JSON object to logs/monitor.jsonl (for trend-watching) and
-prints a human-readable summary to stdout (which cron can mail). Diagnostics go
-to stderr. A domain that fails is recorded and skipped; the run continues.
+prints a one-line status to stdout. The human-readable stats tables are NOT
+printed here — they are rendered to logs/analysis/<date>.md by report_tables.py
+(pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
+fails is recorded and skipped; the run continues.
 
 Timestamps: per-response submission times come from the Argilla v2 REST records
 endpoint (``response.inserted_at`` + ``user_id``). The SDK and the export CSVs
@@ -37,9 +39,12 @@ agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
 ``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
 
 Usage:
-  scripts/monitor.py                 # run all domains, append jsonl + print summary
+  scripts/monitor.py                 # run all domains, append jsonl + one-line status
   scripts/monitor.py --domain X      # one domain only (smoke test)
-  scripts/monitor.py --no-jsonl      # print summary, don't append history
+  scripts/monitor.py --summary       # also print the human-readable table to stdout
+  scripts/monitor.py --no-jsonl      # don't append history
+  scripts/monitor.py --use-export    # reuse scripts/export.sh's durable per-domain
+                                     #   export for IAA instead of a throwaway one
   scripts/monitor.py --self-check    # run the cadence unit self-check and exit
 """
 from __future__ import annotations
@@ -357,12 +362,18 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     return out
 
 
-def process_domain(domain: str, client, http: "httpx.Client") -> dict:
+def process_domain(domain: str, client, http: "httpx.Client", *, use_export: bool = False) -> dict:
     """Assemble one domain's metrics: counts (progress + REST), agreement (IAA),
     cadence (REST per-response timestamps).
 
     Raises on a hard fetch failure. IAA failure is caught locally so counts/timing
     still surface.
+
+    Only IAA reads an export; counts and cadence come straight from Argilla. By
+    default we run a throwaway export (``export_id="monitor"``) just to feed IAA.
+    With ``use_export`` we instead read the durable per-domain export
+    (``export_id=<domain>``, e.g. from scripts/export.sh) and skip re-exporting —
+    if that export is missing, IAA degrades like any other IAA failure.
     """
     base_dir = str(ws.ROOT)
     cfg_path, clean_cfg = sanitized_config(domain)
@@ -375,14 +386,17 @@ def process_domain(domain: str, client, http: "httpx.Client") -> dict:
         progress = fetch_progress(client, settings)
         responses = fetch_responses(client, http, settings)
 
-        # Export must run so compute_iaa has CSVs to read (we don't read them here).
-        export_annotations(config_path=cfg, export_id=EXPORT_ID, base_dir=base_dir,
-                           include_discarded=False)
+        # IAA reads CSVs, not Argilla. Default: write our own throwaway export.
+        # With use_export: reuse export.sh's durable per-domain CSVs, no re-export.
+        export_id = domain if use_export else EXPORT_ID
+        if not use_export:
+            export_annotations(config_path=cfg, export_id=export_id, base_dir=base_dir,
+                               include_discarded=False)
 
         agr_by_task: dict = {}
         iaa_error: str | None = None
         try:
-            report = compute_iaa(EXPORT_ID, config_path=cfg, base_dir=base_dir,
+            report = compute_iaa(export_id, config_path=cfg, base_dir=base_dir,
                                  tasks=TASKS, n_resamples=IAA_RESAMPLES)
             agr_by_task = {ta.task: ta for ta in report.tasks}
         except Exception as e:  # IAA-only failure shouldn't sink the counts
@@ -426,7 +440,7 @@ def process_domain(domain: str, client, http: "httpx.Client") -> dict:
     return block
 
 
-def run(domains: list[str]) -> dict:
+def run(domains: list[str], *, use_export: bool = False) -> dict:
     url = os.environ.get("ARGILLA_API_URL")
     key = os.environ["ARGILLA_API_KEY"]
     client = resolve_argilla_client(url, key)
@@ -442,7 +456,7 @@ def run(domains: list[str]) -> dict:
         for domain in domains:
             log(f"=== {domain} ===")
             try:
-                block = process_domain(domain, client, http)
+                block = process_domain(domain, client, http, use_export=use_export)
             except Exception as e:
                 domains_out[domain] = {"error": f"{type(e).__name__}: {e}"}
                 log(f"  ! {domain}: {type(e).__name__}: {e}")
@@ -551,7 +565,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
     ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/monitor.jsonl.")
+    ap.add_argument("--use-export", action="store_true",
+                    help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
+                         "scripts/export.sh) for IAA instead of running a throwaway export. "
+                         "IAA degrades gracefully if the export is missing.")
     ap.add_argument("--self-check", action="store_true", help="Run the cadence self-check and exit.")
+    ap.add_argument("--summary", action="store_true",
+                    help="Also print the human-readable table to stdout (off by default; "
+                         "the analysis tables live in logs/analysis/<date>.md via report_tables.py).")
     args = ap.parse_args()
 
     if args.self_check:
@@ -564,10 +585,16 @@ def main() -> int:
         log("No domains found under annotation_configs/")
         return 1
 
-    result = run(domains)
+    result = run(domains, use_export=args.use_export)
     if not args.no_jsonl:
         append_jsonl(result)
-    print_summary(result)
+    if args.summary:
+        print_summary(result)
+    else:
+        c = result["total"]["count"]
+        print(f"monitor: {result['run_at']} — {len(result['domains'])} domains, "
+              f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
+              f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}")
     return 0
 
 
