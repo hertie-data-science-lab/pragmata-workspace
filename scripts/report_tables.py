@@ -47,6 +47,32 @@ def _f(x, nd=2) -> str:
     return f"{x:.{nd}f}" if x is not None else "-"
 
 
+def _prev(lv) -> str:
+    """Prevalence as a percentage with its Wilson 95% CI, from a label_summary dict."""
+    if not lv or lv.get("prevalence") is None:
+        return "-"
+    s = f"{lv['prevalence'] * 100:.0f}%"
+    ci = lv.get("ci95")
+    return s + (f" [{ci[0] * 100:.0f}–{ci[1] * 100:.0f}]" if ci else "")
+
+
+def _flag(lv) -> str:
+    if not lv:
+        return ""
+    return "⚠ degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
+
+
+def _breakdown(counts: dict) -> str:
+    if not counts:
+        return "-"
+    return ", ".join(f"{k}×{v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
+def _bucket_frac(st) -> float | None:
+    n = (st or {}).get("n_panels", 0)
+    return st["n_complete"] / n if n else None
+
+
 def _table(headers: list[str], aligns: list[str], rows: list[list[str]]) -> str:
     sep = {"l": "---", "r": "---:", "c": ":-:"}
     out = ["| " + " | ".join(headers) + " |",
@@ -119,11 +145,116 @@ def iaa_per_label(domains: dict) -> str:
             n_items, n_ann = first["n_items"], first["n_annotators"]
             if n_items == 0:  # no overlapping items → no agreement to report
                 continue
-            rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"])]
+            lab = (tv.get("labels") or {}).get("per_label") or {}
+            rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]),
+                     _prev(lab.get(lbl)), _flag(lab.get(lbl))]
                     for lbl, lv in per_label.items()]
-            tbl = _table(["Label", "α", "% agreement"], ["l", "r", "r"], rows)
+            tbl = _table(["Label", "α", "% agreement", "Prevalence", ""],
+                         ["l", "r", "r", "r", "l"], rows)
             blocks.append(f"#### {name} / {task} (n = {n_items} items, {n_ann} annotators)\n\n{tbl}")
     return "\n\n".join(blocks)
+
+
+def label_distribution(domains: dict, total: dict) -> str:
+    """Class balance per (scope, task, label): prevalence + Wilson CI + degeneracy flag."""
+    rows = []
+
+    def emit(scope, task, per_label):
+        for lbl, lv in per_label.items():
+            if lv["n"] == 0:  # label with no submitted data yet — skip the empty row
+                continue
+            rows.append([scope, task, lbl, _int(lv["n"]), _prev(lv), _flag(lv)])
+
+    for name, v in sorted(domains.items()):
+        for task in TASK_ORDER:
+            lab = (v.get("tasks", {}).get(task) or {}).get("labels")
+            if lab and lab.get("per_label"):
+                emit(name, task, lab["per_label"])
+    for task in TASK_ORDER:
+        pl = (total.get("labels") or {}).get(task)
+        if pl:
+            emit("**TOTAL**", task, pl)
+    if not rows:
+        return ""
+    return _table(["Scope", "Task", "Label", "n", "Prevalence (95% CI)", "Flag"],
+                  ["l", "l", "l", "r", "r", "l"], rows)
+
+
+def discards(domains: dict, total: dict) -> str:
+    rows = []
+    items = sorted(domains.items(), key=lambda kv: -((kv[1].get("discards") or {}).get("n_discarded") or 0))
+    for name, v in items:
+        d = v.get("discards")
+        if not d:
+            continue
+        rows.append([name, _int(d["n_submitted"]), _int(d["n_discarded"]),
+                     _pct(d["discard_rate"]), _breakdown(d["by_reason"])])
+    d = total.get("discards")
+    if d:
+        rows.append(["**TOTAL**", f"**{_int(d['n_submitted'])}**", f"**{_int(d['n_discarded'])}**",
+                     f"**{_pct(d['discard_rate'])}**", _breakdown(d["by_reason"])])
+    if not rows:
+        return ""
+    return _table(["Domain", "Submitted", "Discarded", "Rate", "Reasons"],
+                  ["l", "r", "r", "r", "l"], rows)
+
+
+def constraint_violations(domains: dict, total: dict) -> str:
+    rows = []
+    for name, v in sorted(domains.items()):
+        c = v.get("constraints")
+        if not c:
+            continue
+        rows.append([name, _int(c["total"]), _breakdown(c.get("by_constraint") or {})])
+    c = total.get("constraints")
+    if c:
+        rows.append(["**TOTAL**", f"**{_int(c['total'])}**", _breakdown(c.get("by_constraint") or {})])
+    if not rows:
+        return ""
+    return _table(["Domain", "Violations", "By constraint"], ["l", "r", "l"], rows)
+
+
+def completeness(domains: dict, total: dict) -> str:
+    """Retrieval panel completeness: fraction of K-chunk panels fully annotated, by K bucket."""
+    rows = []
+
+    def emit(name, c):
+        if not c:
+            return
+        bk = c.get("by_k_bucket") or {}
+        rows.append([name, _int(c["n_panels"]), _int(c["n_complete"]), _pct(c["fraction_complete"]),
+                     *[_pct(_bucket_frac(bk.get(k))) for k in ("k_lt_5", "k_eq_5", "k_gt_5")]])
+
+    for name, v in sorted(domains.items()):
+        emit(name, v.get("completeness"))
+    emit("**TOTAL**", total.get("completeness"))
+    if not rows:
+        return ""
+    return _table(["Domain", "Panels", "Complete", "Frac", "K<5", "K=5", "K>5"],
+                  ["l", "r", "r", "r", "r", "r", "r"], rows)
+
+
+def annotator_bias(domains: dict, top_n: int = 15) -> str:
+    """Largest per-annotator deviations from the pool prevalence (≥2 annotators per task)."""
+    devs = []
+    for name, v in sorted(domains.items()):
+        for task in TASK_ORDER:
+            lab = (v.get("tasks", {}).get(task) or {}).get("labels")
+            by_ann = (lab or {}).get("by_annotator") or {}
+            if len(by_ann) < 2:
+                continue
+            for uuid, labs in by_ann.items():
+                for lbl, lv in labs.items():
+                    d = lv.get("delta_vs_pool")
+                    if d is None:
+                        continue
+                    devs.append((abs(d), [name, task, uuid, lbl,
+                                          _pct(lv["prevalence"]), f"{d * 100:+.0f}", _int(lv["n"])]))
+    if not devs:
+        return ""
+    devs.sort(key=lambda r: -r[0])
+    return _table(["Domain", "Task", "Annotator", "Label", "Ann. prev.", "Δ pool (pp)", "n"],
+                  ["l", "l", "l", "l", "r", "r", "r"], [r[1] for r in devs[:top_n]])
 
 
 def per_annotator_timing(total: dict) -> str:
@@ -206,6 +337,18 @@ def render(snap: dict) -> str:
         "## Progress by domain\n\n" + progress_by_domain(domains),
         "### Per-task within active domains\n\n" + per_task_counts(domains),
         "## Inter-annotator agreement (Krippendorff's α)\n\n" + iaa_per_label(domains),
+    ]
+    # Label-value statistics (omit a section when the snapshot carries no data for it).
+    for title, body in [
+        ("## Label distribution", label_distribution(domains, total)),
+        ("## Discards", discards(domains, total)),
+        ("## Logical-constraint violations", constraint_violations(domains, total)),
+        ("## Retrieval panel completeness", completeness(domains, total)),
+        ("## Per-annotator label bias", annotator_bias(domains)),
+    ]:
+        if body:
+            parts.append(f"{title}\n\n{body}")
+    parts += [
         "## Per-annotator activity & timing\n\n"
         f"Pooled median active gap across everyone = **{total['timing']['per_annotator']['pooled_median_active_gap_s']} s/record**.\n\n"
         + per_annotator_timing(total),

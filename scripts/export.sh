@@ -8,7 +8,12 @@
 # Artifacts land under annotation/ (gitignored), keyed by export-id = domain, so
 # each run overwrites that domain's "latest" snapshot. This is the durable
 # counterpart to scripts/monitor.py, which runs its own throwaway export
-# (export-id=monitor) purely to feed IAA — the two don't interfere.
+# (export-id=monitor) purely to feed IAA + label-stats — the two don't interfere.
+#
+# Exported WITH --include-discarded so discard rows (response_status=discarded,
+# discard_reason) are available to monitor's discard stats. CONTRACT: any
+# submitted-only consumer must filter response_status == "submitted" (IAA already
+# does); label/constraint columns are null on discarded rows.
 #
 # Like the other stage wrappers this uses the installed `pragmata` ($PRAGMATA);
 # it must resolve to the same branch the data was imported with (see README
@@ -33,6 +38,7 @@ for d in "${domains[@]}"; do
   [[ -f "$cfg" ]] || { warn "no config: $cfg (skipping)"; rc=1; continue; }
   section "export: $d"
   "$PRAGMATA" annotation export --config "$cfg" --export-id "$d" --base-dir "$WORKSPACE_ROOT" \
+    --include-discarded \
     || { warn "export failed: $d"; rc=1; }
 done
 exit "$rc"

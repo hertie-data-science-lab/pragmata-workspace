@@ -50,7 +50,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import math
 import os
 import statistics
 import sys
@@ -80,6 +82,11 @@ from pragmata.api.annotation_iaa import compute_iaa  # noqa: E402
 from pragmata.core.annotation.argilla_task_definitions import dataset_name  # noqa: E402
 from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
 from pragmata.core.annotation.export_fetcher import build_user_lookup  # noqa: E402
+from pragmata.core.schemas.annotation_export import (  # noqa: E402
+    GenerationAnnotation,
+    GroundingAnnotation,
+    RetrievalAnnotation,
+)
 from pragmata.core.schemas.annotation_task import Task  # noqa: E402
 from pragmata.core.settings.annotation_settings import AnnotationSettings  # noqa: E402
 
@@ -93,15 +100,31 @@ _VALID_CONFIG_KEYS = set(AnnotationSettings.model_fields)
 EXPORT_ID = "monitor"  # fixed → overwritten each run (no unbounded disk growth)
 TASKS = [Task.RETRIEVAL, Task.GROUNDING, Task.GENERATION]
 
+# Per-task label fields, discovered generically: a label is any export-schema field typed
+# `bool | None` (mirrors iaa_runner's `== bool | None` test). No hardcoded column lists.
+_TASK_SCHEMA = {
+    Task.RETRIEVAL: RetrievalAnnotation,
+    Task.GROUNDING: GroundingAnnotation,
+    Task.GENERATION: GenerationAnnotation,
+}
+_LABELS: dict[Task, list[str]] = {
+    t: [n for n, f in c.model_fields.items() if f.annotation == bool | None]
+    for t, c in _TASK_SCHEMA.items()
+}
+
+Z95 = 1.959963984540054  # standard normal quantile for a two-sided 95% interval
+NEAR_DEGENERATE_FRAC = 0.05  # minority class below this (but >0) → flagged "near-degenerate"
+
 SESSION_GAP_S = float(os.environ.get("MONITOR_SESSION_GAP_MIN", "30")) * 60
 MIN_RECORDS = int(os.environ.get("MONITOR_MIN_RECORDS_FOR_TIMING", "5"))
 IAA_RESAMPLES = int(os.environ.get("MONITOR_IAA_RESAMPLES", "200"))
 
 JSONL_PATH = ws.LOGS_DIR / "monitor.jsonl"
 
-# Argilla user_id (UUID str) → username, populated once per run for readable
-# per-annotator cadence keys.
-USER_LOOKUP: dict[str, str] = {}
+# username → Argilla user_id (UUID str), populated once per run. The CSV export carries the
+# annotator *username*; we map it to the UUID so no real names appear in the output (the REST
+# cadence path already keys by UUID directly).
+NAME_TO_UUID: dict[str, str] = {}
 
 
 def log(msg: str) -> None:
@@ -185,9 +208,9 @@ def cadence_report(events: list[dict]) -> dict:
     for uid, evs in by_user.items():
         pts, kept, excluded = _split_gaps(
             [(ev.get("record_id") or str(i), ev["at"]) for i, ev in enumerate(evs)], SESSION_GAP_S)
-        name = USER_LOOKUP.get(uid, uid)
-        by_annotator[name] = _summarize(len(pts), kept, excluded, SESSION_GAP_S, MIN_RECORDS,
-                                        with_excluded=False)
+        # Keyed by the Argilla user_id (UUID) — never a real username.
+        by_annotator[uid] = _summarize(len(pts), kept, excluded, SESSION_GAP_S, MIN_RECORDS,
+                                       with_excluded=False)
         pooled_kept.extend(kept)
 
     per = {
@@ -206,6 +229,222 @@ def wmean(pairs: list[tuple[float, int]]) -> float | None:
     if not total:
         return None
     return round(sum(a * n for a, n in pairs) / total, 4)
+
+
+# --- label-value statistics -------------------------------------------------
+
+def wilson_ci(n_true: int, n: int, z: float = Z95) -> list[float] | None:
+    """Wilson score 95% CI for a binomial proportion; None when n == 0.
+
+    Chosen over the normal approximation because it stays non-zero-width and
+    in-range at p=0 / p=1 — exactly the degenerate-label case (e.g. a label
+    seen 'always true' over n=46), so the interval quantifies how confident
+    'always' really is rather than collapsing to a point.
+    """
+    if n == 0:
+        return None
+    p = n_true / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return [round(max(0.0, center - half), 4), round(min(1.0, center + half), 4)]
+
+
+def label_summary(n_true: int, n: int) -> dict:
+    """Class balance for one binary label: prevalence, Wilson CI, degeneracy flags.
+
+    Raw fraction-true only — no good/bad polarity (the reader knows label semantics).
+    ``degenerate`` = only one class ever observed (always- or never-true);
+    ``near_degenerate`` = minority class present but below NEAR_DEGENERATE_FRAC.
+    """
+    if n == 0:
+        return {"n": 0, "n_true": 0, "prevalence": None, "ci95": None,
+                "degenerate": False, "minority_frac": None, "near_degenerate": False}
+    p = n_true / n
+    minority = min(p, 1 - p)
+    degenerate = n_true == 0 or n_true == n
+    return {
+        "n": n, "n_true": n_true, "prevalence": round(p, 4),
+        "ci95": wilson_ci(n_true, n), "degenerate": degenerate,
+        "minority_frac": round(minority, 4),
+        "near_degenerate": (not degenerate) and minority < NEAR_DEGENERATE_FRAC,
+    }
+
+
+def _parse_bool(s: str | None) -> bool | None:
+    if s is None:
+        return None
+    s = s.strip().lower()
+    return True if s == "true" else False if s == "false" else None
+
+
+def label_stats(path: Path, labels: list[str], name_to_uuid: dict[str, str]) -> tuple[dict, dict]:
+    """One CSV pass over a task export → label distribution, discards, notes rate, bias.
+
+    Returns ``(block, raw)``. ``block`` is the serialized stats; ``raw`` carries the
+    per-label ``(n_true, n)`` and discard counts for correct (pool-then-recompute)
+    rollup at the domain/total level — never average per-domain prevalences.
+
+    Discarded rows (``response_status == "discarded"``) feed the discard breakdown only;
+    label distribution and bias are over submitted rows. Annotators are keyed by UUID.
+    """
+    counts = {lab: [0, 0] for lab in labels}  # [n_true, n] over submitted, non-null
+    by_ann: dict[str, dict[str, list[int]]] = {}
+    n_submitted = n_notes = n_discarded = 0
+    by_reason: dict[str, int] = {}
+
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            status = (row.get("response_status") or "").strip()
+            if status == "discarded":
+                n_discarded += 1
+                reason = (row.get("discard_reason") or "").strip() or "unspecified"
+                by_reason[reason] = by_reason.get(reason, 0) + 1
+                continue
+            if status != "submitted":
+                continue
+            n_submitted += 1
+            if (row.get("notes") or "").strip():
+                n_notes += 1
+            raw_id = row.get("annotator_id", "")
+            uuid = name_to_uuid.get(raw_id, raw_id)
+            ann = by_ann.setdefault(uuid, {lab: [0, 0] for lab in labels})
+            for lab in labels:
+                v = _parse_bool(row.get(lab))
+                if v is None:
+                    continue
+                counts[lab][1] += 1
+                ann[lab][1] += 1
+                if v:
+                    counts[lab][0] += 1
+                    ann[lab][0] += 1
+
+    per_label = {lab: label_summary(*counts[lab]) for lab in labels}
+    pool_prev = {lab: per_label[lab]["prevalence"] for lab in labels}
+
+    by_annotator: dict[str, dict] = {}
+    for uuid, ann in by_ann.items():
+        out = {}
+        for lab in labels:
+            nt, n = ann[lab]
+            if n == 0:
+                continue
+            prev = nt / n
+            delta = None if pool_prev[lab] is None else round(prev - pool_prev[lab], 4)
+            out[lab] = {"n": n, "n_true": nt, "prevalence": round(prev, 4), "delta_vs_pool": delta}
+        by_annotator[uuid] = out
+
+    total = n_submitted + n_discarded
+    block = {
+        "per_label": per_label,
+        "discards": {
+            "n_discarded": n_discarded, "n_submitted": n_submitted,
+            "discard_rate": round(n_discarded / total, 4) if total else None,
+            "by_reason": by_reason,
+        },
+        "notes_rate": round(n_notes / n_submitted, 4) if n_submitted else None,
+        "by_annotator": by_annotator,
+    }
+    raw = {"per_label": {lab: tuple(counts[lab]) for lab in labels}}  # for pool-then-recompute rollup
+    return block, raw
+
+
+def read_export_meta(export_id: str) -> dict:
+    """Constraint + completeness aggregates from the export's meta sidecar.
+
+    The sidecar (``annotation_export.meta.json``) is written next to the CSVs by every
+    export, so this works on both the throwaway and ``--use-export`` paths. Degrades to
+    ``None`` blocks if the sidecar is missing or unreadable. Both aggregates are
+    domain-level: ``constraint_summary`` is per-constraint_id across tasks; completeness
+    is the retrieval panel-completeness summary.
+    """
+    path = ws.ROOT / "annotation" / "exports" / export_id / "annotation_export.meta.json"
+    try:
+        meta = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {"constraints": None, "completeness": None}
+    cs = meta.get("constraint_summary") or {}
+    return {
+        "constraints": {"total": sum(cs.values()), "by_constraint": cs},
+        "completeness": meta.get("completeness_summary"),
+    }
+
+
+# --- label / discard / constraint / completeness rollup ---------------------
+
+def empty_label_rollup() -> dict:
+    return {t: {lab: [0, 0] for lab in _LABELS[t]} for t in TASKS}
+
+
+def add_label_raw(acc: dict, raw_by_task: dict) -> None:
+    for task, raw in raw_by_task.items():
+        for lab, (nt, n) in raw["per_label"].items():
+            acc[task][lab][0] += nt
+            acc[task][lab][1] += n
+
+
+def build_label_block(acc: dict) -> dict:
+    """Pool (n_true, n) per (task, label), then recompute prevalence/CI/flags."""
+    out = {}
+    for task in TASKS:
+        labs = {lab: label_summary(nt, n) for lab, (nt, n) in acc[task].items()}
+        if any(v["n"] > 0 for v in labs.values()):
+            out[task.value] = labs
+    return out
+
+
+def empty_discards() -> dict:
+    return {"n_discarded": 0, "n_submitted": 0, "by_reason": {}}
+
+
+def add_discards(acc: dict, d: dict) -> None:
+    acc["n_discarded"] += d["n_discarded"]
+    acc["n_submitted"] += d["n_submitted"]
+    for reason, c in d["by_reason"].items():
+        acc["by_reason"][reason] = acc["by_reason"].get(reason, 0) + c
+
+
+def finalize_discards(acc: dict) -> dict:
+    total = acc["n_discarded"] + acc["n_submitted"]
+    return {**acc, "discard_rate": round(acc["n_discarded"] / total, 4) if total else None}
+
+
+def add_constraints(acc: dict, c: dict | None) -> None:
+    if not c:
+        return
+    for cid, n in c["by_constraint"].items():
+        acc[cid] = acc.get(cid, 0) + n
+
+
+def build_constraints(acc: dict) -> dict:
+    return {"total": sum(acc.values()), "by_constraint": acc}
+
+
+def empty_completeness() -> dict:
+    return {"n_panels": 0, "n_complete": 0, "by_k_bucket": {}}
+
+
+def add_completeness(acc: dict, c: dict | None) -> None:
+    if not c:
+        return
+    acc["n_panels"] += c.get("n_panels", 0)
+    acc["n_complete"] += c.get("n_complete", 0)
+    for bucket, st in (c.get("by_k_bucket") or {}).items():
+        b = acc["by_k_bucket"].setdefault(bucket, {"n_panels": 0, "n_complete": 0})
+        b["n_panels"] += st.get("n_panels", 0)
+        b["n_complete"] += st.get("n_complete", 0)
+
+
+def build_completeness(acc: dict) -> dict | None:
+    if acc["n_panels"] == 0:
+        return None
+    # by_k_bucket kept as raw {n_panels, n_complete} — matches the sidecar shape; the
+    # renderer recomputes per-bucket fractions (_bucket_frac).
+    return {
+        "n_panels": acc["n_panels"], "n_complete": acc["n_complete"],
+        "fraction_complete": round(acc["n_complete"] / acc["n_panels"], 4),
+        "by_k_bucket": acc["by_k_bucket"],
+    }
 
 
 # Three distinct quantities, all reported:
@@ -364,16 +603,16 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
 
 def process_domain(domain: str, client, http: "httpx.Client", *, use_export: bool = False) -> dict:
     """Assemble one domain's metrics: counts (progress + REST), agreement (IAA),
-    cadence (REST per-response timestamps).
+    cadence (REST per-response timestamps), label statistics (export CSV).
 
-    Raises on a hard fetch failure. IAA failure is caught locally so counts/timing
-    still surface.
+    Raises on a hard fetch failure. IAA and label-stats failures are caught locally so
+    counts/timing still surface.
 
-    Only IAA reads an export; counts and cadence come straight from Argilla. By
-    default we run a throwaway export (``export_id="monitor"``) just to feed IAA.
-    With ``use_export`` we instead read the durable per-domain export
-    (``export_id=<domain>``, e.g. from scripts/export.sh) and skip re-exporting —
-    if that export is missing, IAA degrades like any other IAA failure.
+    The export (read by both IAA and label-stats) is written with ``include_discarded=True``
+    so discard rows are present for the discard breakdown; IAA filters them out, so this is
+    safe. By default we run a throwaway export (``export_id="monitor"``). With ``use_export``
+    we reuse the durable per-domain export (``export_id=<domain>``, e.g. scripts/export.sh,
+    also include_discarded=True) and skip re-exporting; a missing export degrades gracefully.
     """
     base_dir = str(ws.ROOT)
     cfg_path, clean_cfg = sanitized_config(domain)
@@ -386,12 +625,12 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
         progress = fetch_progress(client, settings)
         responses = fetch_responses(client, http, settings)
 
-        # IAA reads CSVs, not Argilla. Default: write our own throwaway export.
+        # The export feeds both IAA and label-stats. Default: write our own throwaway export.
         # With use_export: reuse export.sh's durable per-domain CSVs, no re-export.
         export_id = domain if use_export else EXPORT_ID
         if not use_export:
             export_annotations(config_path=cfg, export_id=export_id, base_dir=base_dir,
-                               include_discarded=False)
+                               include_discarded=True)
 
         agr_by_task: dict = {}
         iaa_error: str | None = None
@@ -405,11 +644,31 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
     finally:
         cfg_path.unlink(missing_ok=True)
 
+    # Label-value statistics from the export CSVs (class balance, discards, per-annotator
+    # bias). Degrades independently of IAA. Constraint + completeness aggregates come from
+    # the export's meta sidecar (domain-level, reused not recomputed).
+    export_dir = ws.ROOT / "annotation" / "exports" / export_id
+    label_by_task: dict[Task, dict] = {}
+    label_raw_by_task: dict[Task, dict] = {}
+    label_error: str | None = None
+    try:
+        for task in TASKS:
+            csv_path = export_dir / f"{task.value}.csv"
+            if not csv_path.exists():
+                continue
+            label_by_task[task], label_raw_by_task[task] = label_stats(
+                csv_path, _LABELS[task], NAME_TO_UUID)
+    except Exception as e:
+        label_error = f"{type(e).__name__}: {e}"
+        log(f"  ! {domain}: label stats failed ({label_error})")
+    meta = read_export_meta(export_id)
+
     tasks_out: dict = {}
     dom_counts = empty_counts()
     dom_annotators: set[str] = set()
     dom_weighted: list[tuple[float, int]] = []
     dom_events: list[dict] = []
+    dom_discards = empty_discards()
 
     for task in TASKS:
         events = responses.get(task, [])
@@ -420,23 +679,33 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
             "count": {**count, "n_annotators": len(annotators)},
             "agreement": agr,
             "timing": cadence_report(events),
+            "labels": label_by_task.get(task),
         }
         add_counts(dom_counts, count)
         dom_annotators |= annotators
         dom_weighted.extend(weighted)
         dom_events.extend(events)
+        if task in label_by_task:
+            add_discards(dom_discards, label_by_task[task]["discards"])
 
     block = {
         "count": {**dom_counts, "n_annotators": len(dom_annotators)},
         "agreement": {"mean_alpha": wmean(dom_weighted), "n_labels": len(dom_weighted)},
         "timing": cadence_report(dom_events),
+        "discards": finalize_discards(dom_discards),
+        "constraints": meta["constraints"],
+        "completeness": meta["completeness"],
         "tasks": tasks_out,
     }
     if iaa_error:
         block["iaa_error"] = iaa_error
+    if label_error:
+        block["label_error"] = label_error
     # Carried out-of-band for total rollup (not serialized at domain level).
     block["_rollup"] = {"weighted": dom_weighted, "counts": dom_counts,
-                        "annotators": dom_annotators, "events": dom_events}
+                        "annotators": dom_annotators, "events": dom_events,
+                        "label_raw": label_raw_by_task, "discards": dom_discards,
+                        "constraints": meta["constraints"], "completeness": meta["completeness"]}
     return block
 
 
@@ -444,13 +713,17 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     url = os.environ.get("ARGILLA_API_URL")
     key = os.environ["ARGILLA_API_KEY"]
     client = resolve_argilla_client(url, key)
-    USER_LOOKUP.update({str(uid): name for uid, name in build_user_lookup(client).items()})
+    NAME_TO_UUID.update({name: str(uid) for uid, name in build_user_lookup(client).items()})
 
     domains_out: dict = {}
     tot_counts = empty_counts()
     tot_annotators: set[str] = set()
     tot_weighted: list[tuple[float, int]] = []
     tot_events: list[dict] = []
+    tot_label = empty_label_rollup()
+    tot_discards = empty_discards()
+    tot_constraints: dict = {}
+    tot_completeness = empty_completeness()
 
     with httpx.Client(base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0) as http:
         for domain in domains:
@@ -467,6 +740,10 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             tot_annotators |= roll["annotators"]
             tot_weighted.extend(roll["weighted"])
             tot_events.extend(roll["events"])
+            add_label_raw(tot_label, roll["label_raw"])
+            add_discards(tot_discards, roll["discards"])
+            add_constraints(tot_constraints, roll["constraints"])
+            add_completeness(tot_completeness, roll["completeness"])
 
     return {
         "run_at": datetime.now(timezone.utc).isoformat(),
@@ -475,6 +752,10 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
             "agreement": {"mean_alpha": wmean(tot_weighted), "n_labels": len(tot_weighted)},
             "timing": cadence_report(tot_events),
+            "labels": build_label_block(tot_label),
+            "discards": finalize_discards(tot_discards),
+            "constraints": build_constraints(tot_constraints),
+            "completeness": build_completeness(tot_completeness),
         },
         "domains": domains_out,
     }
