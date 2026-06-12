@@ -335,8 +335,9 @@ def render(snap: dict) -> str:
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}** · "
         f"session gap threshold {snap['session_gap_threshold_s'] // 60} min",
         "## Overall counts\n\n" + overall_counts(total),
-        "## Progress by domain\n\n" + progress_by_domain(domains),
-        "### Per-task within active domains\n\n" + per_task_counts(domains),
+        "## Progress",
+        "### By domain\n\n" + progress_by_domain(domains),
+        "### By task\n\n" + per_task_counts(domains),
         "## Inter-annotator agreement (Krippendorff's α)\n\n" + iaa_per_label(domains),
     ]
     # Label-value statistics (omit a section when the snapshot carries no data for it).
