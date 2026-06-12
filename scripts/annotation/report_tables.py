@@ -133,8 +133,11 @@ def per_task_counts(domains: dict) -> str:
 
 
 def iaa_per_label(domains: dict) -> str:
-    """Emit a labelled sub-table for every (domain, task) that has per-label agreement."""
-    blocks = []
+    """One combined table of per-label agreement across all (domain, task) with calibration overlap.
+
+    Items = calibration-overlap items, Ann = annotators in that overlap (both per domain/task).
+    """
+    rows = []
     for name, v in sorted(domains.items()):
         for task in TASK_ORDER:
             tv = v["tasks"].get(task)
@@ -148,16 +151,17 @@ def iaa_per_label(domains: dict) -> str:
             if n_items == 0:  # no overlapping items → no agreement to report
                 continue
             lab = (tv.get("labels") or {}).get("per_label") or {}
-            rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]), _prev(lab.get(lbl))]
-                    for lbl, lv in per_label.items()]
-            tbl = _table(["Label", "α", "% agreement", "Prev."],
-                         ["l", "r", "r", "r"], rows)
-            blocks.append(f"#### {name} / {task} (n = {n_items} items, {n_ann} annotators)\n\n{tbl}")
-    return "\n\n".join(blocks)
+            for lbl, lv in per_label.items():
+                rows.append([name, task, lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]),
+                             _prev(lab.get(lbl)), _int(n_items), str(n_ann)])
+    if not rows:
+        return ""
+    return _table(["Domain", "Task", "Label", "α", "% agreement", "Prev.", "Items", "Ann."],
+                  ["l", "l", "l", "r", "r", "r", "r", "r"], rows)
 
 
 def label_distribution(domains: dict, total: dict) -> str:
-    """Class balance per (scope, task, label): prevalence (fraction true) over n."""
+    """Class balance per (domain, task, label): prevalence (fraction true) over n."""
     rows = []
 
     def emit(scope, task, per_label):
@@ -177,7 +181,7 @@ def label_distribution(domains: dict, total: dict) -> str:
             emit("**TOTAL**", task, pl)
     if not rows:
         return ""
-    return _table(["Scope", "Task", "Label", "n", "Prev."],
+    return _table(["Domain", "Task", "Label", "n", "Prev."],
                   ["l", "l", "l", "r", "r"], rows)
 
 
@@ -246,12 +250,12 @@ def annotator_bias(domains: dict, top_n: int = 15) -> str:
                     d = lv.get("delta_vs_pool")
                     if d is None:
                         continue
-                    devs.append((abs(d), [name, task, _uid(uuid), lbl,
+                    devs.append((abs(d), [_uid(uuid), name, task, lbl,
                                           _pct(lv["prevalence"]), f"{d * 100:+.0f}", _int(lv["n"])]))
     if not devs:
         return ""
     devs.sort(key=lambda r: -r[0])
-    return _table(["Domain", "Task", "Annotator", "Label", "Ann. prev.", "Δ pool (pp)", "n"],
+    return _table(["Annotator", "Domain", "Task", "Label", "Ann. prev.", "Δ pool (pp)", "n"],
                   ["l", "l", "l", "l", "r", "r", "r"], [r[1] for r in devs[:top_n]])
 
 
@@ -262,13 +266,12 @@ def per_annotator_timing(total: dict) -> str:
         active_h = v["active_span_s"] / 3600 if v["active_span_s"] else 0.0
         pace = v["n_events"] / active_h if active_h else None
         rows.append((pace if pace is not None else -1, [
-            _uid(ann), _f(v["median_active_gap_s"], 1), str(v["n_events"]), str(v["n_sessions"]),
-            _f(active_h, 2), _f(pace, 1), str(v["n_pause_breaks"]),
+            _uid(ann), str(v["n_events"]), _f(active_h, 2),
+            _f(v["median_active_gap_s"], 1), _f(pace, 1),
         ]))
     rows.sort(key=lambda r: -r[0])
-    return _table(["Annotator", "Median gap (s)", "Events", "Sessions", "Active time (h)",
-                   "Pace (rec/active-h)", "Breaks"],
-                  ["l", "r", "r", "r", "r", "r", "r"], [r[1] for r in rows])
+    return _table(["Annotator", "Events", "Active time (h)", "Median gap (s)", "Pace (rec/h)"],
+                  ["l", "r", "r", "r", "r"], [r[1] for r in rows])
 
 
 def domain_pace(domains: dict) -> str:
@@ -281,15 +284,14 @@ def domain_pace(domains: dict) -> str:
     rows = [[name, _f(gap, 1), str(n)] for name, gap, n in timed]
     if untimed:
         rows.append([" / ".join(sorted(n for n, _, _ in untimed)), "-", "0"])
-    return _table(["Domain", "Pooled median gap (s)", "Annotators"], ["l", "r", "r"], rows)
+    return _table(["Domain", "Median gap (s)", "Annotators"], ["l", "r", "r"], rows)
 
 
-def task_pace_collapsed(domains: dict) -> str:
-    """Cross-domain task pace: weighted mean of per-annotator medians (weighted by n_gaps).
-
-    The snapshot stores no raw gaps, so a true pooled median is unavailable across
-    domains; this weighted mean is the faithful approximation from stored medians.
-    """
+def task_pace(domains: dict, total: dict) -> str:
+    """Cross-domain task pace: true pooled median (events pooled by task) alongside the
+    weighted mean of per-domain medians (gap-count-weighted) for comparison."""
+    by_task = total.get("timing_by_task") or {}
+    # weighted mean of per-(domain,task) per-annotator medians (the pre-pooling approximation)
     agg: dict[str, list[tuple[float, int]]] = {}
     for v in domains.values():
         for task, tv in v["tasks"].items():
@@ -299,15 +301,16 @@ def task_pace_collapsed(domains: dict) -> str:
                     agg.setdefault(task, []).append((med, n))
     rows = []
     for task in TASK_ORDER:
-        pairs = agg.get(task)
-        if not pairs:
+        pa = (by_task.get(task) or {}).get("per_annotator")
+        if not pa or pa.get("pooled_median_active_gap_s") is None:
             continue
-        total_n = sum(n for _, n in pairs)
-        wmean = sum(m * n for m, n in pairs) / total_n
-        rows.append((wmean, [task, _f(wmean, 1), str(len(pairs))]))
+        pooled = pa["pooled_median_active_gap_s"]
+        pairs = agg.get(task)
+        wmean = sum(m * n for m, n in pairs) / sum(n for _, n in pairs) if pairs else None
+        rows.append((pooled, [task, _f(pooled, 1), _f(wmean, 1), str(pa["n_annotators"])]))
     rows.sort(key=lambda r: r[0])
-    return _table(["Task", "Weighted mean gap (s)", "Annotator-sessions"],
-                  ["l", "r", "r"], [r[1] for r in rows])
+    return _table(["Task", "Median gap (s)", "Weighted mean (s)", "Annotators"],
+                  ["l", "r", "r", "r"], [r[1] for r in rows])
 
 
 def task_x_domain_pace(domains: dict) -> str:
@@ -320,7 +323,7 @@ def task_x_domain_pace(domains: dict) -> str:
                 timed.append((name, task, gap, pa["n_annotators"]))
     timed.sort(key=lambda r: r[2])
     rows = [[name, task, _f(gap, 1), str(n)] for name, task, gap, n in timed]
-    return _table(["Domain", "Task", "Pooled median gap (s)", "Annotators"],
+    return _table(["Domain", "Task", "Median gap (s)", "Annotators"],
                   ["l", "l", "r", "r"], rows)
 
 
@@ -349,7 +352,7 @@ def render(snap: dict) -> str:
     parts += [
         "## Per-annotator activity & timing\n\n" + per_annotator_timing(total),
         "### Domain-level pace\n\n" + domain_pace(domains),
-        "### Task-level pace\n\n" + task_pace_collapsed(domains),
+        "### Task-level pace\n\n" + task_pace(domains, total),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
     ]
     return "\n\n".join(parts) + "\n"

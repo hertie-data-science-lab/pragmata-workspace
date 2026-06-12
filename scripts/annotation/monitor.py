@@ -513,6 +513,7 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
                                     "at": datetime.fromisoformat(ts),
                                     "purpose": purpose,
                                     "record_id": str(resp.get("record_id")),
+                                    "task": task.value,
                                 })
                     offset += len(items)
                     if len(items) < limit:
@@ -724,6 +725,13 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             add_constraints(tot_constraints, roll["constraints"])
             add_completeness(tot_completeness, roll["completeness"])
 
+    # True pooled cadence per task across domains (so the task-level pace table is a real
+    # median, not a weighted-mean approximation of per-domain medians).
+    events_by_task: dict[str, list[dict]] = {}
+    for e in tot_events:
+        events_by_task.setdefault(e["task"], []).append(e)
+    timing_by_task = {t: cadence_report(evs) for t, evs in events_by_task.items()}
+
     return {
         "run_at": datetime.now(timezone.utc).isoformat(),
         "session_gap_threshold_s": int(SESSION_GAP_S),
@@ -731,6 +739,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
             "agreement": {"mean_alpha": wmean(tot_weighted), "n_labels": len(tot_weighted)},
             "timing": cadence_report(tot_events),
+            "timing_by_task": timing_by_task,
             "labels": build_label_block(tot_label),
             "discards": finalize_discards(tot_discards),
             "constraints": build_constraints(tot_constraints),
