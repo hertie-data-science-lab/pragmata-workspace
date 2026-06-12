@@ -74,9 +74,9 @@ def _uid(u: str) -> str:
 
 
 def _table(headers: list[str], aligns: list[str], rows: list[list[str]]) -> str:
-    sep = {"l": "---", "r": "---:", "c": ":-:"}
+    # All columns centered (aligns retained for per-column intent but unused for now).
     out = ["| " + " | ".join(headers) + " |",
-           "|" + "|".join(sep[a] for a in aligns) + "|"]
+           "|" + "|".join(":-:" for _ in headers) + "|"]
     out += ["| " + " | ".join(r) + " |" for r in rows]
     return "\n".join(out)
 
