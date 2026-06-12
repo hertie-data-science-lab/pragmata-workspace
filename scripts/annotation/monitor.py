@@ -52,7 +52,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import os
 import statistics
 import sys
@@ -112,7 +111,6 @@ _LABELS: dict[Task, list[str]] = {
     for t, c in _TASK_SCHEMA.items()
 }
 
-Z95 = 1.959963984540054  # standard normal quantile for a two-sided 95% interval
 NEAR_DEGENERATE_FRAC = 0.05  # minority class below this (but >0) → flagged "near-degenerate"
 
 SESSION_GAP_S = float(os.environ.get("MONITOR_SESSION_GAP_MIN", "30")) * 60
@@ -233,39 +231,21 @@ def wmean(pairs: list[tuple[float, int]]) -> float | None:
 
 # --- label-value statistics -------------------------------------------------
 
-def wilson_ci(n_true: int, n: int, z: float = Z95) -> list[float] | None:
-    """Wilson score 95% CI for a binomial proportion; None when n == 0.
-
-    Chosen over the normal approximation because it stays non-zero-width and
-    in-range at p=0 / p=1 — exactly the degenerate-label case (e.g. a label
-    seen 'always true' over n=46), so the interval quantifies how confident
-    'always' really is rather than collapsing to a point.
-    """
-    if n == 0:
-        return None
-    p = n_true / n
-    denom = 1 + z * z / n
-    center = (p + z * z / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return [round(max(0.0, center - half), 4), round(min(1.0, center + half), 4)]
-
-
 def label_summary(n_true: int, n: int) -> dict:
-    """Class balance for one binary label: prevalence, Wilson CI, degeneracy flags.
+    """Class balance for one binary label: prevalence + degeneracy flags (descriptive).
 
     Raw fraction-true only — no good/bad polarity (the reader knows label semantics).
     ``degenerate`` = only one class ever observed (always- or never-true);
     ``near_degenerate`` = minority class present but below NEAR_DEGENERATE_FRAC.
     """
     if n == 0:
-        return {"n": 0, "n_true": 0, "prevalence": None, "ci95": None,
+        return {"n": 0, "n_true": 0, "prevalence": None,
                 "degenerate": False, "minority_frac": None, "near_degenerate": False}
     p = n_true / n
     minority = min(p, 1 - p)
     degenerate = n_true == 0 or n_true == n
     return {
-        "n": n, "n_true": n_true, "prevalence": round(p, 4),
-        "ci95": wilson_ci(n_true, n), "degenerate": degenerate,
+        "n": n, "n_true": n_true, "prevalence": round(p, 4), "degenerate": degenerate,
         "minority_frac": round(minority, 4),
         "near_degenerate": (not degenerate) and minority < NEAR_DEGENERATE_FRAC,
     }

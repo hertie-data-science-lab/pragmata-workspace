@@ -60,7 +60,7 @@ def plot_burnup(snaps: list[dict], out: Path) -> bool:
 
 
 def plot_label_prevalence(snap: dict, out: Path) -> bool:
-    """Per-task horizontal bars of fraction-true with Wilson CI; degenerate/rare highlighted."""
+    """Per-task horizontal bars of fraction-true; degenerate/rare highlighted."""
     labels_by_task = snap["total"].get("labels") or {}
     tasks = [t for t in TASK_ORDER if labels_by_task.get(t)]
     if not tasks:
@@ -70,19 +70,17 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
         items = [(k, v) for k, v in labels_by_task[task].items() if v["n"] > 0]
         names = [k for k, _ in items]
         prev = [v["prevalence"] for _, v in items]
-        lo = [v["prevalence"] - v["ci95"][0] for _, v in items]
-        hi = [v["ci95"][1] - v["prevalence"] for _, v in items]
         colors = ["#d62728" if v["degenerate"] else "#ff7f0e" if v["near_degenerate"]
                   else "#1f77b4" for _, v in items]
         y = range(len(names))
-        ax.barh(y, prev, xerr=[lo, hi], color=colors, capsize=3)
+        ax.barh(y, prev, color=colors)
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)
         ax.set_xlim(0, 1)
         ax.set_xlabel("prevalence (fraction true)")
         ax.set_title(task)
         ax.grid(True, axis="x", alpha=0.3)
-    fig.suptitle("Label prevalence (Wilson 95% CI) — red=degenerate, orange=rare")
+    fig.suptitle("Label prevalence — red=degenerate, orange=rare")
     _save(fig, out / "label_prevalence.png")
     return True
 

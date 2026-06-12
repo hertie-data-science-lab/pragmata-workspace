@@ -51,12 +51,10 @@ def _f(x, nd=2) -> str:
 
 
 def _prev(lv) -> str:
-    """Prevalence as a percentage with its Wilson 95% CI, from a label_summary dict."""
+    """Prevalence (fraction true) as a percentage, from a label_summary dict."""
     if not lv or lv.get("prevalence") is None:
         return "-"
-    s = f"{lv['prevalence'] * 100:.0f}%"
-    ci = lv.get("ci95")
-    return s + (f" [{ci[0] * 100:.0f}–{ci[1] * 100:.0f}]" if ci else "")
+    return f"{lv['prevalence'] * 100:.0f}%"
 
 
 def _flag(lv) -> str:
@@ -125,7 +123,7 @@ def progress_by_domain(domains: dict) -> str:
         rows.append([name, _int(c["total_records"]), _int(c["submitted_responses"]),
                      _int(c["completed_records"]), _pctc(c["completed_records"], c["total_records"]),
                      str(c["n_annotators"]), _domain_alpha_cell(c, v["agreement"])])
-    return _table(["Domain", "Total", "Submitted", "Completed", "% Done", "Annotators", "mean α"],
+    return _table(["Domain", "Total", "Subm.", "Compl.", "% Done", "Ann.", "mean α"],
                   ["l", "r", "r", "r", "r", "r", "r"], rows)
 
 
@@ -141,7 +139,7 @@ def per_task_counts(domains: dict) -> str:
             rows.append([name, task, _int(c["total_records"]), _int(c["submitted_responses"]),
                          _int(c["completed_records"]), _pctc(c["completed_records"], c["total_records"]),
                          str(c["n_annotators"]), _alpha(tv["agreement"].get("mean_alpha"))])
-    return _table(["Domain", "Task", "Total", "Submitted", "Completed", "% Done", "Ann.", "mean α"],
+    return _table(["Domain", "Task", "Total", "Subm.", "Compl.", "% Done", "Ann.", "mean α"],
                   ["l", "l", "r", "r", "r", "r", "r", "r"], rows)
 
 
@@ -164,14 +162,14 @@ def iaa_per_label(domains: dict) -> str:
             rows = [[lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]),
                      _prev(lab.get(lbl)), _flag(lab.get(lbl))]
                     for lbl, lv in per_label.items()]
-            tbl = _table(["Label", "α", "% agreement", "Prevalence", ""],
+            tbl = _table(["Label", "α", "% agreement", "Prev.", "Flag"],
                          ["l", "r", "r", "r", "l"], rows)
             blocks.append(f"#### {name} / {task} (n = {n_items} items, {n_ann} annotators)\n\n{tbl}")
     return "\n\n".join(blocks)
 
 
 def label_distribution(domains: dict, total: dict) -> str:
-    """Class balance per (scope, task, label): prevalence + Wilson CI + degeneracy flag."""
+    """Class balance per (scope, task, label): prevalence + degeneracy flag."""
     rows = []
 
     def emit(scope, task, per_label):
@@ -191,7 +189,7 @@ def label_distribution(domains: dict, total: dict) -> str:
             emit("**TOTAL**", task, pl)
     if not rows:
         return ""
-    return _table(["Scope", "Task", "Label", "n", "Prevalence (95% CI)", "Flag"],
+    return _table(["Scope", "Task", "Label", "n", "Prev.", "Flag"],
                   ["l", "l", "l", "r", "r", "l"], rows)
 
 
@@ -351,37 +349,20 @@ def render(snap: dict) -> str:
         "## Overall counts\n\n" + overall_counts(total),
         "## Progress by domain\n\n" + progress_by_domain(domains),
         "### Per-task within active domains\n\n" + per_task_counts(domains),
-        "## Inter-annotator agreement (Krippendorff's α)\n\n"
-        "_α measures inter-annotator **agreement** on the calibration overlap. The Prevalence "
-        "column is the **class balance** (fraction true) with its Wilson 95% CI — a different "
-        "quantity from α, shown alongside because a low α at an extreme prevalence is expected, "
-        "not a quality problem._\n\n" + iaa_per_label(domains),
+        "## Inter-annotator agreement (Krippendorff's α)\n\n" + iaa_per_label(domains),
     ]
-    label_dist_note = (
-        "_Prevalence = fraction of submitted responses marked **true**; the bracketed range is "
-        "its **Wilson 95% confidence interval** (sampling uncertainty given n) — this is class "
-        "balance, **not** inter-annotator agreement (α, above). Flags: **degenerate** = only one "
-        "class ever observed (α undefined, no signal); **rare** = minority class below 5%._")
-    bias_note = (
-        "_Each row is one annotator's prevalence for a label vs the pool mean, as Δ in percentage "
-        "points (pp), over their n submitted responses. A large |Δ| flags a systematically "
-        "lenient/harsh or 'always-yes' annotator — a quality signal and a common driver of low α. "
-        "Rows are sorted by |Δ| (largest deviations first); annotator = first 8 chars of the "
-        "Argilla user UUID (full id in the snapshot JSONL)._")
     # Label-value statistics (omit a section when the snapshot carries no data for it).
-    for title, note, body in [
-        ("## Label distribution", label_dist_note, label_distribution(domains, total)),
-        ("## Discards", "", discards(domains, total)),
-        ("## Logical-constraint violations", "", constraint_violations(domains, total)),
-        ("## Retrieval panel completeness", "", completeness(domains, total)),
-        ("## Per-annotator label bias", bias_note, annotator_bias(domains)),
+    for title, body in [
+        ("## Label distribution", label_distribution(domains, total)),
+        ("## Discards", discards(domains, total)),
+        ("## Logical-constraint violations", constraint_violations(domains, total)),
+        ("## Retrieval panel completeness", completeness(domains, total)),
+        ("## Per-annotator label bias", annotator_bias(domains)),
     ]:
         if body:
-            parts.append(f"{title}\n\n" + (f"{note}\n\n" if note else "") + body)
+            parts.append(f"{title}\n\n{body}")
     parts += [
-        "## Per-annotator activity & timing\n\n"
-        f"Pooled median active gap across everyone = **{total['timing']['per_annotator']['pooled_median_active_gap_s']} s/record**.\n\n"
-        + per_annotator_timing(total),
+        "## Per-annotator activity & timing\n\n" + per_annotator_timing(total),
         "### Domain-level pace\n\n" + domain_pace(domains),
         "### Task-level pace (collapsed across domains)\n\n" + task_pace_collapsed(domains),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
