@@ -156,7 +156,7 @@ def iaa_per_label(domains: dict) -> str:
                              _prev(lab.get(lbl)), _int(n_items), str(n_ann)])
     if not rows:
         return ""
-    return _table(["Domain", "Task", "Label", "α", "% agreement", "Prev.", "Items", "Ann."],
+    return _table(["Domain", "Task", "Label", "α", "% agree", "Prev.", "Items", "Ann."],
                   ["l", "l", "l", "r", "r", "r", "r", "r"], rows)
 
 
