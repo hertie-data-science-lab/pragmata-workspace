@@ -47,7 +47,8 @@ for spec in "${specs[@]}"; do
     warn "  failed to merge $RUNTIME + $spec"; failures+=("$stem (merge)"); continue
   fi
   if ! "$PRAGMATA" -v querygen gen-queries \
-      --config-path "$merged" --n-queries "$n" --run-id "$stem"; then
+      --config-path "$merged" --n-queries "$n" --run-id "$stem" \
+      --base-dir "$WORKSPACE_ROOT/data"; then
     warn "  failed: $stem"; failures+=("$stem (gen-queries)")
   fi
 done

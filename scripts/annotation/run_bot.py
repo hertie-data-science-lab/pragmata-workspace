@@ -3,8 +3,8 @@
 Pipe pragmata querygen output through publikationsbot prod's /stream endpoint
 and emit annotation-import-ready JSONL.
 
-For each ``data/annotation/querygen/runs/<stem>/synthetic_queries.csv``:
-  - Skip query_ids already present in ``data/annotation/publikationsbot/<stem>.jsonl``
+For each ``data/querygen/runs/<stem>/synthetic_queries.csv``:
+  - Skip query_ids already present in ``data/publikationsbot/<stem>.jsonl``
   - For each remaining query:
       1. Acquire/refresh Azure AD bearer token (via ``az``)
       2. POST /login -> sessionToken (with retry on 401)
@@ -30,9 +30,9 @@ when the bot omits it. This markdown renders in both the Grounding TextField
 
 Modes:
   --probe              : one query from the first available spec, dump raw
-                         SSE lines to data/annotation/publikationsbot/probe_<stem>.raw.txt
+                         SSE lines to data/publikationsbot/probe_<stem>.raw.txt
                          for inspection. Does NOT write to <stem>.jsonl.
-  --spec <stem>        : process only this spec (default: all under data/annotation/querygen/runs/)
+  --spec <stem>        : process only this spec (default: all under data/querygen/runs/)
   --max-per-spec N     : cap queries per spec (smoke testing)
   (no flags)           : process all specs found, all queries, with resume
 """
@@ -51,19 +51,19 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # config/workspace.env + .env; existing env wins
+ws.load_env()  # configs/annotation/settings.conf + .env; existing env wins
 
 RUNS_DIR = ws.RUNS_DIR
 OUT_DIR = ws.OUT_DIR
 OUT_DIR.mkdir(exist_ok=True)
 
-PRD = os.environ["PUBLIKATIONSBOT_URL"]  # from config/workspace.env
+PRD = os.environ["PUBLIKATIONSBOT_URL"]  # from .env
 LANG_MAP = {"german": "de", "english": "en"}
 
 # Throttle: seconds to sleep after each network-touching iteration (skipped/done
 # rows are unaffected). The bot's own /stream latency is ~30s, so 2s adds ~7%
 # overhead while giving the bot's upstream (LLM, vector store) breathing room.
-# Default from config/workspace.env (INTER_QUERY_DELAY_S); --delay overrides.
+# Default from configs/annotation/settings.conf (INTER_QUERY_DELAY_S); --delay overrides.
 INTER_QUERY_DELAY_S = float(os.environ.get("INTER_QUERY_DELAY_S", "2.0"))
 
 # HTTP 5xx backoff-retry schedule. Each entry is "wait this long, then retry".

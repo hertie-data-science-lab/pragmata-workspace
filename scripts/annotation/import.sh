@@ -14,7 +14,7 @@ cd_root
 [[ $# -eq 1 ]] || fatal "usage: $0 <domain>"
 d="$1"
 cfg="configs/annotation/${d}.yaml"
-combined="data/annotation/publikationsbot/${d}_combined.jsonl"
+combined="data/publikationsbot/${d}_combined.jsonl"
 [[ -f "$cfg" ]] || fatal "no config: $cfg"
 [[ -s "$combined" ]] || fatal "no combined JSONL: $combined (run build_combined.py first)"
 

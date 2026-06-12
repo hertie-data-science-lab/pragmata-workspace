@@ -5,7 +5,7 @@
 #     source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 #
 # It sets WORKSPACE_ROOT, defines logging / guard helpers, exposes the venv
-# binaries (PY, PRAGMATA), and loads tunables (config/workspace.env) then
+# binaries (PY, PRAGMATA), and loads tunables (configs/annotation/settings.conf) then
 # secrets (.env). It does NOT cd anywhere on its own — call `cd_root` when a
 # script needs to run from the workspace root (every orchestrator does; a
 # pure stdin/stdout filter would skip it).
@@ -53,7 +53,7 @@ load_dotenv() {
 }
 
 # Tunables first, then secrets; a pre-set environment beats both.
-load_dotenv "$WORKSPACE_ROOT/config/workspace.env"
+load_dotenv "$WORKSPACE_ROOT/configs/annotation/settings.conf"
 load_dotenv "$WORKSPACE_ROOT/.env"
 
 # Pin the pragmata source: if PRAGMATA_SRC is set (in .env), shadow the installed

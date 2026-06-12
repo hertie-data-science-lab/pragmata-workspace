@@ -92,7 +92,7 @@ stage_querygen() {
 
 stage_bot() {
   mapfile -t specs < <(filter_specs | while IFS= read -r s; do
-    [[ -f "data/annotation/querygen/runs/${s}/synthetic_queries.csv" ]] && echo "$s"
+    [[ -f "data/querygen/runs/${s}/synthetic_queries.csv" ]] && echo "$s"
   done)
   log "bot: ${#specs[@]} spec(s), ${JOBS}-way parallel"
   (( ${#specs[@]} > 0 )) || return 0
@@ -148,7 +148,7 @@ preflight() {
     require_env ARGILLA_API_URL ARGILLA_API_KEY
   fi
   if in_slice setup; then
-    [[ -f config/users.json ]] || fatal "config/users.json (roster) missing" 4
+    [[ -f configs/annotation/users.json ]] || fatal "configs/annotation/users.json (roster) missing" 4
     log "  argilla: credentials + roster present"
   fi
   log "pre-flight OK"

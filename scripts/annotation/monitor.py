@@ -66,11 +66,11 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # config/workspace.env + .env; existing env wins
+ws.load_env()  # configs/annotation/settings.conf + .env; existing env wins
 
 # Build against the demo deployment's pragmata. (NB: the data
 # was imported by the demo-branch pragmata (partition_scope topology), so we read
-# it back through the same branch). PRAGMATA_SRC (config/workspace.env) shadows the
+# it back through the same branch). PRAGMATA_SRC (configs/annotation/settings.conf) shadows the
 # installed package on sys.path; unset → installed pragmata.
 _PRAGMATA_SRC = os.environ.get("PRAGMATA_SRC")
 if _PRAGMATA_SRC:
@@ -614,7 +614,7 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
     we reuse the durable per-domain export (``export_id=<domain>``, e.g. scripts/export.sh,
     also include_discarded=True) and skip re-exporting; a missing export degrades gracefully.
     """
-    base_dir = str(ws.ROOT / "data")
+    base_dir = str(ws.DATA_DIR)
     cfg_path, clean_cfg = sanitized_config(domain)
     try:
         cfg = str(cfg_path)

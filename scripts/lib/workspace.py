@@ -20,15 +20,14 @@ from pathlib import Path
 # This file is scripts/lib/workspace.py -> parents[2] is the workspace root.
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = ROOT / "scripts" / "annotation"
-CONFIG_DIR = ROOT / "config"                      # operational config + credentials (unchanged)
 CONFIGS_DIR = ROOT / "configs" / "annotation"     # per-domain task YAMLs
 SPECS_DIR = ROOT / "configs" / "annotation" / "querygen_specs"
-DATA_DIR = ROOT / "data" / "annotation"           # pragmata --base-dir is DATA_DIR.parent (= ROOT/"data")
-EXPORTS_DIR = DATA_DIR / "exports"
-RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen output (name kept; path moved)
-OUT_DIR = DATA_DIR / "publikationsbot"
-LOGS_DIR = ROOT / "runs" / "annotation"            # monitor.jsonl + run logs (name kept; path moved)
-REPORTS_DIR = ROOT / "reports" / "annotation"      # rendered tables + plots
+DATA_DIR = ROOT / "data"                          # pragmata base_dir
+EXPORTS_DIR = DATA_DIR / "annotation" / "exports"
+RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen output (pragmata tool sibling)
+OUT_DIR = DATA_DIR / "publikationsbot"             # workspace bot output (sibling)
+LOGS_DIR = ROOT / "runs" / "annotation"            # monitor.jsonl + run logs (unchanged)
+REPORTS_DIR = ROOT / "reports" / "annotation"      # rendered tables + plots (unchanged)
 
 
 def load_dotenv(path: Path) -> None:
@@ -44,8 +43,8 @@ def load_dotenv(path: Path) -> None:
 
 
 def load_env() -> None:
-    """Load config/workspace.env then .env (a pre-set environment beats both)."""
-    load_dotenv(CONFIG_DIR / "workspace.env")
+    """Load configs/annotation/settings.conf then .env (a pre-set environment beats both)."""
+    load_dotenv(CONFIGS_DIR / "settings.conf")
     load_dotenv(ROOT / ".env")
 
 

@@ -12,13 +12,13 @@ or outputs (those stay local and gitignored, see [Data & secrets](#data--secrets
 configs/annotation/querygen_specs/ + _runtime.yaml
    │  run_querygen.sh   pragmata querygen (openai provider -> Azure v1 endpoint)
    ▼
-data/annotation/querygen/runs/<stem>/synthetic_queries.csv        [gitignored data]
+data/querygen/runs/<stem>/synthetic_queries.csv                    [gitignored data]
    │  run_bot.py        publikationsbot /stream -> import-ready JSONL
    ▼
-data/annotation/publikationsbot/<stem>.jsonl               [gitignored data]
+data/publikationsbot/<stem>.jsonl                          [gitignored data]
    │  build_combined.py pool successive runs + intersperse edgecases
    ▼
-data/annotation/publikationsbot/<domain>_combined.jsonl    [gitignored data]
+data/publikationsbot/<domain>_combined.jsonl               [gitignored data]
    │  setup.sh (provision) + import.sh (clean + load)   pragmata annotation
    ▼
 Argilla datasets (3 tasks × {production, calibration})
@@ -91,14 +91,14 @@ python scripts/annotation/run_bot.py --spec <spec>
 python scripts/annotation/build_combined.py [<domain> ...]
 
 # setup (per domain) — native pragmata, after merging the password overlay
-jq --slurpfile s config/users.secrets.json \
+jq --slurpfile s configs/annotation/users.secrets.json \
   '$s[0] as $x | map(if $x[.username] then . + {password:$x[.username]} else . end)' \
-  config/users.json > /tmp/u.json
+  configs/annotation/users.json > /tmp/u.json
 pragmata annotation setup --users /tmp/u.json --config configs/annotation/<domain>.yaml
 
 # import (per domain) — native pragmata, after stripping run_bot extras
 jq -c '{query,answer,chunks,context_set,language}' \
-  data/annotation/publikationsbot/<domain>_combined.jsonl > /tmp/c.jsonl
+  data/publikationsbot/<domain>_combined.jsonl > /tmp/c.jsonl
 pragmata annotation import /tmp/c.jsonl --config configs/annotation/<domain>.yaml --base-dir data/
 
 # export (per domain) — native pragmata; submitted annotations -> per-task CSVs
@@ -175,12 +175,11 @@ overwrites. Take a backup before any bulk or in-place edit of live annotation da
 ## Layout
 
 ```
-config/
-  workspace.env        operational tunables (committed)
-  users.json           annotator roster, no passwords (gitignored, local)
-  users.secrets.json   username -> password overlay (gitignored)
 configs/
   annotation/          per-domain pragmata annotation configs (committed)
+    settings.conf      operational tunables (committed)
+    users.json         annotator roster, no passwords (gitignored, local)
+    users.secrets.json username -> password overlay (gitignored)
     querygen_specs/    per-domain querygen specs + _runtime.yaml (committed)
 scripts/
   lib/common.sh        shared shell helpers (logging, env, guards, venv paths)
@@ -197,8 +196,8 @@ data/                  (gitignored)
   annotation/
     exports/           export CSVs (one subdir per domain)
     imports/           import artifacts
-    querygen/runs/     querygen output
-    publikationsbot/   bot output JSONL
+  querygen/runs/       querygen output (pragmata tool sibling of annotation/)
+  publikationsbot/     bot output JSONL (sibling of annotation/)
 runs/                  (gitignored)
   annotation/
     monitor.jsonl      metrics history (one snapshot per run, appended)
@@ -210,7 +209,7 @@ reports/               (gitignored)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
-resolution, `.env` + `config/workspace.env` loading (existing environment wins),
+resolution, `.env` + `configs/annotation/settings.conf` loading (existing environment wins),
 stderr logging, and disk/env guards. See `scripts/lib/common.sh` for the shell
 side and `scripts/lib/workspace.py` for the python side.
 
@@ -218,10 +217,11 @@ side and `scripts/lib/workspace.py` for the python side.
 
 - **Secrets** live in `.env` (gitignored). Required keys:
   `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup);
-  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen). For Azure, set `OPENAI_API_KEY`
+  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen);
+  `PUBLIKATIONSBOT_URL` (bot). For Azure, set `OPENAI_API_KEY`
   to your Azure key and `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
-- **Operational tunables** live in `config/workspace.env` (queries-per-spec,
-  bot concurrency, throttle, disk thresholds, the publikationsbot URL). 
+- **Operational tunables** live in `configs/annotation/settings.conf` (queries-per-spec,
+  bot concurrency, throttle, disk thresholds). Committed and tracked.
 - **querygen runtime** (model, reasoning effort, batching) lives in
   `configs/annotation/querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
 - **The domain list** is derived from `configs/annotation/*.yaml` - add a domain
@@ -229,12 +229,12 @@ side and `scripts/lib/workspace.py` for the python side.
 
 ## Annotator roster
 
-`config/users.json` is the roster - usernames, roles, and workspace
+`configs/annotation/users.json` is the roster - usernames, roles, and workspace
 assignments, **no passwords**. It is kept **local (gitignored)**, not
 version-controlled, since it carries annotator names. Passwords live in
-`config/users.secrets.json` (also gitignored).
+`configs/annotation/users.secrets.json` (also gitignored).
 
 ## Data & secrets
 
-Not version-controlled (gitignored): `.venv/`, `.env`, `config/users.secrets.json`,
-`config/users.json`, `data/`, `runs/`, `reports/`, `*.log`. Everything tracked is scripts, configs, and specs.
+Not version-controlled (gitignored): `.venv/`, `.env`, `configs/annotation/users.secrets.json`,
+`configs/annotation/users.json`, `data/`, `runs/`, `reports/`, `*.log`. Everything tracked is scripts, configs, and specs.

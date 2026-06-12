@@ -6,12 +6,12 @@ For each requested domain, reads every JSONL output produced by run_bot.py
 across successive runs:
 
   Baseline pool:
-    data/annotation/publikationsbot/<domain>.jsonl
-    data/annotation/publikationsbot/<domain>_batch*.jsonl    (e.g. _batch2, _batch3)
+    data/publikationsbot/<domain>.jsonl
+    data/publikationsbot/<domain>_batch*.jsonl    (e.g. _batch2, _batch3)
 
   Edgecase pool:
-    data/annotation/publikationsbot/<domain>_edgecase.jsonl
-    data/annotation/publikationsbot/<domain>_edgecase_batch*.jsonl
+    data/publikationsbot/<domain>_edgecase.jsonl
+    data/publikationsbot/<domain>_edgecase_batch*.jsonl
 
 Within each pool, deduplicates on the literal query string (first occurrence
 wins). Cross-run duplicates can happen even with planning memory, because
@@ -20,9 +20,9 @@ strict deduplication against prior runs.
 
 Writes three files per domain:
 
-  data/annotation/publikationsbot/<domain>_pooled.jsonl           (deduped baseline pool)
-  data/annotation/publikationsbot/<domain>_edgecase_pooled.jsonl  (deduped edgecase pool)
-  data/annotation/publikationsbot/<domain>_combined.jsonl         (interspersed order)
+  data/publikationsbot/<domain>_pooled.jsonl           (deduped baseline pool)
+  data/publikationsbot/<domain>_edgecase_pooled.jsonl  (deduped edgecase pool)
+  data/publikationsbot/<domain>_combined.jsonl         (interspersed order)
 
 Interspersion rules:
   - First LEAD records are baseline only (no edgecase in the warm-up).
