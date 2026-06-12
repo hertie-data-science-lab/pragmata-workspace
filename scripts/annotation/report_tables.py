@@ -62,7 +62,7 @@ def _prev(lv) -> str:
 def _flag(lv) -> str:
     if not lv:
         return ""
-    return "⚠ degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
+    return "degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
 
 
 def _breakdown(counts: dict) -> str:
@@ -334,7 +334,7 @@ def task_x_domain_pace(domains: dict) -> str:
 def render(snap: dict) -> str:
     total, domains = snap["total"], snap["domains"]
     parts = [
-        f"**Snapshot:** run at **{snap['run_at']}** · "
+        f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}** · "
         f"session gap threshold {snap['session_gap_threshold_s'] // 60} min",
         "## Overall counts\n\n" + overall_counts(total),
         "## Progress by domain\n\n" + progress_by_domain(domains),
@@ -373,6 +373,7 @@ def main() -> None:
                     help="output .md path (default: reports/annotation/<snapshot-date>.md)")
     ap.add_argument("--stdout", action="store_true", help="write to stdout instead of a file")
     args = ap.parse_args()
+    ws.load_env()  # for REPORT_TZ (local-time display)
 
     lines = [ln for ln in args.jsonl.read_text().splitlines() if ln.strip()]
     if not lines:
@@ -386,8 +387,8 @@ def main() -> None:
     if args.stdout:
         sys.stdout.write(md)
         return
-    # default: reports/annotation/<snapshot-date>.md (date from the snapshot, not now)
-    out = args.out or (ws.REPORTS_DIR / f"{snap['run_at'][:10]}.md")
+    # default: reports/annotation/<local-snapshot-date>.md
+    out = args.out or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md)
     print(f"wrote {out}", file=sys.stderr)

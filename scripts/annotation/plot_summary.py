@@ -154,12 +154,13 @@ def main() -> None:
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
     args = ap.parse_args()
+    ws.load_env()  # for REPORT_TZ (local-date out-dir, matches report_tables)
 
     snaps = [json.loads(ln) for ln in args.jsonl.read_text().splitlines() if ln.strip()]
     if not snaps:
         sys.exit(f"no snapshots in {args.jsonl}")
     snap = snaps[args.line]
-    out = args.out_dir or (ws.REPORTS_DIR / snap["run_at"][:10])
+    out = args.out_dir or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}")
     out.mkdir(parents=True, exist_ok=True)
 
     made = sum([

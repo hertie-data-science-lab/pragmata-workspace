@@ -51,7 +51,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/annotation/settings.conf + .env; existing env wins
+ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 RUNS_DIR = ws.RUNS_DIR
 OUT_DIR = ws.OUT_DIR
@@ -63,7 +63,7 @@ LANG_MAP = {"german": "de", "english": "en"}
 # Throttle: seconds to sleep after each network-touching iteration (skipped/done
 # rows are unaffected). The bot's own /stream latency is ~30s, so 2s adds ~7%
 # overhead while giving the bot's upstream (LLM, vector store) breathing room.
-# Default from configs/annotation/settings.conf (INTER_QUERY_DELAY_S); --delay overrides.
+# Default from configs/settings.conf (INTER_QUERY_DELAY_S); --delay overrides.
 INTER_QUERY_DELAY_S = float(os.environ.get("INTER_QUERY_DELAY_S", "2.0"))
 
 # HTTP 5xx backoff-retry schedule. Each entry is "wait this long, then retry".

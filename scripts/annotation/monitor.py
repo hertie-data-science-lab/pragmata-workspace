@@ -66,11 +66,11 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/annotation/settings.conf + .env; existing env wins
+ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 # Build against the demo deployment's pragmata. (NB: the data
 # was imported by the demo-branch pragmata (partition_scope topology), so we read
-# it back through the same branch). PRAGMATA_SRC (configs/annotation/settings.conf) shadows the
+# it back through the same branch). PRAGMATA_SRC (.env) shadows the
 # installed package on sys.path; unset → installed pragmata.
 _PRAGMATA_SRC = os.environ.get("PRAGMATA_SRC")
 if _PRAGMATA_SRC:

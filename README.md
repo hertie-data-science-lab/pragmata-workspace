@@ -176,10 +176,10 @@ overwrites. Take a backup before any bulk or in-place edit of live annotation da
 
 ```
 configs/
+  settings.conf        workspace-global operational tunables (committed, loaded for all scripts)
   annotation/          annotation-stage configs
     domains/           per-domain pragmata annotation task YAMLs (committed)
     querygen_specs/    per-domain querygen specs + _runtime.yaml (committed)
-    settings.conf      operational tunables (committed)
     users.json         annotator roster, no passwords (gitignored, local)
     users.secrets.json username -> password overlay (gitignored)
 scripts/
@@ -210,7 +210,7 @@ reports/               (gitignored)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
-resolution, `.env` + `configs/annotation/settings.conf` loading (existing environment wins),
+resolution, `.env` + `configs/settings.conf` loading (existing environment wins),
 stderr logging, and disk/env guards. See `scripts/lib/common.sh` for the shell
 side and `scripts/lib/workspace.py` for the python side.
 
@@ -221,7 +221,7 @@ side and `scripts/lib/workspace.py` for the python side.
   `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen);
   `PUBLIKATIONSBOT_URL` (bot). For Azure, set `OPENAI_API_KEY`
   to your Azure key and `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
-- **Operational tunables** live in `configs/annotation/settings.conf` (queries-per-spec,
+- **Operational tunables** live in `configs/settings.conf` (queries-per-spec,
   bot concurrency, throttle, disk thresholds). Committed and tracked.
 - **querygen runtime** (model, reasoning effort, batching) lives in
   `configs/annotation/querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
