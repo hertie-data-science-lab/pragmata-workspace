@@ -61,6 +61,12 @@ export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, defau
 report-tables: ## Render latest monitor snapshot -> reports/annotation/<date>.md
 	$(PY) scripts/annotation/report_tables.py
 
+report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>.pdf (needs pandoc + xelatex)
+	@md=$$($(PY) scripts/annotation/report_tables.py 2>&1 | sed -n 's/^wrote //p'); \
+	pandoc "$$md" -o "$${md%.md}.pdf" --pdf-engine=xelatex -V fontsize=9pt \
+	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
+	  && echo "wrote $${md%.md}.pdf"
+
 plots: ## Render summary plots (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 

@@ -152,37 +152,41 @@ def iaa_per_label(domains: dict) -> str:
                 continue
             lab = (tv.get("labels") or {}).get("per_label") or {}
             for lbl, lv in per_label.items():
-                rows.append([name, task, lbl, _alpha(lv["alpha"]), _pct(lv["pct_agreement"]),
-                             _prev(lab.get(lbl)), _int(n_items), str(n_ann)])
+                rows.append([name, task, lbl, _alpha(lv["alpha"]),
+                             _pct(lv["pct_agreement"]), _prev(lab.get(lbl))])
     if not rows:
         return ""
-    return _table(["Domain", "Task", "Label", "α", "% agree", "Prev.", "Items", "Ann."],
-                  ["l", "l", "l", "r", "r", "r", "r", "r"], rows)
+    return _table(["Domain", "Task", "Label", "α", "% agree", "Prev."],
+                  ["l", "l", "l", "r", "r", "r"], rows)
 
 
-def label_distribution(domains: dict, total: dict) -> str:
+def _label_rows(per_label: dict) -> list[list[str]]:
+    return [[lbl, _int(lv["n"]), _prev(lv)] for lbl, lv in per_label.items() if lv["n"] > 0]
+
+
+def label_distribution_totals(total: dict) -> str:
+    """Pooled class balance per task across all domains (fraction true over n)."""
+    rows = []
+    for task in TASK_ORDER:
+        pl = (total.get("labels") or {}).get(task)
+        if pl:
+            rows += [[task, *r] for r in _label_rows(pl)]
+    if not rows:
+        return ""
+    return _table(["Task", "Label", "n", "Prev."], ["l", "l", "r", "r"], rows)
+
+
+def label_distribution_by_domain(domains: dict) -> str:
     """Class balance per (domain, task, label): prevalence (fraction true) over n."""
     rows = []
-
-    def emit(scope, task, per_label):
-        for lbl, lv in per_label.items():
-            if lv["n"] == 0:  # label with no submitted data yet — skip the empty row
-                continue
-            rows.append([scope, task, lbl, _int(lv["n"]), _prev(lv)])
-
     for name, v in sorted(domains.items()):
         for task in TASK_ORDER:
             lab = (v.get("tasks", {}).get(task) or {}).get("labels")
             if lab and lab.get("per_label"):
-                emit(name, task, lab["per_label"])
-    for task in TASK_ORDER:
-        pl = (total.get("labels") or {}).get(task)
-        if pl:
-            emit("**TOTAL**", task, pl)
+                rows += [[name, task, *r] for r in _label_rows(lab["per_label"])]
     if not rows:
         return ""
-    return _table(["Domain", "Task", "Label", "n", "Prev."],
-                  ["l", "l", "l", "r", "r"], rows)
+    return _table(["Domain", "Task", "Label", "n", "Prev."], ["l", "l", "l", "r", "r"], rows)
 
 
 def discards(domains: dict, total: dict) -> str:
@@ -255,7 +259,7 @@ def annotator_bias(domains: dict, top_n: int = 15) -> str:
     if not devs:
         return ""
     devs.sort(key=lambda r: -r[0])
-    return _table(["Annotator", "Domain", "Task", "Label", "Ann. prev.", "Δ pool (pp)", "n"],
+    return _table(["Annotator", "Domain", "Task", "Label", "Prev.", "Δ pp", "n"],
                   ["l", "l", "l", "l", "r", "r", "r"], [r[1] for r in devs[:top_n]])
 
 
@@ -341,8 +345,11 @@ def render(snap: dict) -> str:
         "## Inter-annotator agreement (Krippendorff's α)\n\n" + iaa_per_label(domains),
     ]
     # Label-value statistics (omit a section when the snapshot carries no data for it).
+    label_tot, label_dom = label_distribution_totals(total), label_distribution_by_domain(domains)
+    label_block = "\n\n".join(
+        f"### {sub}\n\n{body}" for sub, body in [("Totals", label_tot), ("By domain", label_dom)] if body)
     for title, body in [
-        ("## Label distribution", label_distribution(domains, total)),
+        ("## Label distribution", label_block),
         ("## Discards", discards(domains, total)),
         ("## Logical-constraint violations", constraint_violations(domains, total)),
         ("## Retrieval panel completeness", completeness(domains, total)),
