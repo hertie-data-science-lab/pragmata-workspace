@@ -16,10 +16,17 @@ Output record schema (one JSON object per line). The first 5 fields satisfy
 pragmata's ``QueryResponsePair`` schema; the rest are extras that preserve
 provenance and are stripped at annotation-import time:
 
-    query, answer, chunks[{chunk_id, doc_id, chunk_rank, text}],
+    query, answer, chunks[{chunk_id, doc_id, chunk_rank, title, text}],
     context_set, language,
     [extras] query_id, domain, role, topic, intent, task, difficulty, format,
              spec_stem
+
+``context_set`` is rendered as markdown: each chunk is a **bold** header line
+carrying the doc title inline -- ``**[chunk N • doc <id> (<title>) • <cid>]**``
+-- followed by its body, with chunks separated by a ``---`` rule. ``<title>`` is
+the bot's native main title (``metadata.title``); it is ``title unavailable``
+when the bot omits it. This markdown renders in both the Grounding TextField
+(``use_markdown=True``) and the Generation collapsible widget.
 
 Modes:
   --probe              : one query from the first available spec, dump raw
@@ -212,6 +219,9 @@ def normalize_chunks(raw_docs: list[dict]) -> list[dict]:
             "chunk_id": f"{doc_id}-c1",
             "doc_id": doc_id,
             "chunk_rank": rank,
+            # bot's native main title (= vectorstore `hst`); shown inline in the
+            # context_set header. Subtitle (hst_zu) is not in the bot response.
+            "title": meta.get("title"),
             "text": text,
         })
     return out
@@ -463,8 +473,12 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
                 # primary visible field in the Grounding workspace (annotators
                 # need to read the actual context to judge support/contradiction)
                 # and as the auxiliary collapsible context in Generation.
-                "context_set": "\n\n".join(
-                    f"[chunk {c['chunk_rank']} • doc {c['doc_id']} • {c['chunk_id']}]\n{c['text']}"
+                # Each chunk = a bold markdown header line (title inline) then
+                # its body; chunks separated by a '---' rule. Markdown renders
+                # in both the Grounding TextField and the Generation widget.
+                "context_set": "\n\n---\n\n".join(
+                    f"**[chunk {c['chunk_rank']} • doc {c['doc_id']} "
+                    f"({c.get('title') or 'title unavailable'}) • {c['chunk_id']}]**\n\n{c['text']}"
                     for c in chunks
                 ),
                 "language": LANG_MAP.get(row.get("language", "").lower(), row.get("language") or None),
