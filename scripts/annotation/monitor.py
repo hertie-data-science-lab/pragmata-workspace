@@ -17,7 +17,7 @@ and emits three progress metrics, rolled up task -> domain -> total:
      per-annotator (true individual pace) and global (team throughput), each
      session-guarded (see below).
 
-Each run appends one JSON object to runs/annotation/monitor.jsonl (for trend-watching) and
+Each run appends one JSON object to logs/annotation/monitor.jsonl (for trend-watching) and
 prints a one-line status to stdout. The human-readable stats tables are NOT
 printed here — they are rendered to reports/annotation/<date>.md by report_tables.py
 (pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
@@ -567,7 +567,7 @@ def sanitized_config(domain: str) -> tuple[Path, dict]:
     Returns (temp path, cleaned dict). Leaves the shared config untouched (the
     demo import path needs the extra keys).
     """
-    raw = yaml.safe_load((ws.CONFIGS_DIR / f"{domain}.yaml").read_text()) or {}
+    raw = yaml.safe_load((ws.DOMAINS_DIR / f"{domain}.yaml").read_text()) or {}
     dropped = sorted(k for k in raw if k not in _VALID_CONFIG_KEYS)
     clean = {k: v for k, v in raw.items() if k in _VALID_CONFIG_KEYS}
     if dropped:
@@ -845,7 +845,7 @@ def self_check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
-    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to runs/annotation/monitor.jsonl.")
+    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/monitor.jsonl.")
     ap.add_argument("--use-export", action="store_true",
                     help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
                          "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
@@ -863,7 +863,7 @@ def main() -> int:
 
     domains = [args.domain] if args.domain else ws.domains()
     if not domains:
-        log("No domains found under configs/annotation/")
+        log("No domains found under configs/annotation/domains/")
         return 1
 
     result = run(domains, use_export=args.use_export)

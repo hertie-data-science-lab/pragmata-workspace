@@ -9,7 +9,7 @@ configs/annotation/users.json
 
 # --- data, outputs, run state (not version-controlled) ---
 /data/
-/runs/
+/logs/
 /reports/
 *.log
 .pipeline.lock

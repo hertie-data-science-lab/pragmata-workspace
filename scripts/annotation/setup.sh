@@ -16,7 +16,7 @@ cd_root
 
 [[ $# -eq 1 ]] || fatal "usage: $0 <domain>"
 d="$1"
-cfg="configs/annotation/${d}.yaml"
+cfg="configs/annotation/domains/${d}.yaml"
 roster="configs/annotation/users.json"
 secrets="configs/annotation/users.secrets.json"
 [[ -f "$cfg" ]]    || fatal "no config: $cfg"

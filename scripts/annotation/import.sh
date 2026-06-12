@@ -13,7 +13,7 @@ cd_root
 
 [[ $# -eq 1 ]] || fatal "usage: $0 <domain>"
 d="$1"
-cfg="configs/annotation/${d}.yaml"
+cfg="configs/annotation/domains/${d}.yaml"
 combined="data/publikationsbot/${d}_combined.jsonl"
 [[ -f "$cfg" ]] || fatal "no config: $cfg"
 [[ -s "$combined" ]] || fatal "no combined JSONL: $combined (run build_combined.py first)"
@@ -22,4 +22,4 @@ combined="data/publikationsbot/${d}_combined.jsonl"
 clean="/tmp/${d}_combined.clean.jsonl"
 jq -c '{query, answer, chunks, context_set, language}' "$combined" > "$clean" \
   || fatal "jq projection failed on $combined"
-"$PRAGMATA" annotation import "$clean" --config "$cfg" --base-dir "$WORKSPACE_ROOT/data"
+"$PRAGMATA" annotation import "$clean" --config "$cfg" --base-dir "$DATA_DIR"

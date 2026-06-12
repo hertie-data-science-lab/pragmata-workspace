@@ -24,20 +24,20 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 require_env ARGILLA_API_URL ARGILLA_API_KEY
 
-# Domains: the one given, else every configs/annotation/*.yaml stem (skip _helpers).
+# Domains: the one given, else every configs/annotation/domains/*.yaml stem (skip _helpers).
 if [[ $# -ge 1 ]]; then
   domains=("$1")
 else
-  mapfile -t domains < <(cd configs/annotation && for f in *.yaml; do [[ "$f" == _* ]] || echo "${f%.yaml}"; done)
+  mapfile -t domains < <(cd configs/annotation/domains && for f in *.yaml; do [[ "$f" == _* ]] || echo "${f%.yaml}"; done)
 fi
-[[ ${#domains[@]} -gt 0 ]] || fatal "no domains found under configs/annotation/"
+[[ ${#domains[@]} -gt 0 ]] || fatal "no domains found under configs/annotation/domains/"
 
 rc=0
 for d in "${domains[@]}"; do
-  cfg="configs/annotation/${d}.yaml"
+  cfg="configs/annotation/domains/${d}.yaml"
   [[ -f "$cfg" ]] || { warn "no config: $cfg (skipping)"; rc=1; continue; }
   section "export: $d"
-  "$PRAGMATA" annotation export --config "$cfg" --export-id "$d" --base-dir "$WORKSPACE_ROOT/data" \
+  "$PRAGMATA" annotation export --config "$cfg" --export-id "$d" --base-dir "$DATA_DIR" \
     --include-discarded \
     || { warn "export failed: $d"; rc=1; }
 done

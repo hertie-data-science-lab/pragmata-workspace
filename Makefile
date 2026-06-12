@@ -52,7 +52,7 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/import.sh "$(DOMAIN)"
 
-monitor: ## Compute annotation snapshot -> runs/annotation/monitor.jsonl (--summary for a CLI table)
+monitor: ## Compute annotation snapshot -> logs/annotation/monitor.jsonl (--summary for a CLI table)
 	$(PY) scripts/annotation/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
 export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)

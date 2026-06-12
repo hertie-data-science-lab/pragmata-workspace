@@ -24,7 +24,7 @@
 # --filter takes DOMAINS (e.g. gesundheit,europas-zukunft); querygen/bot expand
 # each to its specs (<domain> + <domain>_edgecase), combine/import use domains.
 #
-# Cron/tmux friendly: lockfile + exit codes + runs/annotation/runs/pipeline.log. Example:
+# Cron/tmux friendly: lockfile + exit codes + logs/annotation/pipeline.log. Example:
 #   tmux new -s pipeline 'bash scripts/pipeline.sh'
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -64,10 +64,10 @@ FROM_IDX="$(stage_index "$FROM")"; TO_IDX="$(stage_index "$TO")"
 in_slice() { local i; i="$(stage_index "$1")"; (( i >= FROM_IDX && i <= TO_IDX )); }
 
 # --- filter resolution ---
-# domains: filter list, or all configs/annotation/.
+# domains: filter list, or all configs/annotation/domains/.
 filter_domains() {
   if [[ -n "$FILTER" ]]; then split_csv "$FILTER"
-  else ls configs/annotation/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'; fi
+  else ls configs/annotation/domains/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'; fi
 }
 # specs: each domain -> <domain> + <domain>_edgecase (only those with a spec yaml);
 # or all non-underscore specs when unfiltered.
@@ -96,9 +96,9 @@ stage_bot() {
   done)
   log "bot: ${#specs[@]} spec(s), ${JOBS}-way parallel"
   (( ${#specs[@]} > 0 )) || return 0
-  mkdir -p runs/annotation/runs
+  mkdir -p logs/annotation
   printf '%s\n' "${specs[@]}" | PY="$PY" xargs -P "$JOBS" -I {} bash -c '
-    stem="$1"; log="runs/annotation/runs/run_bot.${stem}.log"
+    stem="$1"; log="logs/annotation/run_bot.${stem}.log"
     echo "[$(date -Iseconds)] start" > "$log"
     "$PY" scripts/annotation/run_bot.py --spec "$stem" >> "$log" 2>&1
     rc=$?; echo "[bot:$stem] finished (rc=$rc)"; exit $rc
@@ -180,8 +180,8 @@ fi
 echo $$ > "$LOCK"
 trap 'rm -f "$LOCK"' EXIT
 
-mkdir -p runs/annotation/runs
-exec > >(tee -a runs/annotation/runs/pipeline.log) 2>&1
+mkdir -p logs/annotation
+exec > >(tee -a logs/annotation/pipeline.log) 2>&1
 
 section "pipeline started: $(ts)  [stages: ${planned[*]}  filter: ${FILTER:-all}]"
 preflight

@@ -4,7 +4,7 @@
 # Nightly annotation analysis. Chains three independently-runnable steps:
 #
 #   1. export.sh              annotations (incl. discarded) -> data/annotation/exports/<domain>/  (overwrite per domain)
-#   2. monitor.py --use-export   counts + IAA + cadence + label/discard stats -> append runs/annotation/monitor.jsonl
+#   2. monitor.py --use-export   counts + IAA + cadence + label/discard stats -> append logs/annotation/monitor.jsonl
 #   3. report_tables.py       latest snapshot -> reports/annotation/<date>.md             (data tables)
 #   4. plot_summary.py        latest snapshot -> reports/annotation/<date>/*.png          (plots; best-effort)
 #
@@ -15,7 +15,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root
 require_env ARGILLA_API_URL ARGILLA_API_KEY
-mkdir -p reports/annotation runs/annotation/runs
+mkdir -p reports/annotation logs/annotation
 
 section "export"
 bash scripts/annotation/export.sh || warn "export had failures; monitor will reuse whatever CSVs exist"

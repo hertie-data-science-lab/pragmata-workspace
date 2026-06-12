@@ -30,6 +30,10 @@ PY="$WORKSPACE_ROOT/.venv/bin/python"
 PRAGMATA="$WORKSPACE_ROOT/.venv/bin/pragmata"
 export PY PRAGMATA
 
+# pragmata base_dir: tools write <DATA_DIR>/{annotation,querygen,eval} as siblings.
+DATA_DIR="$WORKSPACE_ROOT/data"
+export DATA_DIR
+
 # --- logging (all to stderr) ---
 ts()      { date -Iseconds; }
 log()     { printf '[%s] %s\n'        "$(ts)" "$*" >&2; }

@@ -48,7 +48,7 @@ for spec in "${specs[@]}"; do
   fi
   if ! "$PRAGMATA" -v querygen gen-queries \
       --config-path "$merged" --n-queries "$n" --run-id "$stem" \
-      --base-dir "$WORKSPACE_ROOT/data"; then
+      --base-dir "$DATA_DIR"; then
     warn "  failed: $stem"; failures+=("$stem (gen-queries)")
   fi
 done

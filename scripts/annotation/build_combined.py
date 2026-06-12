@@ -42,7 +42,7 @@ fills its `calibration_max_records` cap from baseline records, leaving zero
 calibration slots for the subsequent edgecase import. See setup_and_import.sh.
 
 Usage:
-  scripts/annotation/build_combined.py                                    # all domains (configs/annotation/)
+  scripts/annotation/build_combined.py                                    # all domains (configs/annotation/domains/)
   scripts/annotation/build_combined.py demokratie-und-zusammenhalt        # one
   scripts/annotation/build_combined.py demokratie-und-zusammenhalt europas-zukunft  # subset
 """
@@ -162,7 +162,7 @@ def build_for_domain(domain: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    known = ws.domains()  # single source of truth: configs/annotation/*.yaml
+    known = ws.domains()  # single source of truth: configs/annotation/domains/*.yaml
     domains = argv[1:] if len(argv) > 1 else known
     unknown = [d for d in domains if d not in known]
     if unknown:

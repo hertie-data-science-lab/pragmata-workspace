@@ -20,13 +20,14 @@ from pathlib import Path
 # This file is scripts/lib/workspace.py -> parents[2] is the workspace root.
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = ROOT / "scripts" / "annotation"
-CONFIGS_DIR = ROOT / "configs" / "annotation"     # per-domain task YAMLs
-SPECS_DIR = ROOT / "configs" / "annotation" / "querygen_specs"
+CONFIGS_DIR = ROOT / "configs" / "annotation"     # settings.conf, users.*, domains/, querygen_specs/
+DOMAINS_DIR = CONFIGS_DIR / "domains"              # per-domain annotation task YAMLs
+SPECS_DIR = CONFIGS_DIR / "querygen_specs"
 DATA_DIR = ROOT / "data"                          # pragmata base_dir
 EXPORTS_DIR = DATA_DIR / "annotation" / "exports"
 RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen output (pragmata tool sibling)
 OUT_DIR = DATA_DIR / "publikationsbot"             # workspace bot output (sibling)
-LOGS_DIR = ROOT / "runs" / "annotation"            # monitor.jsonl + run logs (unchanged)
+LOGS_DIR = ROOT / "logs" / "annotation"            # monitor.jsonl + run logs (flat)
 REPORTS_DIR = ROOT / "reports" / "annotation"      # rendered tables + plots (unchanged)
 
 
@@ -49,13 +50,13 @@ def load_env() -> None:
 
 
 def domains() -> list[str]:
-    """All domain stems, derived from configs/annotation/*.yaml (sorted).
+    """All domain stems, derived from configs/annotation/domains/*.yaml (sorted).
 
     Single source of truth for "which domains exist" — replaces hardcoded lists.
     Underscore-prefixed helper files are excluded.
     """
     return sorted(
-        p.stem for p in CONFIGS_DIR.glob("*.yaml") if not p.name.startswith("_")
+        p.stem for p in DOMAINS_DIR.glob("*.yaml") if not p.name.startswith("_")
     )
 
 
