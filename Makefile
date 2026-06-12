@@ -27,7 +27,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe monitor
+.PHONY: help pipeline plan querygen bot combine setup import probe monitor report-tables
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -54,3 +54,6 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 
 monitor: ## Report annotation progress/agreement/cadence (DOMAIN= to filter)
 	$(PY) scripts/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),) 2>&1 | tee -a logs/monitor.log
+
+report-tables: ## Render analysis markdown tables from the latest monitor snapshot
+	$(PY) scripts/report_tables.py

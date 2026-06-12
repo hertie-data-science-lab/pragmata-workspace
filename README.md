@@ -63,6 +63,7 @@ make combine                              # all domains (DOMAINS="a b" to filter
 make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
 make import                               # import one domain (DOMAIN= to filter)
 make monitor                              # annotation progress report (DOMAIN= to filter)
+make report-tables                        # render markdown stats tables from latest monitor snapshot
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
@@ -130,6 +131,11 @@ NB:
   ```cron
   0 2 * * * cd /home/azureuser/pragmata-workspace && .venv/bin/python scripts/monitor.py >> logs/monitor.log 2>&1
   ```
+
+`scripts/report_tables.py` (`make report-tables`) reshapes one `logs/monitor.jsonl`
+snapshot into deterministic markdown tables on stdout - numbers are pulled verbatim
+from the snapshot, so the output is reproducible and prose can be layered on top.
+`--line N` selects a specific snapshot (default: latest).
 
 ## Layout
 
