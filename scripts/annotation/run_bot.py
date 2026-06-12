@@ -3,8 +3,8 @@
 Pipe pragmata querygen output through publikationsbot prod's /stream endpoint
 and emit annotation-import-ready JSONL.
 
-For each ``querygen/runs/<stem>/synthetic_queries.csv``:
-  - Skip query_ids already present in ``publikationsbot_output/<stem>.jsonl``
+For each ``data/annotation/querygen/runs/<stem>/synthetic_queries.csv``:
+  - Skip query_ids already present in ``data/annotation/publikationsbot/<stem>.jsonl``
   - For each remaining query:
       1. Acquire/refresh Azure AD bearer token (via ``az``)
       2. POST /login -> sessionToken (with retry on 401)
@@ -30,9 +30,9 @@ when the bot omits it. This markdown renders in both the Grounding TextField
 
 Modes:
   --probe              : one query from the first available spec, dump raw
-                         SSE lines to publikationsbot_output/probe_<stem>.raw.txt
+                         SSE lines to data/annotation/publikationsbot/probe_<stem>.raw.txt
                          for inspection. Does NOT write to <stem>.jsonl.
-  --spec <stem>        : process only this spec (default: all under querygen/runs/)
+  --spec <stem>        : process only this spec (default: all under data/annotation/querygen/runs/)
   --max-per-spec N     : cap queries per spec (smoke testing)
   (no flags)           : process all specs found, all queries, with resume
 """
@@ -48,7 +48,7 @@ from pathlib import Path
 
 import httpx
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
 ws.load_env()  # config/workspace.env + .env; existing env wins

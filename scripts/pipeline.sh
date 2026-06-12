@@ -24,7 +24,7 @@
 # --filter takes DOMAINS (e.g. gesundheit,europas-zukunft); querygen/bot expand
 # each to its specs (<domain> + <domain>_edgecase), combine/import use domains.
 #
-# Cron/tmux friendly: lockfile + exit codes + logs/pipeline.log. Example:
+# Cron/tmux friendly: lockfile + exit codes + runs/annotation/runs/pipeline.log. Example:
 #   tmux new -s pipeline 'bash scripts/pipeline.sh'
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -64,10 +64,10 @@ FROM_IDX="$(stage_index "$FROM")"; TO_IDX="$(stage_index "$TO")"
 in_slice() { local i; i="$(stage_index "$1")"; (( i >= FROM_IDX && i <= TO_IDX )); }
 
 # --- filter resolution ---
-# domains: filter list, or all annotation_configs/.
+# domains: filter list, or all configs/annotation/.
 filter_domains() {
   if [[ -n "$FILTER" ]]; then split_csv "$FILTER"
-  else ls annotation_configs/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'; fi
+  else ls configs/annotation/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'; fi
 }
 # specs: each domain -> <domain> + <domain>_edgecase (only those with a spec yaml);
 # or all non-underscore specs when unfiltered.
@@ -76,44 +76,44 @@ filter_specs() {
     local d s
     while IFS= read -r d; do
       for s in "$d" "${d}_edgecase"; do
-        [[ -f "querygen_specs/${s}.yaml" ]] && printf '%s\n' "$s"
+        [[ -f "configs/annotation/querygen_specs/${s}.yaml" ]] && printf '%s\n' "$s"
       done
     done < <(split_csv "$FILTER")
   else
-    ls querygen_specs/[!_]*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'
+    ls configs/annotation/querygen_specs/[!_]*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'
   fi
 }
 
 # --- stages (each returns its rc) ---
 stage_querygen() {
   local csv=""; [[ -n "$FILTER" ]] && csv="$(filter_specs | paste -sd,)"
-  bash scripts/run_querygen.sh "$csv"
+  bash scripts/annotation/run_querygen.sh "$csv"
 }
 
 stage_bot() {
   mapfile -t specs < <(filter_specs | while IFS= read -r s; do
-    [[ -f "querygen/runs/${s}/synthetic_queries.csv" ]] && echo "$s"
+    [[ -f "data/annotation/querygen/runs/${s}/synthetic_queries.csv" ]] && echo "$s"
   done)
   log "bot: ${#specs[@]} spec(s), ${JOBS}-way parallel"
   (( ${#specs[@]} > 0 )) || return 0
-  mkdir -p logs
+  mkdir -p runs/annotation/runs
   printf '%s\n' "${specs[@]}" | PY="$PY" xargs -P "$JOBS" -I {} bash -c '
-    stem="$1"; log="logs/run_bot.${stem}.log"
+    stem="$1"; log="runs/annotation/runs/run_bot.${stem}.log"
     echo "[$(date -Iseconds)] start" > "$log"
-    "$PY" scripts/run_bot.py --spec "$stem" >> "$log" 2>&1
+    "$PY" scripts/annotation/run_bot.py --spec "$stem" >> "$log" 2>&1
     rc=$?; echo "[bot:$stem] finished (rc=$rc)"; exit $rc
   ' _ {}
 }
 
 stage_combine() {
   mapfile -t doms < <(filter_domains)
-  "$PY" scripts/build_combined.py "${doms[@]}"
+  "$PY" scripts/annotation/build_combined.py "${doms[@]}"
 }
 
 stage_setup() {
   local d rc=0
   while IFS= read -r d; do
-    bash scripts/setup.sh "$d" || { warn "setup failed: $d"; rc=1; }
+    bash scripts/annotation/setup.sh "$d" || { warn "setup failed: $d"; rc=1; }
   done < <(filter_domains)
   return "$rc"
 }
@@ -121,7 +121,7 @@ stage_setup() {
 stage_import() {
   local d rc=0
   while IFS= read -r d; do
-    bash scripts/import.sh "$d" || { warn "import failed: $d"; rc=1; }
+    bash scripts/annotation/import.sh "$d" || { warn "import failed: $d"; rc=1; }
   done < <(filter_domains)
   return "$rc"
 }
@@ -133,8 +133,8 @@ preflight() {
   check_disk
   if in_slice querygen; then
     require_env OPENAI_API_KEY OPENAI_BASE_URL
-    local sample; sample="$(ls querygen_specs/[!_]*.yaml | head -1)"
-    "$PY" scripts/merge_yaml.py querygen_specs/_runtime.yaml "$sample" \
+    local sample; sample="$(ls configs/annotation/querygen_specs/[!_]*.yaml | head -1)"
+    "$PY" scripts/annotation/merge_yaml.py configs/annotation/querygen_specs/_runtime.yaml "$sample" \
       | "$PY" -c "import sys,yaml; from pragmata.core.settings.querygen_settings import QueryGenRunSettings; QueryGenRunSettings.resolve(config=yaml.safe_load(sys.stdin))" \
         >/dev/null 2>&1 \
       || fatal "_runtime.yaml + $(basename "$sample") failed QueryGenRunSettings validation" 4
@@ -180,8 +180,8 @@ fi
 echo $$ > "$LOCK"
 trap 'rm -f "$LOCK"' EXIT
 
-mkdir -p logs
-exec > >(tee -a logs/pipeline.log) 2>&1
+mkdir -p runs/annotation/runs
+exec > >(tee -a runs/annotation/runs/pipeline.log) 2>&1
 
 section "pipeline started: $(ts)  [stages: ${planned[*]}  filter: ${FILTER:-all}]"
 preflight

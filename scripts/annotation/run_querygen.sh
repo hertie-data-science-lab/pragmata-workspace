@@ -1,36 +1,36 @@
 #!/bin/bash
-# scripts/run_querygen.sh [spec1,spec2,...]
+# scripts/annotation/run_querygen.sh [spec1,spec2,...]
 #
-# Runs pragmata querygen across querygen_specs/ — all specs by default, or a
+# Runs pragmata querygen across configs/annotation/querygen_specs/ — all specs by default, or a
 # comma-separated subset (first positional arg).
 #   baseline  <domain>.yaml           -> N=$N_BASELINE
 #   edge-case <domain>_edgecase.yaml  -> N=$N_EDGECASE
 #
-# Each spec is deep-merged with querygen_specs/_runtime.yaml (shared model /
-# batching / timeout knobs) via scripts/merge_yaml.py, then passed to pragmata
+# Each spec is deep-merged with configs/annotation/querygen_specs/_runtime.yaml (shared model /
+# batching / timeout knobs) via scripts/annotation/merge_yaml.py, then passed to pragmata
 # via --config-path. Azure is reached natively through pragmata's `openai`
 # provider pointed at the Azure v1 endpoint (set OPENAI_API_KEY + OPENAI_BASE_URL
 # in .env; model_provider: openai in _runtime.yaml) — no wrapper needed.
 
-source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 
-MERGE="scripts/merge_yaml.py"
-RUNTIME="querygen_specs/_runtime.yaml"
+MERGE="scripts/annotation/merge_yaml.py"
+RUNTIME="configs/annotation/querygen_specs/_runtime.yaml"
 
 # --- spec selection: comma-list, or all non-underscore specs ---
 if [[ -n "${1:-}" ]]; then
   specs=()
   while IFS= read -r stem; do
-    if [[ -f "querygen_specs/${stem}.yaml" ]]; then
-      specs+=("querygen_specs/${stem}.yaml")
+    if [[ -f "configs/annotation/querygen_specs/${stem}.yaml" ]]; then
+      specs+=("configs/annotation/querygen_specs/${stem}.yaml")
     else
-      warn "no spec at querygen_specs/${stem}.yaml, skipping"
+      warn "no spec at configs/annotation/querygen_specs/${stem}.yaml, skipping"
     fi
   done < <(split_csv "$1")
   [[ ${#specs[@]} -gt 0 ]] || fatal "no valid specs after filter" 6
 else
-  specs=(querygen_specs/[!_]*.yaml)
+  specs=(configs/annotation/querygen_specs/[!_]*.yaml)
 fi
 
 merged="$(mktemp --suffix=.yaml)"

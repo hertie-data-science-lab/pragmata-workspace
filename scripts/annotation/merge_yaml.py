@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deep-merge YAML files and print the result to stdout.
 
-Used by scripts/run_querygen.sh to compose querygen_specs/_runtime.yaml
+Used by scripts/annotation/run_querygen.sh to compose configs/annotation/querygen_specs/_runtime.yaml
 with each per-spec YAML before passing the result to `pragmata querygen
 gen-queries --config-path`. Reuses pragmata's own deep_merge so the merged
 file behaves identically to what pragmata would produce from layered

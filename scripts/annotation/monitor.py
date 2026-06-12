@@ -17,9 +17,9 @@ and emits three progress metrics, rolled up task -> domain -> total:
      per-annotator (true individual pace) and global (team throughput), each
      session-guarded (see below).
 
-Each run appends one JSON object to logs/monitor.jsonl (for trend-watching) and
+Each run appends one JSON object to runs/annotation/monitor.jsonl (for trend-watching) and
 prints a one-line status to stdout. The human-readable stats tables are NOT
-printed here — they are rendered to logs/analysis/<date>.md by report_tables.py
+printed here — they are rendered to reports/annotation/<date>.md by report_tables.py
 (pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
 fails is recorded and skipped; the run continues.
 
@@ -39,13 +39,13 @@ agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
 ``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
 
 Usage:
-  scripts/monitor.py                 # run all domains, append jsonl + one-line status
-  scripts/monitor.py --domain X      # one domain only (smoke test)
-  scripts/monitor.py --summary       # also print the human-readable table to stdout
-  scripts/monitor.py --no-jsonl      # don't append history
-  scripts/monitor.py --use-export    # reuse scripts/export.sh's durable per-domain
-                                     #   export for IAA instead of a throwaway one
-  scripts/monitor.py --self-check    # run the cadence unit self-check and exit
+  scripts/annotation/monitor.py                 # run all domains, append jsonl + one-line status
+  scripts/annotation/monitor.py --domain X      # one domain only (smoke test)
+  scripts/annotation/monitor.py --summary       # also print the human-readable table to stdout
+  scripts/annotation/monitor.py --no-jsonl      # don't append history
+  scripts/annotation/monitor.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
+                                                #   export for IAA instead of a throwaway one
+  scripts/annotation/monitor.py --self-check    # run the cadence unit self-check and exit
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
 ws.load_env()  # config/workspace.env + .env; existing env wins
@@ -358,7 +358,7 @@ def read_export_meta(export_id: str) -> dict:
     domain-level: ``constraint_summary`` is per-constraint_id across tasks; completeness
     is the retrieval panel-completeness summary.
     """
-    path = ws.ROOT / "annotation" / "exports" / export_id / "annotation_export.meta.json"
+    path = ws.EXPORTS_DIR / export_id / "annotation_export.meta.json"
     try:
         meta = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
@@ -614,7 +614,7 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
     we reuse the durable per-domain export (``export_id=<domain>``, e.g. scripts/export.sh,
     also include_discarded=True) and skip re-exporting; a missing export degrades gracefully.
     """
-    base_dir = str(ws.ROOT)
+    base_dir = str(ws.ROOT / "data")
     cfg_path, clean_cfg = sanitized_config(domain)
     try:
         cfg = str(cfg_path)
@@ -647,7 +647,7 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
     # Label-value statistics from the export CSVs (class balance, discards, per-annotator
     # bias). Degrades independently of IAA. Constraint + completeness aggregates come from
     # the export's meta sidecar (domain-level, reused not recomputed).
-    export_dir = ws.ROOT / "annotation" / "exports" / export_id
+    export_dir = ws.EXPORTS_DIR / export_id
     label_by_task: dict[Task, dict] = {}
     label_raw_by_task: dict[Task, dict] = {}
     label_error: str | None = None
@@ -808,7 +808,7 @@ def print_summary(result: dict) -> None:
 
 
 def append_jsonl(result: dict) -> None:
-    ws.LOGS_DIR.mkdir(exist_ok=True)
+    ws.LOGS_DIR.mkdir(parents=True, exist_ok=True)
     with JSONL_PATH.open("a") as f:
         f.write(json.dumps(result, ensure_ascii=False) + "\n")
 
@@ -845,15 +845,15 @@ def self_check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
-    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/monitor.jsonl.")
+    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to runs/annotation/monitor.jsonl.")
     ap.add_argument("--use-export", action="store_true",
                     help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
-                         "scripts/export.sh) for IAA instead of running a throwaway export. "
+                         "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
                          "IAA degrades gracefully if the export is missing.")
     ap.add_argument("--self-check", action="store_true", help="Run the cadence self-check and exit.")
     ap.add_argument("--summary", action="store_true",
                     help="Also print the human-readable table to stdout (off by default; "
-                         "the analysis tables live in logs/analysis/<date>.md via report_tables.py).")
+                         "the analysis tables live in reports/annotation/<date>.md via report_tables.py).")
     args = ap.parse_args()
 
     if args.self_check:
@@ -863,7 +863,7 @@ def main() -> int:
 
     domains = [args.domain] if args.domain else ws.domains()
     if not domains:
-        log("No domains found under annotation_configs/")
+        log("No domains found under configs/annotation/")
         return 1
 
     result = run(domains, use_export=args.use_export)

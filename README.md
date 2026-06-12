@@ -9,16 +9,16 @@ or outputs (those stay local and gitignored, see [Data & secrets](#data--secrets
 ## Pipeline
 
 ```
-querygen_specs/ + _runtime.yaml
+configs/annotation/querygen_specs/ + _runtime.yaml
    │  run_querygen.sh   pragmata querygen (openai provider -> Azure v1 endpoint)
    ▼
-querygen/runs/<stem>/synthetic_queries.csv        [gitignored data]
+data/annotation/querygen/runs/<stem>/synthetic_queries.csv        [gitignored data]
    │  run_bot.py        publikationsbot /stream -> import-ready JSONL
    ▼
-publikationsbot_output/<stem>.jsonl               [gitignored data]
+data/annotation/publikationsbot/<stem>.jsonl               [gitignored data]
    │  build_combined.py pool successive runs + intersperse edgecases
    ▼
-publikationsbot_output/<domain>_combined.jsonl    [gitignored data]
+data/annotation/publikationsbot/<domain>_combined.jsonl    [gitignored data]
    │  setup.sh (provision) + import.sh (clean + load)   pragmata annotation
    ▼
 Argilla datasets (3 tasks × {production, calibration})
@@ -63,8 +63,8 @@ make combine                              # all domains (DOMAINS="a b" to filter
 make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
 make import                               # import one domain (DOMAIN= to filter)
 make export                               # export current annotations to CSV (DOMAIN= to filter)
-make monitor                              # compute snapshot -> logs/monitor.jsonl (no CLI tables)
-make report-tables                        # render latest snapshot -> logs/analysis/<date>.md
+make monitor                              # compute snapshot -> runs/annotation/monitor.jsonl (no CLI tables)
+make report-tables                        # render latest snapshot -> reports/annotation/<date>.md
 make daily                                # export -> monitor -> analysis tables (the nightly job)
 make backup                               # status-preserving backup of all Argilla datasets
 
@@ -81,37 +81,37 @@ so you can run any stage by hand or see exactly what's executed:
 
 ```bash
 # querygen (per spec) — native pragmata, after merging _runtime + spec
-python scripts/merge_yaml.py querygen_specs/_runtime.yaml querygen_specs/<spec>.yaml > /tmp/m.yaml
+python scripts/annotation/merge_yaml.py configs/annotation/querygen_specs/_runtime.yaml configs/annotation/querygen_specs/<spec>.yaml > /tmp/m.yaml
 pragmata querygen gen-queries --config-path /tmp/m.yaml --n-queries <N> --run-id <spec>
 
 # bot (per spec) — NOT pragmata; scrapes the publikationsbot /stream endpoint
-python scripts/run_bot.py --spec <spec>
+python scripts/annotation/run_bot.py --spec <spec>
 
 # combine — NOT pragmata; pools runs + intersperses edgecases
-python scripts/build_combined.py [<domain> ...]
+python scripts/annotation/build_combined.py [<domain> ...]
 
 # setup (per domain) — native pragmata, after merging the password overlay
 jq --slurpfile s config/users.secrets.json \
   '$s[0] as $x | map(if $x[.username] then . + {password:$x[.username]} else . end)' \
   config/users.json > /tmp/u.json
-pragmata annotation setup --users /tmp/u.json --config annotation_configs/<domain>.yaml
+pragmata annotation setup --users /tmp/u.json --config configs/annotation/<domain>.yaml
 
 # import (per domain) — native pragmata, after stripping run_bot extras
 jq -c '{query,answer,chunks,context_set,language}' \
-  publikationsbot_output/<domain>_combined.jsonl > /tmp/c.jsonl
-pragmata annotation import /tmp/c.jsonl --config annotation_configs/<domain>.yaml
+  data/annotation/publikationsbot/<domain>_combined.jsonl > /tmp/c.jsonl
+pragmata annotation import /tmp/c.jsonl --config configs/annotation/<domain>.yaml --base-dir data/
 
 # export (per domain) — native pragmata; submitted annotations -> per-task CSVs
-# under annotation/exports/<domain>/ (gitignored)
-pragmata annotation export --config annotation_configs/<domain>.yaml --export-id <domain> --base-dir .
+# under data/annotation/exports/<domain>/ (gitignored)
+pragmata annotation export --config configs/annotation/<domain>.yaml --export-id <domain> --base-dir data/
 ```
 
 ```bash
-# monitor - NOT a stage; reads live Argilla, appends logs/monitor.jsonl
-scripts/monitor.py                 # all domains
-scripts/monitor.py --domain <d>    # one domain (smoke test)
-scripts/monitor.py --use-export    # reuse export.sh's per-domain CSVs for IAA
-scripts/monitor.py --self-check    # offline cadence-guard check, no network
+# monitor - NOT a stage; reads live Argilla, appends runs/annotation/monitor.jsonl
+scripts/annotation/monitor.py                 # all domains
+scripts/annotation/monitor.py --domain <d>    # one domain (smoke test)
+scripts/annotation/monitor.py --use-export    # reuse export.sh's per-domain CSVs for IAA
+scripts/annotation/monitor.py --self-check    # offline cadence-guard check, no network
 ```
 
 ## Monitoring & analysis
@@ -120,20 +120,20 @@ A single nightly job — `scripts/daily.sh` (`make daily`) — chains three step
 each runnable on its own:
 
 ```
-export.sh            submitted annotations  -> annotation/exports/<domain>/  (overwrite per domain)
-monitor.py --use-export   live counts + IAA + cadence -> append logs/monitor.jsonl
-report_tables.py     latest snapshot        -> logs/analysis/<date>.md       (pure data tables)
+export.sh            submitted annotations  -> data/annotation/exports/<domain>/  (overwrite per domain)
+monitor.py --use-export   live counts + IAA + cadence -> append runs/annotation/monitor.jsonl
+report_tables.py     latest snapshot        -> reports/annotation/<date>.md       (pure data tables)
 ```
 
-- **`scripts/monitor.py`** computes the snapshot (counts / IAA / cadence) from
-  live Argilla and appends one JSON line to `logs/monitor.jsonl`. It does **not**
+- **`scripts/annotation/monitor.py`** computes the snapshot (counts / IAA / cadence) from
+  live Argilla and appends one JSON line to `runs/annotation/monitor.jsonl`. It does **not**
   print tables to the terminal — it emits a one-line status; pass `--summary` for
   an ad-hoc table. Only IAA needs an export; `--use-export` reuses `export.sh`'s
   durable per-domain CSVs (degrades gracefully if absent) so the nightly job
   exports once, not twice.
-- **`scripts/report_tables.py`** (`make report-tables`) renders a `monitor.jsonl`
+- **`scripts/annotation/report_tables.py`** (`make report-tables`) renders a `monitor.jsonl`
   snapshot into deterministic markdown stats tables and writes
-  `logs/analysis/<snapshot-date>.md` — pure data, no commentary (layer prose on
+  `reports/annotation/<snapshot-date>.md` — pure data, no commentary (layer prose on
   top separately). `--line N` picks a snapshot; `--stdout` prints instead.
 Three metrics (production vs calibration where it applies):
 1. **Counts** — *submitted responses* (work units), *completed records* (met
@@ -152,12 +152,12 @@ NB:
   time).
 - *Daily cron* — one job runs export → monitor → analysis tables:
   ```cron
-  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/daily.sh >> logs/runs/daily.log 2>&1
+  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/daily.sh >> runs/annotation/runs/daily.log 2>&1
   ```
 
 ## Backup & restore
 
-`scripts/argilla_backup.py` (`make backup`) takes a status-preserving snapshot of
+`scripts/annotation/argilla_backup.py` (`make backup`) takes a status-preserving snapshot of
 **every** Argilla dataset - records, metadata, suggestions, and responses *with
 their `submitted`/`draft`/`discarded` status* (the SDK's own `to_disk` drops
 response status, so a naive dump can't restore annotations faithfully). Read-only;
@@ -179,21 +179,34 @@ config/
   workspace.env        operational tunables (committed)
   users.json           annotator roster, no passwords (gitignored, local)
   users.secrets.json   username -> password overlay (gitignored)
-annotation_configs/    per-domain pragmata annotation configs (committed)
-querygen_specs/         per-domain querygen specs + _runtime.yaml (committed)
+configs/
+  annotation/          per-domain pragmata annotation configs (committed)
+    querygen_specs/    per-domain querygen specs + _runtime.yaml (committed)
 scripts/
   lib/common.sh        shared shell helpers (logging, env, guards, venv paths)
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
-  run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh  export.sh  (stages)
   daily.sh             nightly: export -> monitor -> analysis tables
-  monitor.py           annotation monitor: progress, IAA, cadence -> logs/monitor.jsonl
-  report_tables.py     render a monitor snapshot -> logs/analysis/<date>.md
-  merge_yaml.py                                                        (helper)
-logs/                  (gitignored)
-  monitor.jsonl        metrics history (one snapshot per run, appended)
-  analysis/<date>.md   daily stats tables (the deliverable)
-  runs/                execution logs (run_bot.*, import.*, daily.log, ...)
+  annotation/
+    run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh  export.sh  (stages)
+    monitor.py         annotation monitor: progress, IAA, cadence -> runs/annotation/monitor.jsonl
+    report_tables.py   render a monitor snapshot -> reports/annotation/<date>.md
+    plot_summary.py    render summary plots -> reports/annotation/<date>/
+    merge_yaml.py      (helper)
+data/                  (gitignored)
+  annotation/
+    exports/           export CSVs (one subdir per domain)
+    imports/           import artifacts
+    querygen/runs/     querygen output
+    publikationsbot/   bot output JSONL
+runs/                  (gitignored)
+  annotation/
+    monitor.jsonl      metrics history (one snapshot per run, appended)
+    runs/              execution logs (run_bot.*, pipeline.log, daily.log, ...)
+reports/               (gitignored)
+  annotation/
+    <date>.md          daily stats tables (the deliverable)
+    <date>/            daily plots (PNGs)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
@@ -210,8 +223,8 @@ side and `scripts/lib/workspace.py` for the python side.
 - **Operational tunables** live in `config/workspace.env` (queries-per-spec,
   bot concurrency, throttle, disk thresholds, the publikationsbot URL). 
 - **querygen runtime** (model, reasoning effort, batching) lives in
-  `querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
-- **The domain list** is derived from `annotation_configs/*.yaml` - add a domain
+  `configs/annotation/querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
+- **The domain list** is derived from `configs/annotation/*.yaml` - add a domain
   by adding its config + spec, nothing else to update.
 
 ## Annotator roster
@@ -224,5 +237,4 @@ version-controlled, since it carries annotator names. Passwords live in
 ## Data & secrets
 
 Not version-controlled (gitignored): `.venv/`, `.env`, `config/users.secrets.json`,
-`config/users.json`, `annotation/`, `publikationsbot_output/`, `querygen/`,
-`logs/`, `*.log`. Everything tracked is scripts, configs, and specs.
+`config/users.json`, `data/`, `runs/`, `reports/`, `*.log`. Everything tracked is scripts, configs, and specs.

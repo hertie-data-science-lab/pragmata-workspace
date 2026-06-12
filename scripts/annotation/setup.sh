@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/setup.sh <domain>
+# scripts/annotation/setup.sh <domain>
 #
 # Provisions Argilla workspaces + users for one domain via pragmata's native
 # `annotation setup`. The roster lives in config/users.json (committed, no
@@ -11,12 +11,12 @@
 # IMPORTANT: capture any "Generated passwords" printed on stdout - that's the
 # only time they're shown.
 
-source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 
 [[ $# -eq 1 ]] || fatal "usage: $0 <domain>"
 d="$1"
-cfg="annotation_configs/${d}.yaml"
+cfg="configs/annotation/${d}.yaml"
 roster="config/users.json"
 secrets="config/users.secrets.json"
 [[ -f "$cfg" ]]    || fatal "no config: $cfg"

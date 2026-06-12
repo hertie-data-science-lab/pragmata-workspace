@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Render the annotation-monitor markdown tables deterministically from a snapshot.
 
-Reads one JSON snapshot line from ``logs/monitor.jsonl`` (the latest by default)
+Reads one JSON snapshot line from ``runs/annotation/monitor.jsonl`` (the latest by default)
 and prints the analysis tables as markdown to stdout. The numbers are pulled
 verbatim from the snapshot - this script only reshapes and formats them, so the
 output is reproducible and the hand-written prose/commentary can be layered on top.
 
 Usage:
-  scripts/report_tables.py                       # latest snapshot -> logs/analysis/<date>.md
-  scripts/report_tables.py --line N              # 0-based line index (negative = from end)
-  scripts/report_tables.py --jsonl PATH          # a different history file
-  scripts/report_tables.py --out PATH            # write to a specific path
-  scripts/report_tables.py --stdout              # print to stdout instead
+  scripts/annotation/report_tables.py                       # latest snapshot -> reports/annotation/<date>.md
+  scripts/annotation/report_tables.py --line N              # 0-based line index (negative = from end)
+  scripts/annotation/report_tables.py --jsonl PATH          # a different history file
+  scripts/annotation/report_tables.py --out PATH            # write to a specific path
+  scripts/annotation/report_tables.py --stdout              # print to stdout instead
 
 Sort rules (all deterministic):
   - domains by submitted desc, then name
@@ -362,12 +362,12 @@ def render(snap: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default="logs/monitor.jsonl", type=Path,
-                    help="history file to read (default: logs/monitor.jsonl)")
+    ap.add_argument("--jsonl", default="runs/annotation/monitor.jsonl", type=Path,
+                    help="history file to read (default: runs/annotation/monitor.jsonl)")
     ap.add_argument("--line", default=-1, type=int,
                     help="0-based snapshot index; negative counts from end (default: -1 = latest)")
     ap.add_argument("--out", type=Path, default=None,
-                    help="output .md path (default: logs/analysis/<snapshot-date>.md)")
+                    help="output .md path (default: reports/annotation/<snapshot-date>.md)")
     ap.add_argument("--stdout", action="store_true", help="write to stdout instead of a file")
     args = ap.parse_args()
 
@@ -383,8 +383,8 @@ def main() -> None:
     if args.stdout:
         sys.stdout.write(md)
         return
-    # default: logs/analysis/<snapshot-date>.md (date from the snapshot, not now)
-    out = args.out or (Path("logs/analysis") / f"{snap['run_at'][:10]}.md")
+    # default: reports/annotation/<snapshot-date>.md (date from the snapshot, not now)
+    out = args.out or (Path("reports/annotation") / f"{snap['run_at'][:10]}.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md)
     print(f"wrote {out}", file=sys.stderr)

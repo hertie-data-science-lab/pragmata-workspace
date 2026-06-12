@@ -1,15 +1,15 @@
 """Shared helpers + path constants for pragmata-workspace Python glue scripts.
 
-Import from any script in scripts/ with a two-line preamble:
+Import from any script in scripts/annotation/ with a two-line preamble:
 
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
     import workspace as ws
 
 Centralizes the workspace layout, the .env / config loader ("existing env
 wins", matching scripts/lib/common.sh), the domain list (derived from
-annotation_configs/ rather than hardcoded), and JSONL read/write.
+configs/annotation/ rather than hardcoded), and JSONL read/write.
 """
 from __future__ import annotations
 
@@ -19,13 +19,16 @@ from pathlib import Path
 
 # This file is scripts/lib/workspace.py -> parents[2] is the workspace root.
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = ROOT / "scripts"
-CONFIG_DIR = ROOT / "config"
-SPECS_DIR = ROOT / "querygen_specs"
-CONFIGS_DIR = ROOT / "annotation_configs"
-RUNS_DIR = ROOT / "querygen" / "runs"
-OUT_DIR = ROOT / "publikationsbot_output"
-LOGS_DIR = ROOT / "logs"
+SCRIPTS_DIR = ROOT / "scripts" / "annotation"
+CONFIG_DIR = ROOT / "config"                      # operational config + credentials (unchanged)
+CONFIGS_DIR = ROOT / "configs" / "annotation"     # per-domain task YAMLs
+SPECS_DIR = ROOT / "configs" / "annotation" / "querygen_specs"
+DATA_DIR = ROOT / "data" / "annotation"           # pragmata --base-dir is DATA_DIR.parent (= ROOT/"data")
+EXPORTS_DIR = DATA_DIR / "exports"
+RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen output (name kept; path moved)
+OUT_DIR = DATA_DIR / "publikationsbot"
+LOGS_DIR = ROOT / "runs" / "annotation"            # monitor.jsonl + run logs (name kept; path moved)
+REPORTS_DIR = ROOT / "reports" / "annotation"      # rendered tables + plots
 
 
 def load_dotenv(path: Path) -> None:
@@ -47,7 +50,7 @@ def load_env() -> None:
 
 
 def domains() -> list[str]:
-    """All domain stems, derived from annotation_configs/*.yaml (sorted).
+    """All domain stems, derived from configs/annotation/*.yaml (sorted).
 
     Single source of truth for "which domains exist" — replaces hardcoded lists.
     Underscore-prefixed helper files are excluded.

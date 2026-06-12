@@ -7,10 +7,9 @@ config/users.json          # annotator roster (names); kept local, not version-c
 .venv/
 
 # --- data, outputs, run state (not version-controlled) ---
-/annotation/
-/publikationsbot_output/
-/querygen/
-/logs/
+/data/
+/runs/
+/reports/
 *.log
 .pipeline.lock
 

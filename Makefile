@@ -36,36 +36,36 @@ pipeline: ## Run a pipeline slice (FROM= TO= ONLY= FILTER= JOBS=); no args = ful
 	bash scripts/pipeline.sh $(PIPELINE_ARGS)
 
 querygen: ## Stage: generate synthetic queries (SPECS=a,b to filter)
-	bash scripts/run_querygen.sh "$(SPECS)"
+	bash scripts/annotation/run_querygen.sh "$(SPECS)"
 
 bot: ## Stage: run publikationsbot over generated queries (SPEC=x to filter)
-	$(PY) scripts/run_bot.py $(if $(SPEC),--spec $(SPEC),)
+	$(PY) scripts/annotation/run_bot.py $(if $(SPEC),--spec $(SPEC),)
 
 combine: ## Stage: pool runs + intersperse edgecases (DOMAINS="a b" to filter)
-	$(PY) scripts/build_combined.py $(DOMAINS)
+	$(PY) scripts/annotation/build_combined.py $(DOMAINS)
 
 setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make setup DOMAIN=<domain>"; exit 2; }
-	bash scripts/setup.sh "$(DOMAIN)"
+	bash scripts/annotation/setup.sh "$(DOMAIN)"
 
 import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
-	bash scripts/import.sh "$(DOMAIN)"
+	bash scripts/annotation/import.sh "$(DOMAIN)"
 
-monitor: ## Compute annotation snapshot -> logs/monitor.jsonl (--summary for a CLI table)
-	$(PY) scripts/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),)
+monitor: ## Compute annotation snapshot -> runs/annotation/monitor.jsonl (--summary for a CLI table)
+	$(PY) scripts/annotation/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
 export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
-	bash scripts/export.sh $(DOMAIN)
+	bash scripts/annotation/export.sh $(DOMAIN)
 
-report-tables: ## Render latest monitor snapshot -> logs/analysis/<date>.md
-	$(PY) scripts/report_tables.py
+report-tables: ## Render latest monitor snapshot -> reports/annotation/<date>.md
+	$(PY) scripts/annotation/report_tables.py
 
-plots: ## Render summary plots (PNGs) -> logs/analysis/<date>/ (needs matplotlib)
-	$(PY) scripts/plot_summary.py
+plots: ## Render summary plots (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
+	$(PY) scripts/annotation/plot_summary.py
 
-daily: ## Nightly: export -> monitor -> analysis tables (logs/analysis/<date>.md)
+daily: ## Nightly: export -> monitor -> analysis tables (reports/annotation/<date>.md)
 	bash scripts/daily.sh
 
 backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
-	$(PY) scripts/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
+	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
