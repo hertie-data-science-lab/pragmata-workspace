@@ -27,7 +27,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe monitor export
+.PHONY: help pipeline plan querygen bot combine setup import probe monitor export report-tables daily
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -52,8 +52,14 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/import.sh "$(DOMAIN)"
 
-monitor: ## Report annotation progress/agreement/cadence (DOMAIN= to filter)
-	$(PY) scripts/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),) 2>&1 | tee -a logs/monitor.log
+monitor: ## Compute annotation snapshot -> logs/monitor.jsonl (--summary for a CLI table)
+	$(PY) scripts/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
 export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/export.sh $(DOMAIN)
+
+report-tables: ## Render latest monitor snapshot -> logs/analysis/<date>.md
+	$(PY) scripts/report_tables.py
+
+daily: ## Nightly: export -> monitor -> analysis tables (logs/analysis/<date>.md)
+	bash scripts/daily.sh

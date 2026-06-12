@@ -62,8 +62,10 @@ make bot                                  # all specs   (SPEC=x to filter)
 make combine                              # all domains (DOMAINS="a b" to filter)
 make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
 make import                               # import one domain (DOMAIN= to filter)
-make monitor                              # annotation progress report (DOMAIN= to filter)
 make export                               # export current annotations to CSV (DOMAIN= to filter)
+make monitor                              # compute snapshot -> logs/monitor.jsonl (no CLI tables)
+make report-tables                        # render latest snapshot -> logs/analysis/<date>.md
+make daily                                # export -> monitor -> analysis tables (the nightly job)
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
 make pipeline                             # full pipeline, all domains
@@ -111,17 +113,27 @@ scripts/monitor.py --use-export    # reuse export.sh's per-domain CSVs for IAA
 scripts/monitor.py --self-check    # offline cadence-guard check, no network
 ```
 
-## Monitoring
+## Monitoring & analysis
 
-`scripts/monitor.py` reports annotation progress from the live Argilla state,
-rolled up task → domain → total, and appends one JSON line per run to
-`logs/monitor.jsonl`. Only the IAA metric needs an export (counts and cadence
-come straight from Argilla); by default the monitor runs its own throwaway export
-to feed it. Pass `--use-export` to reuse `scripts/export.sh`'s durable per-domain
-CSVs instead — pair the two in one nightly job (`export.sh && monitor.py
---use-export`) to export once rather than twice. IAA degrades gracefully if the
-export is missing.
+A single nightly job — `scripts/daily.sh` (`make daily`) — chains three steps,
+each runnable on its own:
 
+```
+export.sh            submitted annotations  -> annotation/exports/<domain>/  (overwrite per domain)
+monitor.py --use-export   live counts + IAA + cadence -> append logs/monitor.jsonl
+report_tables.py     latest snapshot        -> logs/analysis/<date>.md       (pure data tables)
+```
+
+- **`scripts/monitor.py`** computes the snapshot (counts / IAA / cadence) from
+  live Argilla and appends one JSON line to `logs/monitor.jsonl`. It does **not**
+  print tables to the terminal — it emits a one-line status; pass `--summary` for
+  an ad-hoc table. Only IAA needs an export; `--use-export` reuses `export.sh`'s
+  durable per-domain CSVs (degrades gracefully if absent) so the nightly job
+  exports once, not twice.
+- **`scripts/report_tables.py`** (`make report-tables`) renders a `monitor.jsonl`
+  snapshot into deterministic markdown stats tables and writes
+  `logs/analysis/<snapshot-date>.md` — pure data, no commentary (layer prose on
+  top separately). `--line N` picks a snapshot; `--stdout` prints instead.
 Three metrics (production vs calibration where it applies):
 1. **Counts** — *submitted responses* (work units), *completed records* (met
    `min_submitted`), and *total records*. Record counts from Argilla
@@ -137,10 +149,9 @@ NB:
   per-response submission times; the monitor reads each *response's* own `inserted_at` (nested in
   `responses[]`) + `user_id` - not the record-level `inserted_at` (the import
   time).
-- *Daily cron* — export once, then monitor reuses it (`&&` so a failed export
-  stops the monitor rather than feeding it stale CSVs):
+- *Daily cron* — one job runs export → monitor → analysis tables:
   ```cron
-  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/export.sh && .venv/bin/python scripts/monitor.py --use-export >> logs/monitor.log 2>&1
+  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/daily.sh >> logs/runs/daily.log 2>&1
   ```
 
 ## Layout
@@ -157,8 +168,14 @@ scripts/
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
   run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh  export.sh  (stages)
-  monitor.py           annotation monitor: progress, IAA, cadence (standalone)
+  daily.sh             nightly: export -> monitor -> analysis tables
+  monitor.py           annotation monitor: progress, IAA, cadence -> logs/monitor.jsonl
+  report_tables.py     render a monitor snapshot -> logs/analysis/<date>.md
   merge_yaml.py                                                        (helper)
+logs/                  (gitignored)
+  monitor.jsonl        metrics history (one snapshot per run, appended)
+  analysis/<date>.md   daily stats tables (the deliverable)
+  runs/                execution logs (run_bot.*, import.*, daily.log, ...)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root

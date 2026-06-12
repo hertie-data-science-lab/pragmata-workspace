@@ -18,8 +18,10 @@ and emits three progress metrics, rolled up task -> domain -> total:
      session-guarded (see below).
 
 Each run appends one JSON object to logs/monitor.jsonl (for trend-watching) and
-prints a human-readable summary to stdout (which cron can mail). Diagnostics go
-to stderr. A domain that fails is recorded and skipped; the run continues.
+prints a one-line status to stdout. The human-readable stats tables are NOT
+printed here — they are rendered to logs/analysis/<date>.md by report_tables.py
+(pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
+fails is recorded and skipped; the run continues.
 
 Timestamps: per-response submission times come from the Argilla v2 REST records
 endpoint (``response.inserted_at`` + ``user_id``). The SDK and the export CSVs
@@ -37,9 +39,10 @@ agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
 ``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
 
 Usage:
-  scripts/monitor.py                 # run all domains, append jsonl + print summary
+  scripts/monitor.py                 # run all domains, append jsonl + one-line status
   scripts/monitor.py --domain X      # one domain only (smoke test)
-  scripts/monitor.py --no-jsonl      # print summary, don't append history
+  scripts/monitor.py --summary       # also print the human-readable table to stdout
+  scripts/monitor.py --no-jsonl      # don't append history
   scripts/monitor.py --use-export    # reuse scripts/export.sh's durable per-domain
                                      #   export for IAA instead of a throwaway one
   scripts/monitor.py --self-check    # run the cadence unit self-check and exit
@@ -567,6 +570,9 @@ def main() -> int:
                          "scripts/export.sh) for IAA instead of running a throwaway export. "
                          "IAA degrades gracefully if the export is missing.")
     ap.add_argument("--self-check", action="store_true", help="Run the cadence self-check and exit.")
+    ap.add_argument("--summary", action="store_true",
+                    help="Also print the human-readable table to stdout (off by default; "
+                         "the analysis tables live in logs/analysis/<date>.md via report_tables.py).")
     args = ap.parse_args()
 
     if args.self_check:
@@ -582,7 +588,13 @@ def main() -> int:
     result = run(domains, use_export=args.use_export)
     if not args.no_jsonl:
         append_jsonl(result)
-    print_summary(result)
+    if args.summary:
+        print_summary(result)
+    else:
+        c = result["total"]["count"]
+        print(f"monitor: {result['run_at']} — {len(result['domains'])} domains, "
+              f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
+              f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}")
     return 0
 
 
