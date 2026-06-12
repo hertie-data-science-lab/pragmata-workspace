@@ -1,6 +1,7 @@
 # --- secrets / credentials (never commit) ---
 .env
 config/users.secrets.json
+config/users.json          # annotator roster (names); kept local, not version-controlled
 
 # --- python virtualenv ---
 .venv/

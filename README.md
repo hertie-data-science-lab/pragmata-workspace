@@ -177,7 +177,7 @@ overwrites. Take a backup before any bulk or in-place edit of live annotation da
 ```
 config/
   workspace.env        operational tunables (committed)
-  users.json           annotator roster, no passwords (committed)
+  users.json           annotator roster, no passwords (gitignored, local)
   users.secrets.json   username -> password overlay (gitignored)
 annotation_configs/    per-domain pragmata annotation configs (committed)
 querygen_specs/         per-domain querygen specs + _runtime.yaml (committed)
@@ -216,13 +216,13 @@ side and `scripts/lib/workspace.py` for the python side.
 
 ## Annotator roster
 
-`config/users.json` is the committed roster - usernames, roles, and workspace
-assignments, **no passwords**. Passwords live in `config/users.secrets.json`
-(gitignored).
+`config/users.json` is the roster - usernames, roles, and workspace
+assignments, **no passwords**. It is kept **local (gitignored)**, not
+version-controlled, since it carries annotator names. Passwords live in
+`config/users.secrets.json` (also gitignored).
 
 ## Data & secrets
 
 Not version-controlled (gitignored): `.venv/`, `.env`, `config/users.secrets.json`,
-`annotation/`, `publikationsbot_output/`, `querygen/`, `logs/`, `*.log`.
-Everything tracked is scripts, configs, specs, and the annotator roster
-(`config/users.json` - names + workspace assignments, no passwords).
+`config/users.json`, `annotation/`, `publikationsbot_output/`, `querygen/`,
+`logs/`, `*.log`. Everything tracked is scripts, configs, and specs.
