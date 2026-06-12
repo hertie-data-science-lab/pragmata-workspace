@@ -27,7 +27,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe monitor export report-tables daily
+.PHONY: help pipeline plan querygen bot combine setup import probe monitor export report-tables daily backup
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -63,3 +63,6 @@ report-tables: ## Render latest monitor snapshot -> logs/analysis/<date>.md
 
 daily: ## Nightly: export -> monitor -> analysis tables (logs/analysis/<date>.md)
 	bash scripts/daily.sh
+
+backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
+	$(PY) scripts/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
