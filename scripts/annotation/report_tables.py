@@ -76,6 +76,16 @@ def _bucket_frac(st) -> float | None:
     return st["n_complete"] / n if n else None
 
 
+def _pctc(done, total) -> str:
+    """Completion percentage (completed / total records)."""
+    return f"{100 * done / total:.0f}%" if total else "-"
+
+
+def _uid(u: str) -> str:
+    """Short, single-line annotator id for tables (full UUID is in the snapshot JSONL)."""
+    return u[:8] if u else "-"
+
+
 def _table(headers: list[str], aligns: list[str], rows: list[list[str]]) -> str:
     sep = {"l": "---", "r": "---:", "c": ":-:"}
     out = ["| " + " | ".join(headers) + " |",
@@ -92,11 +102,13 @@ def overall_counts(total: dict) -> str:
     for label, key in [("Production", "production"), ("Calibration", "calibration")]:
         s = c[key]
         rows.append([label, _int(s["total_records"]), _int(s["submitted_responses"]),
-                     _int(s["completed_records"]), _int(s["pending_records"])])
+                     _int(s["completed_records"]), _int(s["pending_records"]),
+                     _pctc(s["completed_records"], s["total_records"])])
     rows.append(["**Overall**", f"**{_int(c['total_records'])}**", f"**{_int(c['submitted_responses'])}**",
-                 f"**{_int(c['completed_records'])}**", f"**{_int(c['pending_records'])}**"])
-    return _table(["Split", "Total", "Submitted", "Completed", "Pending"],
-                  ["l", "r", "r", "r", "r"], rows)
+                 f"**{_int(c['completed_records'])}**", f"**{_int(c['pending_records'])}**",
+                 f"**{_pctc(c['completed_records'], c['total_records'])}**"])
+    return _table(["Split", "Total", "Submitted", "Completed", "Pending", "% Done"],
+                  ["l", "r", "r", "r", "r", "r"], rows)
 
 
 def _domain_alpha_cell(c: dict, agr: dict) -> str:
@@ -111,10 +123,10 @@ def progress_by_domain(domains: dict) -> str:
     for name, v in items:
         c = v["count"]
         rows.append([name, _int(c["total_records"]), _int(c["submitted_responses"]),
-                     _int(c["completed_records"]), str(c["n_annotators"]),
-                     _domain_alpha_cell(c, v["agreement"])])
-    return _table(["Domain", "Total", "Submitted", "Completed", "Annotators", "mean α"],
-                  ["l", "r", "r", "r", "r", "r"], rows)
+                     _int(c["completed_records"]), _pctc(c["completed_records"], c["total_records"]),
+                     str(c["n_annotators"]), _domain_alpha_cell(c, v["agreement"])])
+    return _table(["Domain", "Total", "Submitted", "Completed", "% Done", "Annotators", "mean α"],
+                  ["l", "r", "r", "r", "r", "r", "r"], rows)
 
 
 def per_task_counts(domains: dict) -> str:
@@ -127,10 +139,10 @@ def per_task_counts(domains: dict) -> str:
                 continue
             c = tv["count"]
             rows.append([name, task, _int(c["total_records"]), _int(c["submitted_responses"]),
-                         _int(c["completed_records"]), str(c["n_annotators"]),
-                         _alpha(tv["agreement"].get("mean_alpha"))])
-    return _table(["Domain", "Task", "Total", "Submitted", "Completed", "Ann.", "mean α"],
-                  ["l", "l", "r", "r", "r", "r", "r"], rows)
+                         _int(c["completed_records"]), _pctc(c["completed_records"], c["total_records"]),
+                         str(c["n_annotators"]), _alpha(tv["agreement"].get("mean_alpha"))])
+    return _table(["Domain", "Task", "Total", "Submitted", "Completed", "% Done", "Ann.", "mean α"],
+                  ["l", "l", "r", "r", "r", "r", "r", "r"], rows)
 
 
 def iaa_per_label(domains: dict) -> str:
@@ -251,7 +263,7 @@ def annotator_bias(domains: dict, top_n: int = 15) -> str:
                     d = lv.get("delta_vs_pool")
                     if d is None:
                         continue
-                    devs.append((abs(d), [name, task, uuid, lbl,
+                    devs.append((abs(d), [name, task, _uid(uuid), lbl,
                                           _pct(lv["prevalence"]), f"{d * 100:+.0f}", _int(lv["n"])]))
     if not devs:
         return ""
@@ -267,7 +279,7 @@ def per_annotator_timing(total: dict) -> str:
         active_h = v["active_span_s"] / 3600 if v["active_span_s"] else 0.0
         pace = v["n_events"] / active_h if active_h else None
         rows.append((pace if pace is not None else -1, [
-            ann, _f(v["median_active_gap_s"], 1), str(v["n_events"]), str(v["n_sessions"]),
+            _uid(ann), _f(v["median_active_gap_s"], 1), str(v["n_events"]), str(v["n_sessions"]),
             _f(active_h, 2), _f(pace, 1), str(v["n_pause_breaks"]),
         ]))
     rows.sort(key=lambda r: -r[0])
@@ -339,18 +351,33 @@ def render(snap: dict) -> str:
         "## Overall counts\n\n" + overall_counts(total),
         "## Progress by domain\n\n" + progress_by_domain(domains),
         "### Per-task within active domains\n\n" + per_task_counts(domains),
-        "## Inter-annotator agreement (Krippendorff's α)\n\n" + iaa_per_label(domains),
+        "## Inter-annotator agreement (Krippendorff's α)\n\n"
+        "_α measures inter-annotator **agreement** on the calibration overlap. The Prevalence "
+        "column is the **class balance** (fraction true) with its Wilson 95% CI — a different "
+        "quantity from α, shown alongside because a low α at an extreme prevalence is expected, "
+        "not a quality problem._\n\n" + iaa_per_label(domains),
     ]
+    label_dist_note = (
+        "_Prevalence = fraction of submitted responses marked **true**; the bracketed range is "
+        "its **Wilson 95% confidence interval** (sampling uncertainty given n) — this is class "
+        "balance, **not** inter-annotator agreement (α, above). Flags: **degenerate** = only one "
+        "class ever observed (α undefined, no signal); **rare** = minority class below 5%._")
+    bias_note = (
+        "_Each row is one annotator's prevalence for a label vs the pool mean, as Δ in percentage "
+        "points (pp), over their n submitted responses. A large |Δ| flags a systematically "
+        "lenient/harsh or 'always-yes' annotator — a quality signal and a common driver of low α. "
+        "Rows are sorted by |Δ| (largest deviations first); annotator = first 8 chars of the "
+        "Argilla user UUID (full id in the snapshot JSONL)._")
     # Label-value statistics (omit a section when the snapshot carries no data for it).
-    for title, body in [
-        ("## Label distribution", label_distribution(domains, total)),
-        ("## Discards", discards(domains, total)),
-        ("## Logical-constraint violations", constraint_violations(domains, total)),
-        ("## Retrieval panel completeness", completeness(domains, total)),
-        ("## Per-annotator label bias", annotator_bias(domains)),
+    for title, note, body in [
+        ("## Label distribution", label_dist_note, label_distribution(domains, total)),
+        ("## Discards", "", discards(domains, total)),
+        ("## Logical-constraint violations", "", constraint_violations(domains, total)),
+        ("## Retrieval panel completeness", "", completeness(domains, total)),
+        ("## Per-annotator label bias", bias_note, annotator_bias(domains)),
     ]:
         if body:
-            parts.append(f"{title}\n\n{body}")
+            parts.append(f"{title}\n\n" + (f"{note}\n\n" if note else "") + body)
     parts += [
         "## Per-annotator activity & timing\n\n"
         f"Pooled median active gap across everyone = **{total['timing']['per_annotator']['pooled_median_active_gap_s']} s/record**.\n\n"
