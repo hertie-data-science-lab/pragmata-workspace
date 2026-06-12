@@ -56,6 +56,12 @@ load_dotenv() {
 load_dotenv "$WORKSPACE_ROOT/config/workspace.env"
 load_dotenv "$WORKSPACE_ROOT/.env"
 
+# Pin the pragmata source: if PRAGMATA_SRC is set (in .env), shadow the installed
+# package on PYTHONPATH so EVERY script resolves to it — both the `pragmata` CLI
+# ($PRAGMATA) and bare `import pragmata` ($PY). Unset → the installed package.
+# The wiring is version-controlled here; .env (gitignored) supplies the path.
+[[ -n "${PRAGMATA_SRC:-}" ]] && export PYTHONPATH="$PRAGMATA_SRC${PYTHONPATH:+:$PYTHONPATH}"
+
 # --- guard: fail fast if any required env var is unset/empty ---
 require_env() {
   local missing=() v
