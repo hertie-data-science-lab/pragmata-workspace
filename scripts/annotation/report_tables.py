@@ -371,12 +371,12 @@ def render(snap: dict) -> str:
         "### Task-level pace\n\n" + task_pace(domains, total),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
         "---",
-        "_\\*Prev. = prevalence: the share of submitted annotations where the label is "
-        "true. We track it to catch degenerate or near-degenerate labels (one class almost "
-        "never chosen), which flag an ambiguous guideline or a label too one-sided to yield "
-        "meaningful agreement._",
-        f"_Session gap threshold: {snap['session_gap_threshold_s'] // 60} min "
-        "(longer gaps are treated as session breaks and excluded from cadence medians)._",
+        "<small>_**\\*Prev. = prevalence**: the share of submitted annotations where the "
+        "label is true. We track it to catch degenerate or near-degenerate labels (one class "
+        "almost never chosen), which flag an ambiguous guideline or a label too one-sided to "
+        "yield meaningful agreement._</small>",
+        f"<small>_**Session gap threshold**: {snap['session_gap_threshold_s'] // 60} min "
+        "(longer gaps are treated as session breaks and excluded from cadence medians)._</small>",
     ]
     return "\n\n".join(parts) + "\n"
 
