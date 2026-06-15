@@ -63,9 +63,9 @@ make combine                              # all domains (DOMAINS="a b" to filter
 make setup                                # provision one domain (workspaces + users; DOMAIN= to filter)
 make import                               # import one domain (DOMAIN= to filter)
 make export                               # export current annotations to CSV (DOMAIN= to filter)
-make monitor                              # compute snapshot -> logs/annotation/monitor.jsonl (no CLI tables)
-make report-tables                        # render latest snapshot -> reports/annotation/<date>.md
-make daily                                # export -> monitor -> analysis tables (the nightly job)
+make log                                  # log a snapshot -> logs/annotation/log.jsonl (no CLI tables)
+make report                               # render latest snapshot -> reports/annotation/<date>/ (md + plots)
+make daily                                # export -> log.jsonl (the nightly logging job)
 make backup                               # status-preserving backup of all Argilla datasets
 
 # or the orchestrated pipeline (dry-run preview: bash scripts/pipeline.sh --dry-run)
@@ -107,34 +107,48 @@ pragmata annotation export --config configs/annotation/domains/<domain>.yaml --e
 ```
 
 ```bash
-# monitor - NOT a stage; reads live Argilla, appends logs/annotation/monitor.jsonl
-scripts/annotation/monitor.py                 # all domains
-scripts/annotation/monitor.py --domain <d>    # one domain (smoke test)
-scripts/annotation/monitor.py --use-export    # reuse export.sh's per-domain CSVs for IAA
-scripts/annotation/monitor.py --self-check    # offline cadence-guard check, no network
+# log - NOT a stage; reads live Argilla, appends logs/annotation/log.jsonl
+scripts/annotation/log.py                 # all domains
+scripts/annotation/log.py --domain <d>    # one domain (smoke test)
+scripts/annotation/log.py --use-export    # reuse export.sh's per-domain CSVs for IAA
+scripts/annotation/log.py --self-check    # offline cadence-guard check, no network
 ```
 
-## Monitoring & analysis
+## Logging & reporting
 
-A single nightly job — `scripts/daily.sh` (`make daily`) — chains three steps,
+Two halves, deliberately split:
+
+- **Logging** is automatic and daily: the nightly job appends one snapshot to a JSONL.
+- **Reporting** is manual: render the latest (or any) snapshot into markdown + plots.
+
+The nightly job — `scripts/daily.sh` (`make daily`) — chains two logging steps,
 each runnable on its own:
 
 ```
 export.sh            submitted annotations  -> data/annotation/exports/<domain>/  (overwrite per domain)
-monitor.py --use-export   live counts + IAA + cadence -> append logs/annotation/monitor.jsonl
-report_tables.py     latest snapshot        -> reports/annotation/<date>.md       (pure data tables)
+log.py --use-export  live counts + IAA + cadence -> append logs/annotation/log.jsonl
 ```
 
-- **`scripts/annotation/monitor.py`** computes the snapshot (counts / IAA / cadence) from
-  live Argilla and appends one JSON line to `logs/annotation/monitor.jsonl`. It does **not**
-  print tables to the terminal — it emits a one-line status; pass `--summary` for
-  an ad-hoc table. Only IAA needs an export; `--use-export` reuses `export.sh`'s
-  durable per-domain CSVs (degrades gracefully if absent) so the nightly job
-  exports once, not twice.
-- **`scripts/annotation/report_tables.py`** (`make report-tables`) renders a `monitor.jsonl`
-  snapshot into deterministic markdown stats tables and writes
-  `reports/annotation/<snapshot-date>.md` — pure data, no commentary (layer prose on
-  top separately). `--line N` picks a snapshot; `--stdout` prints instead.
+Reporting is on demand (`make report`):
+
+```
+report_tables.py     latest snapshot -> reports/annotation/<date>/report.md   (pure data tables)
+plot_summary.py      latest snapshot -> reports/annotation/<date>/*.png       (plots)
+                     reports/annotation/_latest -> <date>/                     (symlink to newest)
+```
+
+- **`scripts/annotation/log.py`** (`make log`) computes the snapshot (counts / IAA /
+  cadence) from live Argilla and appends one JSON line to `logs/annotation/log.jsonl`.
+  It does **not** print tables to the terminal — it emits a one-line status; pass
+  `--summary` for an ad-hoc table. Only IAA needs an export; `--use-export` reuses
+  `export.sh`'s durable per-domain CSVs (degrades gracefully if absent) so the nightly
+  job exports once, not twice.
+- **`make report`** runs both reporters into one dated subdir and repoints `_latest`:
+  - **`report_tables.py`** renders a `log.jsonl` snapshot into deterministic markdown
+    stats tables (`report.md`) — pure data, no commentary (layer prose on top
+    separately). `--line N` picks a snapshot; `--stdout` prints instead.
+  - **`plot_summary.py`** renders the PNGs into the same dir: progress (burn-up +
+    burn-down), label prevalence, pace, discards.
 Three metrics (production vs calibration where it applies):
 1. **Counts** — *submitted responses* (work units), *completed records* (met
    `min_submitted`), and *total records*. Record counts from Argilla
@@ -143,14 +157,14 @@ Three metrics (production vs calibration where it applies):
    mean, from pragmata's IAA over the calibration overlap.
 3. **Cadence** — median seconds between consecutive submissions, **per-annotator**
    (true individual pace) and **global** (team throughput). A **session guard**
-   drops gaps over `MONITOR_SESSION_GAP_MIN` (default 30 min) as pauses, listing
+   drops gaps over `LOG_SESSION_GAP_MIN` (default 30 min) as pauses, listing
    each under `excluded_gaps` so nothing vanishes silently.
 NB: 
 - *Timestamps come from the REST endpoint.* Whereas Argilla SDK and export CSVs drop
-  per-response submission times; the monitor reads each *response's* own `inserted_at` (nested in
+  per-response submission times; log.py reads each *response's* own `inserted_at` (nested in
   `responses[]`) + `user_id` - not the record-level `inserted_at` (the import
   time).
-- *Daily cron* — one job runs export → monitor → analysis tables:
+- *Daily cron* — one job logs a snapshot (export → log.jsonl); reporting stays manual:
   ```cron
   0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/daily.sh >> logs/annotation/daily.log 2>&1
   ```
@@ -186,12 +200,12 @@ scripts/
   lib/common.sh        shared shell helpers (logging, env, guards, venv paths)
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
   pipeline.sh          orchestrator: runs a slice of the stages (pre-flight, lock, parallelism)
-  daily.sh             nightly: export -> monitor -> analysis tables
+  daily.sh             nightly logging: export -> log.jsonl
   annotation/
     run_querygen.sh  run_bot.py  build_combined.py  setup.sh  import.sh  export.sh  (stages)
-    monitor.py         annotation monitor: progress, IAA, cadence -> logs/annotation/monitor.jsonl
-    report_tables.py   render a monitor snapshot -> reports/annotation/<date>.md
-    plot_summary.py    render summary plots -> reports/annotation/<date>/
+    log.py             annotation logger: progress, IAA, cadence -> logs/annotation/log.jsonl
+    report_tables.py   render a snapshot -> reports/annotation/<date>/report.md
+    plot_summary.py    render summary plots -> reports/annotation/<date>/*.png
     merge_yaml.py      (helper)
 data/                  (gitignored)
   annotation/
@@ -201,12 +215,12 @@ data/                  (gitignored)
   publikationsbot/     bot output JSONL (sibling of annotation/)
 logs/                  (gitignored)
   annotation/
-    monitor.jsonl      metrics history (one snapshot per run, appended)
+    log.jsonl          metrics history (one snapshot per run, appended)
     *.log              execution logs (run_bot.*, pipeline.log, daily.log, ...)
 reports/               (gitignored)
   annotation/
-    <date>.md          daily stats tables (the deliverable)
-    <date>/            daily plots (PNGs)
+    <date>/            one report per snapshot: report.md + plots (PNGs)
+    _latest -> <date>/ symlink to the newest report
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root

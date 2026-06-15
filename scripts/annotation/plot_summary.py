@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Render summary-stat plots from logs/annotation/monitor.jsonl to PNGs.
+"""Render summary-stat plots from logs/annotation/log.jsonl to PNGs.
 
-Burn-up uses the full snapshot history (a time series); the rest use one snapshot
-(latest by default). Outputs land in reports/annotation/<snapshot-date>/.
+The *reporting* half (manual): progress.png uses the full snapshot history (a time
+series); the rest use one snapshot (latest by default). PNGs land in
+reports/annotation/<snapshot-date>/ alongside report.md, and the
+reports/annotation/_latest symlink is repointed at that dir.
 
 Usage:
   scripts/annotation/plot_summary.py                 # latest snapshot -> reports/annotation/<date>/
@@ -19,6 +21,8 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.dates as mdates  # noqa: E402
+import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -34,33 +38,63 @@ def _save(fig, path: Path) -> None:
     print(f"wrote {path}", file=sys.stderr)
 
 
-def plot_burnup(snaps: list[dict], out: Path) -> bool:
-    """Submitted responses over time, one line per domain + total."""
-    series: dict[str, list[tuple[str, int]]] = {}
+def plot_progress(snaps: list[dict], out: Path) -> bool:
+    """2x2 time-series grid in progress.png. Columns are the two metrics
+    (burn-up = submitted responses; burn-down = records remaining); rows split
+    TOTAL (top, own scale) from the per-domain lines (bottom) so the much larger
+    total doesn't compress the domain-level patterns.
+    """
+    up: dict[str, list[tuple[str, int]]] = {}
+    down: dict[str, list[tuple[str, int]]] = {}
     for s in snaps:
         t = s["run_at"]
-        series.setdefault("TOTAL", []).append((t, s["total"]["count"]["submitted_responses"]))
+        tc = s["total"]["count"]
+        up.setdefault("TOTAL", []).append((t, tc["submitted_responses"]))
+        down.setdefault("TOTAL", []).append((t, tc["pending_records"]))
         for name, v in s.get("domains", {}).items():
             if "count" in v:
-                series.setdefault(name, []).append((t, v["count"]["submitted_responses"]))
+                up.setdefault(name, []).append((t, v["count"]["submitted_responses"]))
+                down.setdefault(name, []).append((t, v["count"]["pending_records"]))
     if len(snaps) < 2:
         return False
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for name, pts in sorted(series.items()):
-        xs = [p[0][:16] for p in pts]
-        ax.plot(xs, [p[1] for p in pts], marker="o", lw=2 if name == "TOTAL" else 1,
-                label=name)
-    ax.set_ylabel("submitted responses")
-    ax.set_title("Annotation progress over time")
-    ax.tick_params(axis="x", rotation=45, labelsize=7)
-    ax.legend(fontsize=7, ncol=2)
-    ax.grid(True, alpha=0.3)
+    def line(ax, name, pts, lw):
+        # Plot against real timestamps so points sit at their true time distance
+        # apart (matplotlib date axis), not at fixed categorical intervals.
+        xs = [ws.local_dt(p[0]) for p in pts]
+        ax.plot(xs, [p[1] for p in pts], marker="o", lw=lw, label=name)
+
+    fig, ((ax_tu, ax_td), (ax_du, ax_dd)) = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
+
+    # Row 1: TOTAL alone (own scale). Row 2: per-domain lines.
+    line(ax_tu, "TOTAL", up["TOTAL"], 2)
+    line(ax_td, "TOTAL", down["TOTAL"], 2)
+    for name in sorted(k for k in up if k != "TOTAL"):
+        line(ax_du, name, up[name], 1)
+    for name in sorted(k for k in down if k != "TOTAL"):
+        line(ax_dd, name, down[name], 1)
+
+    ax_tu.set_title("Total submitted (burn-up)")
+    ax_td.set_title("Total remaining (burn-down)")
+    ax_du.set_title("By domain — submitted (burn-up)")
+    ax_dd.set_title("By domain — remaining (burn-down)")
+    ax_tu.set_ylabel("submitted responses")
+    ax_du.set_ylabel("submitted responses")
+    ax_td.set_ylabel("records remaining")
+    ax_dd.set_ylabel("records remaining")
+    ax_du.legend(fontsize=7, ncol=2)
+
+    for ax in (ax_tu, ax_td, ax_du, ax_dd):
+        ax.grid(True, alpha=0.3)
+    for ax in (ax_du, ax_dd):
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+    fig.autofmt_xdate(rotation=45)
     _save(fig, out / "progress.png")
     return True
 
 
 def plot_label_prevalence(snap: dict, out: Path) -> bool:
-    """Per-task horizontal bars of fraction-true with Wilson CI; degenerate/rare highlighted."""
+    """Per-task horizontal bars of fraction-true; degenerate/rare highlighted."""
     labels_by_task = snap["total"].get("labels") or {}
     tasks = [t for t in TASK_ORDER if labels_by_task.get(t)]
     if not tasks:
@@ -70,19 +104,24 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
         items = [(k, v) for k, v in labels_by_task[task].items() if v["n"] > 0]
         names = [k for k, _ in items]
         prev = [v["prevalence"] for _, v in items]
-        lo = [v["prevalence"] - v["ci95"][0] for _, v in items]
-        hi = [v["ci95"][1] - v["prevalence"] for _, v in items]
         colors = ["#d62728" if v["degenerate"] else "#ff7f0e" if v["near_degenerate"]
                   else "#1f77b4" for _, v in items]
         y = range(len(names))
-        ax.barh(y, prev, xerr=[lo, hi], color=colors, capsize=3)
+        ax.barh(y, prev, color=colors)
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)
         ax.set_xlim(0, 1)
         ax.set_xlabel("prevalence (fraction true)")
         ax.set_title(task)
         ax.grid(True, axis="x", alpha=0.3)
-    fig.suptitle("Label prevalence (Wilson 95% CI) — red=degenerate, orange=rare")
+    key = [
+        mpatches.Patch(color="#1f77b4", label="normal"),
+        mpatches.Patch(color="#ff7f0e", label="rare (near-degenerate)"),
+        mpatches.Patch(color="#d62728", label="degenerate (one class only)"),
+    ]
+    fig.legend(handles=key, loc="lower center", ncol=3, fontsize=8,
+               frameon=False, bbox_to_anchor=(0.5, -0.04))
+    fig.suptitle("Label prevalence (fraction true)")
     _save(fig, out / "label_prevalence.png")
     return True
 
@@ -111,11 +150,13 @@ def plot_pace(snap: dict, out: Path) -> bool:
     axes[0].barh([d[0] for d in dom], [d[1] for d in dom], color="#1f77b4")
     axes[0].set_title("Pooled pace by domain")
     axes[0].set_xlabel("median active gap (min/record)")
-    axes[1].bar([t[0] for t in tasks], [t[1] for t in tasks], color="#2ca02c")
+    # Both panels horizontal (x = gap); reverse so retrieval reads at the top.
+    trev = list(reversed(tasks))
+    axes[1].barh([t[0] for t in trev], [t[1] for t in trev], color="#2ca02c")
     axes[1].set_title("Pooled pace by task")
-    axes[1].set_ylabel("median active gap (min/record)")
+    axes[1].set_xlabel("median active gap (min/record)")
     for ax in axes:
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, axis="x", alpha=0.3)
     _save(fig, out / "pace.png")
     return True
 
@@ -150,7 +191,7 @@ def plot_discards(snap: dict, out: Path) -> bool:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "monitor.jsonl", type=Path)
+    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "log.jsonl", type=Path)
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
     args = ap.parse_args()
@@ -160,11 +201,15 @@ def main() -> None:
     if not snaps:
         sys.exit(f"no snapshots in {args.jsonl}")
     snap = snaps[args.line]
-    out = args.out_dir or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}")
-    out.mkdir(parents=True, exist_ok=True)
+    if args.out_dir:
+        out = args.out_dir
+        out.mkdir(parents=True, exist_ok=True)
+    else:
+        out = ws.report_dir(snap["run_at"])
+        ws.link_latest(out)
 
     made = sum([
-        plot_burnup(snaps, out),
+        plot_progress(snaps, out),
         plot_label_prevalence(snap, out),
         plot_pace(snap, out),
         plot_discards(snap, out),

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Daily annotation monitor for the BSt pragmata-workspace.
+Daily annotation logger for the BSt pragmata-workspace.
+
+This is the *logging* half of the pipeline: it computes one snapshot of the live
+annotation state and appends it to logs/annotation/log.jsonl. Turning snapshots
+into human-readable markdown + plots is the *reporting* half (manual; see
+report_tables.py and plot_summary.py).
 
 Reads the live Argilla annotation state (across all domains/workspaces/tasks)
 and emits three progress metrics, rolled up task -> domain -> total:
@@ -17,9 +22,9 @@ and emits three progress metrics, rolled up task -> domain -> total:
      per-annotator (true individual pace) and global (team throughput), each
      session-guarded (see below).
 
-Each run appends one JSON object to logs/annotation/monitor.jsonl (for trend-watching) and
+Each run appends one JSON object to logs/annotation/log.jsonl (for trend-watching) and
 prints a one-line status to stdout. The human-readable stats tables are NOT
-printed here — they are rendered to reports/annotation/<date>.md by report_tables.py
+printed here — they are rendered to reports/annotation/<date>/report.md by report_tables.py
 (pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
 fails is recorded and skipped; the run continues.
 
@@ -29,7 +34,7 @@ drop them, and record ``updated_at`` is unreliable (bulk/import ops bump it), so
 REST is the only true source — which is why cadence reads it directly.
 
 Session guard: an annotator's submissions are sorted by time and the gaps between
-them taken. Any gap longer than MONITOR_SESSION_GAP_MIN (default 30 min) is a
+them taken. Any gap longer than LOG_SESSION_GAP_MIN (default 30 min) is a
 *session break* (a pause, e.g. overnight) — excluded from the median and reported
 under ``excluded_gaps`` (global view) so the exclusion is auditable. The headline
 ``median_active_gap_s`` is the median of the within-session gaps only.
@@ -39,20 +44,19 @@ agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
 ``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
 
 Usage:
-  scripts/annotation/monitor.py                 # run all domains, append jsonl + one-line status
-  scripts/annotation/monitor.py --domain X      # one domain only (smoke test)
-  scripts/annotation/monitor.py --summary       # also print the human-readable table to stdout
-  scripts/annotation/monitor.py --no-jsonl      # don't append history
-  scripts/annotation/monitor.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
-                                                #   export for IAA instead of a throwaway one
-  scripts/annotation/monitor.py --self-check    # run the cadence unit self-check and exit
+  scripts/annotation/log.py                 # run all domains, append jsonl + one-line status
+  scripts/annotation/log.py --domain X      # one domain only (smoke test)
+  scripts/annotation/log.py --summary       # also print the human-readable table to stdout
+  scripts/annotation/log.py --no-jsonl      # don't append history
+  scripts/annotation/log.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
+                                            #   export for IAA instead of a throwaway one
+  scripts/annotation/log.py --self-check    # run the cadence unit self-check and exit
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
-import math
 import os
 import statistics
 import sys
@@ -112,14 +116,13 @@ _LABELS: dict[Task, list[str]] = {
     for t, c in _TASK_SCHEMA.items()
 }
 
-Z95 = 1.959963984540054  # standard normal quantile for a two-sided 95% interval
 NEAR_DEGENERATE_FRAC = 0.05  # minority class below this (but >0) → flagged "near-degenerate"
 
-SESSION_GAP_S = float(os.environ.get("MONITOR_SESSION_GAP_MIN", "30")) * 60
-MIN_RECORDS = int(os.environ.get("MONITOR_MIN_RECORDS_FOR_TIMING", "5"))
-IAA_RESAMPLES = int(os.environ.get("MONITOR_IAA_RESAMPLES", "200"))
+SESSION_GAP_S = float(os.environ.get("LOG_SESSION_GAP_MIN", "30")) * 60
+MIN_RECORDS = int(os.environ.get("LOG_MIN_RECORDS_FOR_TIMING", "5"))
+IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "200"))
 
-JSONL_PATH = ws.LOGS_DIR / "monitor.jsonl"
+JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 
 # username → Argilla user_id (UUID str), populated once per run. The CSV export carries the
 # annotator *username*; we map it to the UUID so no real names appear in the output (the REST
@@ -233,40 +236,21 @@ def wmean(pairs: list[tuple[float, int]]) -> float | None:
 
 # --- label-value statistics -------------------------------------------------
 
-def wilson_ci(n_true: int, n: int, z: float = Z95) -> list[float] | None:
-    """Wilson score 95% CI for a binomial proportion; None when n == 0.
-
-    Chosen over the normal approximation because it stays non-zero-width and
-    in-range at p=0 / p=1 — exactly the degenerate-label case (e.g. a label
-    seen 'always true' over n=46), so the interval quantifies how confident
-    'always' really is rather than collapsing to a point.
-    """
-    if n == 0:
-        return None
-    p = n_true / n
-    denom = 1 + z * z / n
-    center = (p + z * z / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return [round(max(0.0, center - half), 4), round(min(1.0, center + half), 4)]
-
-
 def label_summary(n_true: int, n: int) -> dict:
-    """Class balance for one binary label: prevalence, Wilson CI, degeneracy flags.
+    """Class balance for one binary label: prevalence + degeneracy flags (descriptive).
 
     Raw fraction-true only — no good/bad polarity (the reader knows label semantics).
     ``degenerate`` = only one class ever observed (always- or never-true);
     ``near_degenerate`` = minority class present but below NEAR_DEGENERATE_FRAC.
     """
     if n == 0:
-        return {"n": 0, "n_true": 0, "prevalence": None, "ci95": None,
-                "degenerate": False, "minority_frac": None, "near_degenerate": False}
+        return {"n": 0, "n_true": 0, "prevalence": None,
+                "degenerate": False, "near_degenerate": False}
     p = n_true / n
     minority = min(p, 1 - p)
     degenerate = n_true == 0 or n_true == n
     return {
-        "n": n, "n_true": n_true, "prevalence": round(p, 4),
-        "ci95": wilson_ci(n_true, n), "degenerate": degenerate,
-        "minority_frac": round(minority, 4),
+        "n": n, "n_true": n_true, "prevalence": round(p, 4), "degenerate": degenerate,
         "near_degenerate": (not degenerate) and minority < NEAR_DEGENERATE_FRAC,
     }
 
@@ -534,6 +518,7 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
                                     "at": datetime.fromisoformat(ts),
                                     "purpose": purpose,
                                     "record_id": str(resp.get("record_id")),
+                                    "task": task.value,
                                 })
                     offset += len(items)
                     if len(items) < limit:
@@ -745,6 +730,13 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             add_constraints(tot_constraints, roll["constraints"])
             add_completeness(tot_completeness, roll["completeness"])
 
+    # True pooled cadence per task across domains (so the task-level pace table is a real
+    # median, not a weighted-mean approximation of per-domain medians).
+    events_by_task: dict[str, list[dict]] = {}
+    for e in tot_events:
+        events_by_task.setdefault(e["task"], []).append(e)
+    timing_by_task = {t: cadence_report(evs) for t, evs in events_by_task.items()}
+
     return {
         "run_at": datetime.now(timezone.utc).isoformat(),
         "session_gap_threshold_s": int(SESSION_GAP_S),
@@ -752,6 +744,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
             "agreement": {"mean_alpha": wmean(tot_weighted), "n_labels": len(tot_weighted)},
             "timing": cadence_report(tot_events),
+            "timing_by_task": timing_by_task,
             "labels": build_label_block(tot_label),
             "discards": finalize_discards(tot_discards),
             "constraints": build_constraints(tot_constraints),
@@ -781,7 +774,7 @@ def print_summary(result: dict) -> None:
     %=completion, ann=annotators, mean_a=mean calibration alpha, a-gap=per-annotator
     active cadence (median gap within an annotator's own stream, session-guarded).
     """
-    print(f"Annotation monitor — {result['run_at']}")
+    print(f"Annotation log — {result['run_at']}")
     print(f"(session gap threshold: {result['session_gap_threshold_s'] // 60} min)\n")
     hdr = (f"{'domain':<34} {'resp':>6} {'done':>7} {'total':>8} {'%':>5} "
            f"{'ann':>4} {'mean_a':>7} {'a-gap':>7}")
@@ -845,7 +838,7 @@ def self_check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
-    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/monitor.jsonl.")
+    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/log.jsonl.")
     ap.add_argument("--use-export", action="store_true",
                     help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
                          "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
@@ -873,7 +866,7 @@ def main() -> int:
         print_summary(result)
     else:
         c = result["total"]["count"]
-        print(f"monitor: {result['run_at']} — {len(result['domains'])} domains, "
+        print(f"log: {result['run_at']} — {len(result['domains'])} domains, "
               f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
               f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}")
     return 0
