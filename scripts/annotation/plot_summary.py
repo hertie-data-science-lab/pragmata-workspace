@@ -39,10 +39,10 @@ def _save(fig, path: Path) -> None:
 
 
 def plot_progress(snaps: list[dict], out: Path) -> bool:
-    """Two stacked time-series in progress.png, one line per domain + TOTAL:
-
-      • burn-up:   submitted responses accumulated over time (work done),
-      • burn-down: records remaining (pending) over time (work left).
+    """2x2 time-series grid in progress.png. Columns are the two metrics
+    (burn-up = submitted responses; burn-down = records remaining); rows split
+    TOTAL (top, own scale) from the per-domain lines (bottom) so the much larger
+    total doesn't compress the domain-level patterns.
     """
     up: dict[str, list[tuple[str, int]]] = {}
     down: dict[str, list[tuple[str, int]]] = {}
@@ -57,27 +57,37 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
                 down.setdefault(name, []).append((t, v["count"]["pending_records"]))
     if len(snaps) < 2:
         return False
-    fig, (ax_up, ax_down) = plt.subplots(2, 1, figsize=(9, 9), sharex=True)
-
-    def draw(ax, series):
+    def line(ax, name, pts, lw):
         # Plot against real timestamps so points sit at their true time distance
         # apart (matplotlib date axis), not at fixed categorical intervals.
-        for name, pts in sorted(series.items()):
-            xs = [ws.local_dt(p[0]) for p in pts]
-            ax.plot(xs, [p[1] for p in pts], marker="o",
-                    lw=2 if name == "TOTAL" else 1, label=name)
+        xs = [ws.local_dt(p[0]) for p in pts]
+        ax.plot(xs, [p[1] for p in pts], marker="o", lw=lw, label=name)
+
+    fig, ((ax_tu, ax_td), (ax_du, ax_dd)) = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
+
+    # Row 1: TOTAL alone (own scale). Row 2: per-domain lines.
+    line(ax_tu, "TOTAL", up["TOTAL"], 2)
+    line(ax_td, "TOTAL", down["TOTAL"], 2)
+    for name in sorted(k for k in up if k != "TOTAL"):
+        line(ax_du, name, up[name], 1)
+    for name in sorted(k for k in down if k != "TOTAL"):
+        line(ax_dd, name, down[name], 1)
+
+    ax_tu.set_title("Total submitted (burn-up)")
+    ax_td.set_title("Total remaining (burn-down)")
+    ax_du.set_title("By domain — submitted (burn-up)")
+    ax_dd.set_title("By domain — remaining (burn-down)")
+    ax_tu.set_ylabel("submitted responses")
+    ax_du.set_ylabel("submitted responses")
+    ax_td.set_ylabel("records remaining")
+    ax_dd.set_ylabel("records remaining")
+    ax_du.legend(fontsize=7, ncol=2)
+
+    for ax in (ax_tu, ax_td, ax_du, ax_dd):
         ax.grid(True, alpha=0.3)
-
-    draw(ax_up, up)
-    ax_up.set_ylabel("submitted responses")
-    ax_up.set_title("Annotation progress over time (burn-up)")
-    ax_up.legend(fontsize=7, ncol=2)
-
-    draw(ax_down, down)
-    ax_down.set_ylabel("records remaining")
-    ax_down.set_title("Records remaining over time (burn-down)")
-    ax_down.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax_down.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+    for ax in (ax_du, ax_dd):
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
     fig.autofmt_xdate(rotation=45)
     _save(fig, out / "progress.png")
     return True
