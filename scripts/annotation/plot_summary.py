@@ -21,6 +21,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
@@ -59,8 +60,10 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     fig, (ax_up, ax_down) = plt.subplots(2, 1, figsize=(9, 9), sharex=True)
 
     def draw(ax, series):
+        # Plot against real timestamps so points sit at their true time distance
+        # apart (matplotlib date axis), not at fixed categorical intervals.
         for name, pts in sorted(series.items()):
-            xs = [p[0][:16] for p in pts]
+            xs = [ws.local_dt(p[0]) for p in pts]
             ax.plot(xs, [p[1] for p in pts], marker="o",
                     lw=2 if name == "TOTAL" else 1, label=name)
         ax.grid(True, alpha=0.3)
@@ -73,7 +76,9 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     draw(ax_down, down)
     ax_down.set_ylabel("records remaining")
     ax_down.set_title("Records remaining over time (burn-down)")
-    ax_down.tick_params(axis="x", rotation=45, labelsize=7)
+    ax_down.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax_down.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+    fig.autofmt_xdate(rotation=45)
     _save(fig, out / "progress.png")
     return True
 
