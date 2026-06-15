@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Daily annotation monitor for the BSt pragmata-workspace.
+Daily annotation logger for the BSt pragmata-workspace.
+
+This is the *logging* half of the pipeline: it computes one snapshot of the live
+annotation state and appends it to logs/annotation/log.jsonl. Turning snapshots
+into human-readable markdown + plots is the *reporting* half (manual; see
+report_tables.py and plot_summary.py).
 
 Reads the live Argilla annotation state (across all domains/workspaces/tasks)
 and emits three progress metrics, rolled up task -> domain -> total:
@@ -17,9 +22,9 @@ and emits three progress metrics, rolled up task -> domain -> total:
      per-annotator (true individual pace) and global (team throughput), each
      session-guarded (see below).
 
-Each run appends one JSON object to logs/annotation/monitor.jsonl (for trend-watching) and
+Each run appends one JSON object to logs/annotation/log.jsonl (for trend-watching) and
 prints a one-line status to stdout. The human-readable stats tables are NOT
-printed here — they are rendered to reports/annotation/<date>.md by report_tables.py
+printed here — they are rendered to reports/annotation/<date>/report.md by report_tables.py
 (pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
 fails is recorded and skipped; the run continues.
 
@@ -39,13 +44,13 @@ agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
 ``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
 
 Usage:
-  scripts/annotation/monitor.py                 # run all domains, append jsonl + one-line status
-  scripts/annotation/monitor.py --domain X      # one domain only (smoke test)
-  scripts/annotation/monitor.py --summary       # also print the human-readable table to stdout
-  scripts/annotation/monitor.py --no-jsonl      # don't append history
-  scripts/annotation/monitor.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
-                                                #   export for IAA instead of a throwaway one
-  scripts/annotation/monitor.py --self-check    # run the cadence unit self-check and exit
+  scripts/annotation/log.py                 # run all domains, append jsonl + one-line status
+  scripts/annotation/log.py --domain X      # one domain only (smoke test)
+  scripts/annotation/log.py --summary       # also print the human-readable table to stdout
+  scripts/annotation/log.py --no-jsonl      # don't append history
+  scripts/annotation/log.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
+                                            #   export for IAA instead of a throwaway one
+  scripts/annotation/log.py --self-check    # run the cadence unit self-check and exit
 """
 from __future__ import annotations
 
@@ -117,7 +122,7 @@ SESSION_GAP_S = float(os.environ.get("MONITOR_SESSION_GAP_MIN", "30")) * 60
 MIN_RECORDS = int(os.environ.get("MONITOR_MIN_RECORDS_FOR_TIMING", "5"))
 IAA_RESAMPLES = int(os.environ.get("MONITOR_IAA_RESAMPLES", "200"))
 
-JSONL_PATH = ws.LOGS_DIR / "monitor.jsonl"
+JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 
 # username → Argilla user_id (UUID str), populated once per run. The CSV export carries the
 # annotator *username*; we map it to the UUID so no real names appear in the output (the REST
@@ -769,7 +774,7 @@ def print_summary(result: dict) -> None:
     %=completion, ann=annotators, mean_a=mean calibration alpha, a-gap=per-annotator
     active cadence (median gap within an annotator's own stream, session-guarded).
     """
-    print(f"Annotation monitor — {result['run_at']}")
+    print(f"Annotation log — {result['run_at']}")
     print(f"(session gap threshold: {result['session_gap_threshold_s'] // 60} min)\n")
     hdr = (f"{'domain':<34} {'resp':>6} {'done':>7} {'total':>8} {'%':>5} "
            f"{'ann':>4} {'mean_a':>7} {'a-gap':>7}")
@@ -833,7 +838,7 @@ def self_check() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
-    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/monitor.jsonl.")
+    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/log.jsonl.")
     ap.add_argument("--use-export", action="store_true",
                     help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
                          "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
@@ -861,7 +866,7 @@ def main() -> int:
         print_summary(result)
     else:
         c = result["total"]["count"]
-        print(f"monitor: {result['run_at']} — {len(result['domains'])} domains, "
+        print(f"log: {result['run_at']} — {len(result['domains'])} domains, "
               f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
               f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}")
     return 0

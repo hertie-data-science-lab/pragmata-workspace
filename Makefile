@@ -27,7 +27,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe monitor export report-tables plots daily backup
+.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -52,25 +52,29 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/import.sh "$(DOMAIN)"
 
-monitor: ## Compute annotation snapshot -> logs/annotation/monitor.jsonl (--summary for a CLI table)
-	$(PY) scripts/annotation/monitor.py $(if $(DOMAIN),--domain $(DOMAIN),)
+log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--summary for a CLI table)
+	$(PY) scripts/annotation/log.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
 export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/annotation/export.sh $(DOMAIN)
 
-report-tables: ## Render latest monitor snapshot -> reports/annotation/<date>.md
+report: ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
+	$(PY) scripts/annotation/report_tables.py
+	$(PY) scripts/annotation/plot_summary.py
+
+report-tables: ## Render tables only -> reports/annotation/<date>/report.md
 	$(PY) scripts/annotation/report_tables.py
 
-report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>.pdf (needs pandoc + xelatex)
+report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
 	@md=$$($(PY) scripts/annotation/report_tables.py 2>&1 | sed -n 's/^wrote //p'); \
 	pandoc "$$md" -o "$${md%.md}.pdf" --pdf-engine=xelatex -V fontsize=9pt \
 	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
 	  && echo "wrote $${md%.md}.pdf"
 
-plots: ## Render summary plots (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
+plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 
-daily: ## Nightly: export -> monitor -> analysis tables (reports/annotation/<date>.md)
+daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report)
 	bash scripts/daily.sh
 
 backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)

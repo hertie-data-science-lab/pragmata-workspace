@@ -47,7 +47,7 @@ SCRIPTS_DIR = _A.scripts
 CONFIGS_DIR = _A.configs                           # domains/, querygen_specs/, users.*
 DOMAINS_DIR = CONFIGS_DIR / "domains"              # per-domain annotation task YAMLs
 SPECS_DIR = CONFIGS_DIR / "querygen_specs"
-LOGS_DIR = _A.logs                                 # monitor.jsonl + run logs (flat)
+LOGS_DIR = _A.logs                                 # log.jsonl + run logs (flat)
 REPORTS_DIR = _A.reports                           # rendered tables + plots
 EXPORTS_DIR = _A.data / "exports"                  # pragmata annotation tool: exports/imports
 RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen tool (pragmata sibling)
@@ -78,6 +78,26 @@ def local_dt(run_at: str) -> datetime:
     Snapshots store run_at in UTC; reports show it in the configured local zone.
     """
     return datetime.fromisoformat(run_at).astimezone(ZoneInfo(os.environ.get("REPORT_TZ", "UTC")))
+
+
+def report_dir(run_at: str) -> Path:
+    """Per-snapshot report subdir reports/annotation/<local-date>/ (created).
+
+    Both the markdown report and the PNGs for one snapshot live here together;
+    link_latest() points reports/annotation/_latest at the newest one.
+    """
+    d = REPORTS_DIR / f"{local_dt(run_at):%Y-%m-%d}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def link_latest(target: Path) -> None:
+    """Point reports/annotation/_latest at ``target`` (relative link, atomic swap)."""
+    link = REPORTS_DIR / "_latest"
+    tmp = REPORTS_DIR / "_latest.tmp"
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(target.name)  # relative: just the date dir name
+    tmp.replace(link)
 
 
 def domains() -> list[str]:

@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Render the annotation-monitor markdown tables deterministically from a snapshot.
+"""Render the annotation-report markdown tables deterministically from a snapshot.
 
-Reads one JSON snapshot line from ``logs/annotation/monitor.jsonl`` (the latest by default)
+The *reporting* half (manual): turns one snapshot logged by log.py into markdown.
+Writes reports/annotation/<date>/report.md and updates the reports/annotation/_latest
+symlink; plot_summary.py drops its PNGs into the same dir.
+
+Reads one JSON snapshot line from ``logs/annotation/log.jsonl`` (the latest by default)
 and prints the analysis tables as markdown to stdout. The numbers are pulled
 verbatim from the snapshot - this script only reshapes and formats them, so the
 output is reproducible and the hand-written prose/commentary can be layered on top.
 
 Usage:
-  scripts/annotation/report_tables.py                       # latest snapshot -> reports/annotation/<date>.md
+  scripts/annotation/report_tables.py                       # latest snapshot -> reports/annotation/<date>/report.md
   scripts/annotation/report_tables.py --line N              # 0-based line index (negative = from end)
   scripts/annotation/report_tables.py --jsonl PATH          # a different history file
   scripts/annotation/report_tables.py --out PATH            # write to a specific path
@@ -158,7 +162,7 @@ def iaa_per_label(domains: dict) -> str:
                              _pct(lv["pct_agreement"]), _prev(lab.get(lbl))])
     if not rows:
         return ""
-    return _table(["Domain", "Task", "Label", "α", "% agree", "Prev."],
+    return _table(["Domain", "Task", "Label", "α", "% agree", "Prev.*"],
                   ["l", "l", "l", "r", "r", "r"], rows)
 
 
@@ -175,7 +179,7 @@ def label_distribution_totals(total: dict) -> str:
             rows += [[task, *r] for r in _label_rows(pl)]
     if not rows:
         return ""
-    return _table(["Task", "Label", "n", "Prev."], ["l", "l", "r", "r"], rows)
+    return _table(["Task", "Label", "n", "Prev.*"], ["l", "l", "r", "r"], rows)
 
 
 def label_distribution_by_domain(domains: dict) -> str:
@@ -188,7 +192,7 @@ def label_distribution_by_domain(domains: dict) -> str:
                 rows += [[name, task, *r] for r in _label_rows(lab["per_label"])]
     if not rows:
         return ""
-    return _table(["Domain", "Task", "Label", "n", "Prev."], ["l", "l", "l", "r", "r"], rows)
+    return _table(["Domain", "Task", "Label", "n", "Prev.*"], ["l", "l", "l", "r", "r"], rows)
 
 
 def discards(domains: dict, total: dict) -> str:
@@ -264,7 +268,7 @@ def annotator_bias(domains: dict, top_n: int = 15) -> str:
     rows = []
     for uuid, lst in sorted(by_uuid.items(), key=lambda kv: -max(ad for ad, _ in kv[1])):
         rows += [row for _, row in sorted(lst, key=lambda x: -x[0])]
-    return _table(["Annotator", "Domain", "Task", "Label", "Prev.", "Δ pp", "n"],
+    return _table(["Annotator", "Domain", "Task", "Label", "Prev.*", "Δ pp", "n"],
                   ["l", "l", "l", "l", "r", "r", "r"], rows[:top_n])
 
 
@@ -366,7 +370,12 @@ def render(snap: dict) -> str:
         "### Domain-level pace\n\n" + domain_pace(domains),
         "### Task-level pace\n\n" + task_pace(domains, total),
         "### Task × domain pace\n\n" + task_x_domain_pace(domains),
-        f"---\n\n_Session gap threshold: {snap['session_gap_threshold_s'] // 60} min "
+        "---",
+        "_\\*Prev. = prevalence: the share of submitted annotations where the label is "
+        "true. We track it to catch degenerate or near-degenerate labels (one class almost "
+        "never chosen), which flag an ambiguous guideline or a label too one-sided to yield "
+        "meaningful agreement._",
+        f"_Session gap threshold: {snap['session_gap_threshold_s'] // 60} min "
         "(longer gaps are treated as session breaks and excluded from cadence medians)._",
     ]
     return "\n\n".join(parts) + "\n"
@@ -375,12 +384,12 @@ def render(snap: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "monitor.jsonl", type=Path,
-                    help="history file to read (default: logs/annotation/monitor.jsonl)")
+    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "log.jsonl", type=Path,
+                    help="history file to read (default: logs/annotation/log.jsonl)")
     ap.add_argument("--line", default=-1, type=int,
                     help="0-based snapshot index; negative counts from end (default: -1 = latest)")
     ap.add_argument("--out", type=Path, default=None,
-                    help="output .md path (default: reports/annotation/<snapshot-date>.md)")
+                    help="output .md path (default: reports/annotation/<snapshot-date>/report.md)")
     ap.add_argument("--stdout", action="store_true", help="write to stdout instead of a file")
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-time display)
@@ -397,9 +406,13 @@ def main() -> None:
     if args.stdout:
         sys.stdout.write(md)
         return
-    # default: reports/annotation/<local-snapshot-date>.md
-    out = args.out or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}.md")
-    out.parent.mkdir(parents=True, exist_ok=True)
+    # default: reports/annotation/<local-snapshot-date>/report.md (+ _latest symlink)
+    if args.out:
+        out = args.out
+        out.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out = ws.report_dir(snap["run_at"]) / "report.md"
+        ws.link_latest(out.parent)
     out.write_text(md)
     print(f"wrote {out}", file=sys.stderr)
 

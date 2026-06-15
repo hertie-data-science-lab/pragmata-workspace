@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Render summary-stat plots from logs/annotation/monitor.jsonl to PNGs.
+"""Render summary-stat plots from logs/annotation/log.jsonl to PNGs.
 
-Burn-up uses the full snapshot history (a time series); the rest use one snapshot
-(latest by default). Outputs land in reports/annotation/<snapshot-date>/.
+The *reporting* half (manual): progress.png uses the full snapshot history (a time
+series); the rest use one snapshot (latest by default). PNGs land in
+reports/annotation/<snapshot-date>/ alongside report.md, and the
+reports/annotation/_latest symlink is repointed at that dir.
 
 Usage:
   scripts/annotation/plot_summary.py                 # latest snapshot -> reports/annotation/<date>/
@@ -19,6 +21,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -34,27 +37,43 @@ def _save(fig, path: Path) -> None:
     print(f"wrote {path}", file=sys.stderr)
 
 
-def plot_burnup(snaps: list[dict], out: Path) -> bool:
-    """Submitted responses over time, one line per domain + total."""
-    series: dict[str, list[tuple[str, int]]] = {}
+def plot_progress(snaps: list[dict], out: Path) -> bool:
+    """Two stacked time-series in progress.png, one line per domain + TOTAL:
+
+      • burn-up:   submitted responses accumulated over time (work done),
+      • burn-down: records remaining (pending) over time (work left).
+    """
+    up: dict[str, list[tuple[str, int]]] = {}
+    down: dict[str, list[tuple[str, int]]] = {}
     for s in snaps:
         t = s["run_at"]
-        series.setdefault("TOTAL", []).append((t, s["total"]["count"]["submitted_responses"]))
+        tc = s["total"]["count"]
+        up.setdefault("TOTAL", []).append((t, tc["submitted_responses"]))
+        down.setdefault("TOTAL", []).append((t, tc["pending_records"]))
         for name, v in s.get("domains", {}).items():
             if "count" in v:
-                series.setdefault(name, []).append((t, v["count"]["submitted_responses"]))
+                up.setdefault(name, []).append((t, v["count"]["submitted_responses"]))
+                down.setdefault(name, []).append((t, v["count"]["pending_records"]))
     if len(snaps) < 2:
         return False
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for name, pts in sorted(series.items()):
-        xs = [p[0][:16] for p in pts]
-        ax.plot(xs, [p[1] for p in pts], marker="o", lw=2 if name == "TOTAL" else 1,
-                label=name)
-    ax.set_ylabel("submitted responses")
-    ax.set_title("Annotation progress over time")
-    ax.tick_params(axis="x", rotation=45, labelsize=7)
-    ax.legend(fontsize=7, ncol=2)
-    ax.grid(True, alpha=0.3)
+    fig, (ax_up, ax_down) = plt.subplots(2, 1, figsize=(9, 9), sharex=True)
+
+    def draw(ax, series):
+        for name, pts in sorted(series.items()):
+            xs = [p[0][:16] for p in pts]
+            ax.plot(xs, [p[1] for p in pts], marker="o",
+                    lw=2 if name == "TOTAL" else 1, label=name)
+        ax.grid(True, alpha=0.3)
+
+    draw(ax_up, up)
+    ax_up.set_ylabel("submitted responses")
+    ax_up.set_title("Annotation progress over time (burn-up)")
+    ax_up.legend(fontsize=7, ncol=2)
+
+    draw(ax_down, down)
+    ax_down.set_ylabel("records remaining")
+    ax_down.set_title("Records remaining over time (burn-down)")
+    ax_down.tick_params(axis="x", rotation=45, labelsize=7)
     _save(fig, out / "progress.png")
     return True
 
@@ -80,7 +99,14 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
         ax.set_xlabel("prevalence (fraction true)")
         ax.set_title(task)
         ax.grid(True, axis="x", alpha=0.3)
-    fig.suptitle("Label prevalence — red=degenerate, orange=rare")
+    key = [
+        mpatches.Patch(color="#1f77b4", label="normal"),
+        mpatches.Patch(color="#ff7f0e", label="rare (near-degenerate)"),
+        mpatches.Patch(color="#d62728", label="degenerate (one class only)"),
+    ]
+    fig.legend(handles=key, loc="lower center", ncol=3, fontsize=8,
+               frameon=False, bbox_to_anchor=(0.5, -0.04))
+    fig.suptitle("Label prevalence (fraction true)")
     _save(fig, out / "label_prevalence.png")
     return True
 
@@ -109,11 +135,13 @@ def plot_pace(snap: dict, out: Path) -> bool:
     axes[0].barh([d[0] for d in dom], [d[1] for d in dom], color="#1f77b4")
     axes[0].set_title("Pooled pace by domain")
     axes[0].set_xlabel("median active gap (min/record)")
-    axes[1].bar([t[0] for t in tasks], [t[1] for t in tasks], color="#2ca02c")
+    # Both panels horizontal (x = gap); reverse so retrieval reads at the top.
+    trev = list(reversed(tasks))
+    axes[1].barh([t[0] for t in trev], [t[1] for t in trev], color="#2ca02c")
     axes[1].set_title("Pooled pace by task")
-    axes[1].set_ylabel("median active gap (min/record)")
+    axes[1].set_xlabel("median active gap (min/record)")
     for ax in axes:
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, axis="x", alpha=0.3)
     _save(fig, out / "pace.png")
     return True
 
@@ -148,7 +176,7 @@ def plot_discards(snap: dict, out: Path) -> bool:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "monitor.jsonl", type=Path)
+    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "log.jsonl", type=Path)
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
     args = ap.parse_args()
@@ -158,11 +186,15 @@ def main() -> None:
     if not snaps:
         sys.exit(f"no snapshots in {args.jsonl}")
     snap = snaps[args.line]
-    out = args.out_dir or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}")
-    out.mkdir(parents=True, exist_ok=True)
+    if args.out_dir:
+        out = args.out_dir
+        out.mkdir(parents=True, exist_ok=True)
+    else:
+        out = ws.report_dir(snap["run_at"])
+        ws.link_latest(out)
 
     made = sum([
-        plot_burnup(snaps, out),
+        plot_progress(snaps, out),
         plot_label_prevalence(snap, out),
         plot_pace(snap, out),
         plot_discards(snap, out),
