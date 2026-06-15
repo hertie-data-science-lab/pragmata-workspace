@@ -3,9 +3,10 @@
 #
 # Nightly annotation analysis. Chains three independently-runnable steps:
 #
-#   1. export.sh              submitted annotations -> annotation/exports/<domain>/  (overwrite per domain)
-#   2. monitor.py --use-export   live counts + IAA + cadence -> append logs/monitor.jsonl
-#   3. report_tables.py       latest snapshot -> logs/analysis/<date>.md             (pure data tables)
+#   1. export.sh              annotations (incl. discarded) -> annotation/exports/<domain>/  (overwrite per domain)
+#   2. monitor.py --use-export   counts + IAA + cadence + label/discard stats -> append logs/monitor.jsonl
+#   3. report_tables.py       latest snapshot -> logs/analysis/<date>.md             (data tables)
+#   4. plot_summary.py        latest snapshot -> logs/analysis/<date>/*.png          (plots; best-effort)
 #
 # A failed export does NOT abort the run: monitor reuses whatever CSVs exist and
 # IAA degrades gracefully, so counts/cadence + the tables still get produced.
@@ -24,3 +25,6 @@ section "monitor"
 
 section "report-tables"
 "$PY" scripts/report_tables.py || fatal "report-tables failed"
+
+section "plots"
+"$PY" scripts/plot_summary.py || warn "plots skipped (matplotlib missing or no data); tables still produced"
