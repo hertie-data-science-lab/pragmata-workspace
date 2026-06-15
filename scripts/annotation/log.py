@@ -34,7 +34,7 @@ drop them, and record ``updated_at`` is unreliable (bulk/import ops bump it), so
 REST is the only true source — which is why cadence reads it directly.
 
 Session guard: an annotator's submissions are sorted by time and the gaps between
-them taken. Any gap longer than MONITOR_SESSION_GAP_MIN (default 30 min) is a
+them taken. Any gap longer than LOG_SESSION_GAP_MIN (default 30 min) is a
 *session break* (a pause, e.g. overnight) — excluded from the median and reported
 under ``excluded_gaps`` (global view) so the exclusion is auditable. The headline
 ``median_active_gap_s`` is the median of the within-session gaps only.
@@ -118,9 +118,9 @@ _LABELS: dict[Task, list[str]] = {
 
 NEAR_DEGENERATE_FRAC = 0.05  # minority class below this (but >0) → flagged "near-degenerate"
 
-SESSION_GAP_S = float(os.environ.get("MONITOR_SESSION_GAP_MIN", "30")) * 60
-MIN_RECORDS = int(os.environ.get("MONITOR_MIN_RECORDS_FOR_TIMING", "5"))
-IAA_RESAMPLES = int(os.environ.get("MONITOR_IAA_RESAMPLES", "200"))
+SESSION_GAP_S = float(os.environ.get("LOG_SESSION_GAP_MIN", "30")) * 60
+MIN_RECORDS = int(os.environ.get("LOG_MIN_RECORDS_FOR_TIMING", "5"))
+IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "200"))
 
 JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 

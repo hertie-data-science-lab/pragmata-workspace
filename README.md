@@ -157,7 +157,7 @@ Three metrics (production vs calibration where it applies):
    mean, from pragmata's IAA over the calibration overlap.
 3. **Cadence** — median seconds between consecutive submissions, **per-annotator**
    (true individual pace) and **global** (team throughput). A **session guard**
-   drops gaps over `MONITOR_SESSION_GAP_MIN` (default 30 min) as pauses, listing
+   drops gaps over `LOG_SESSION_GAP_MIN` (default 30 min) as pauses, listing
    each under `excluded_gaps` so nothing vanishes silently.
 NB: 
 - *Timestamps come from the REST endpoint.* Whereas Argilla SDK and export CSVs drop
