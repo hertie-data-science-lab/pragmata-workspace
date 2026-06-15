@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Render summary-stat plots from logs/monitor.jsonl to PNGs.
+"""Render summary-stat plots from logs/annotation/monitor.jsonl to PNGs.
 
 Burn-up uses the full snapshot history (a time series); the rest use one snapshot
-(latest by default). Outputs land in logs/analysis/<snapshot-date>/.
+(latest by default). Outputs land in reports/annotation/<snapshot-date>/.
 
 Usage:
-  scripts/plot_summary.py                 # latest snapshot -> logs/analysis/<date>/
-  scripts/plot_summary.py --line N        # 0-based index; negative from end
-  scripts/plot_summary.py --out-dir DIR   # write PNGs here instead
+  scripts/annotation/plot_summary.py                 # latest snapshot -> reports/annotation/<date>/
+  scripts/annotation/plot_summary.py --line N        # 0-based index; negative from end
+  scripts/annotation/plot_summary.py --out-dir DIR   # write PNGs here instead
 """
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import workspace as ws  # noqa: E402
 
 TASK_ORDER = ["retrieval", "grounding", "generation"]
 
@@ -147,16 +150,17 @@ def plot_discards(snap: dict, out: Path) -> bool:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default="logs/monitor.jsonl", type=Path)
+    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "monitor.jsonl", type=Path)
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
     args = ap.parse_args()
+    ws.load_env()  # for REPORT_TZ (local-date out-dir, matches report_tables)
 
     snaps = [json.loads(ln) for ln in args.jsonl.read_text().splitlines() if ln.strip()]
     if not snaps:
         sys.exit(f"no snapshots in {args.jsonl}")
     snap = snaps[args.line]
-    out = args.out_dir or (Path("logs/analysis") / snap["run_at"][:10])
+    out = args.out_dir or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}")
     out.mkdir(parents=True, exist_ok=True)
 
     made = sum([

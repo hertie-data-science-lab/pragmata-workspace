@@ -1,0 +1,1 @@
+Evaluation-stage scripts (stub). Mirrors `scripts/annotation/`. Pragmata writes eval artifacts to `data/eval/` via its `eval` tool (`tool_root('eval')`), a sibling of `data/annotation/` and `data/querygen/`. Configs live in `configs/eval/`.

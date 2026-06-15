@@ -33,10 +33,10 @@ from uuid import UUID
 
 import argilla as rg
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws  # noqa: E402
 
-ws.load_env()  # config/workspace.env + .env; existing env wins
+ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 BACKUP_ROOT = ws.ROOT / "argilla_backup"
 

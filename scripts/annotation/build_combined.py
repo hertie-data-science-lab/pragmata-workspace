@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-scripts/build_combined.py — pool successive querygen runs and intersperse edgecases.
+scripts/annotation/build_combined.py — pool successive querygen runs and intersperse edgecases.
 
 For each requested domain, reads every JSONL output produced by run_bot.py
 across successive runs:
 
   Baseline pool:
-    publikationsbot_output/<domain>.jsonl
-    publikationsbot_output/<domain>_batch*.jsonl    (e.g. _batch2, _batch3)
+    data/publikationsbot/<domain>.jsonl
+    data/publikationsbot/<domain>_batch*.jsonl    (e.g. _batch2, _batch3)
 
   Edgecase pool:
-    publikationsbot_output/<domain>_edgecase.jsonl
-    publikationsbot_output/<domain>_edgecase_batch*.jsonl
+    data/publikationsbot/<domain>_edgecase.jsonl
+    data/publikationsbot/<domain>_edgecase_batch*.jsonl
 
 Within each pool, deduplicates on the literal query string (first occurrence
 wins). Cross-run duplicates can happen even with planning memory, because
@@ -20,9 +20,9 @@ strict deduplication against prior runs.
 
 Writes three files per domain:
 
-  publikationsbot_output/<domain>_pooled.jsonl           (deduped baseline pool)
-  publikationsbot_output/<domain>_edgecase_pooled.jsonl  (deduped edgecase pool)
-  publikationsbot_output/<domain>_combined.jsonl         (interspersed order)
+  data/publikationsbot/<domain>_pooled.jsonl           (deduped baseline pool)
+  data/publikationsbot/<domain>_edgecase_pooled.jsonl  (deduped edgecase pool)
+  data/publikationsbot/<domain>_combined.jsonl         (interspersed order)
 
 Interspersion rules:
   - First LEAD records are baseline only (no edgecase in the warm-up).
@@ -42,9 +42,9 @@ fills its `calibration_max_records` cap from baseline records, leaving zero
 calibration slots for the subsequent edgecase import. See setup_and_import.sh.
 
 Usage:
-  scripts/build_combined.py                                    # all domains (annotation_configs/)
-  scripts/build_combined.py demokratie-und-zusammenhalt        # one
-  scripts/build_combined.py demokratie-und-zusammenhalt europas-zukunft  # subset
+  scripts/annotation/build_combined.py                                    # all domains (configs/annotation/domains/)
+  scripts/annotation/build_combined.py demokratie-und-zusammenhalt        # one
+  scripts/annotation/build_combined.py demokratie-und-zusammenhalt europas-zukunft  # subset
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 from workspace import read_jsonl, write_jsonl
 
@@ -162,7 +162,7 @@ def build_for_domain(domain: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    known = ws.domains()  # single source of truth: annotation_configs/*.yaml
+    known = ws.domains()  # single source of truth: configs/annotation/domains/*.yaml
     domains = argv[1:] if len(argv) > 1 else known
     unknown = [d for d in domains if d not in known]
     if unknown:

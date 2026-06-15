@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Render the annotation-monitor markdown tables deterministically from a snapshot.
 
-Reads one JSON snapshot line from ``logs/monitor.jsonl`` (the latest by default)
+Reads one JSON snapshot line from ``logs/annotation/monitor.jsonl`` (the latest by default)
 and prints the analysis tables as markdown to stdout. The numbers are pulled
 verbatim from the snapshot - this script only reshapes and formats them, so the
 output is reproducible and the hand-written prose/commentary can be layered on top.
 
 Usage:
-  scripts/report_tables.py                       # latest snapshot -> logs/analysis/<date>.md
-  scripts/report_tables.py --line N              # 0-based line index (negative = from end)
-  scripts/report_tables.py --jsonl PATH          # a different history file
-  scripts/report_tables.py --out PATH            # write to a specific path
-  scripts/report_tables.py --stdout              # print to stdout instead
+  scripts/annotation/report_tables.py                       # latest snapshot -> reports/annotation/<date>.md
+  scripts/annotation/report_tables.py --line N              # 0-based line index (negative = from end)
+  scripts/annotation/report_tables.py --jsonl PATH          # a different history file
+  scripts/annotation/report_tables.py --out PATH            # write to a specific path
+  scripts/annotation/report_tables.py --stdout              # print to stdout instead
 
 Sort rules (all deterministic):
   - domains by submitted desc, then name
@@ -25,6 +25,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import workspace as ws  # noqa: E402
 
 TASK_ORDER = ["retrieval", "grounding", "generation"]
 
@@ -59,7 +62,7 @@ def _prev(lv) -> str:
 def _flag(lv) -> str:
     if not lv:
         return ""
-    return "⚠ degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
+    return "degenerate" if lv.get("degenerate") else "rare" if lv.get("near_degenerate") else ""
 
 
 def _breakdown(counts: dict) -> str:
@@ -331,7 +334,7 @@ def task_x_domain_pace(domains: dict) -> str:
 def render(snap: dict) -> str:
     total, domains = snap["total"], snap["domains"]
     parts = [
-        f"**Snapshot:** run at **{snap['run_at']}** · "
+        f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}** · "
         f"session gap threshold {snap['session_gap_threshold_s'] // 60} min",
         "## Overall counts\n\n" + overall_counts(total),
         "## Progress by domain\n\n" + progress_by_domain(domains),
@@ -362,14 +365,15 @@ def render(snap: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--jsonl", default="logs/monitor.jsonl", type=Path,
-                    help="history file to read (default: logs/monitor.jsonl)")
+    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "monitor.jsonl", type=Path,
+                    help="history file to read (default: logs/annotation/monitor.jsonl)")
     ap.add_argument("--line", default=-1, type=int,
                     help="0-based snapshot index; negative counts from end (default: -1 = latest)")
     ap.add_argument("--out", type=Path, default=None,
-                    help="output .md path (default: logs/analysis/<snapshot-date>.md)")
+                    help="output .md path (default: reports/annotation/<snapshot-date>.md)")
     ap.add_argument("--stdout", action="store_true", help="write to stdout instead of a file")
     args = ap.parse_args()
+    ws.load_env()  # for REPORT_TZ (local-time display)
 
     lines = [ln for ln in args.jsonl.read_text().splitlines() if ln.strip()]
     if not lines:
@@ -383,8 +387,8 @@ def main() -> None:
     if args.stdout:
         sys.stdout.write(md)
         return
-    # default: logs/analysis/<snapshot-date>.md (date from the snapshot, not now)
-    out = args.out or (Path("logs/analysis") / f"{snap['run_at'][:10]}.md")
+    # default: reports/annotation/<local-snapshot-date>.md
+    out = args.out or (ws.REPORTS_DIR / f"{ws.local_dt(snap['run_at']):%Y-%m-%d}.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md)
     print(f"wrote {out}", file=sys.stderr)
