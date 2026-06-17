@@ -166,7 +166,7 @@ NB:
   time).
 - *Daily cron* — one job logs a snapshot (export → log.jsonl); reporting stays manual:
   ```cron
-  0 2 * * * cd /home/azureuser/pragmata-workspace && bash scripts/daily.sh >> logs/annotation/daily.log 2>&1
+  0 2 * * * /home/azureuser/pragmata-workspace/scripts/daily.sh > /dev/null 2>&1
   ```
 
 ## Backup & restore
@@ -216,7 +216,7 @@ data/                  (gitignored)
 logs/                  (gitignored)
   annotation/
     log.jsonl          metrics history (one snapshot per run, appended)
-    *.log              execution logs (run_bot.*, pipeline.log, daily.log, ...)
+    *.log              execution logs (run_bot.*, pipeline.log, ...)
 reports/               (gitignored)
   annotation/
     <date>/            one report per snapshot: report.md + plots (PNGs)
