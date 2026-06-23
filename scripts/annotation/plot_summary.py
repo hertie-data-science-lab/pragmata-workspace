@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -107,8 +108,19 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     return True
 
 
+def _wilson_ci(n_true: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95% Wilson score interval for a binomial proportion. Robust at the
+    extreme prevalences (near 0/1) where the labels of interest actually sit,
+    and always brackets the observed fraction (so the error bars stay >= 0)."""
+    p = n_true / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = (z / denom) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return centre - half, centre + half
+
+
 def plot_label_prevalence(snap: dict, out: Path) -> bool:
-    """Per-task horizontal bars of fraction-true; degenerate/rare highlighted."""
+    """Per-task horizontal bars of fraction-true (95% Wilson CI); degenerate/rare highlighted."""
     labels_by_task = snap["total"].get("labels") or {}
     tasks = [t for t in TASK_ORDER if labels_by_task.get(t)]
     if not tasks:
@@ -117,15 +129,21 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
     for ax, task in zip(axes[0], tasks):
         items = [(k, v) for k, v in labels_by_task[task].items() if v["n"] > 0]
         names = [k for k, _ in items]
-        prev = [v["prevalence"] for _, v in items]
+        # Drive bar and CI from the same exact fraction so the error bars (which
+        # bracket the observed proportion) never go negative on a rounding mismatch.
+        prev = [v["n_true"] / v["n"] for _, v in items]
+        ci = [_wilson_ci(v["n_true"], v["n"]) for _, v in items]
+        xerr = [[max(0.0, p - lo) for p, (lo, _) in zip(prev, ci)],
+                [max(0.0, hi - p) for p, (_, hi) in zip(prev, ci)]]
         colors = ["#d62728" if v["degenerate"] else "#ff7f0e" if v["near_degenerate"]
                   else "#1f77b4" for _, v in items]
         y = range(len(names))
-        ax.barh(y, prev, color=colors)
+        ax.barh(y, prev, color=colors, xerr=xerr,
+                error_kw=dict(ecolor="#333333", capsize=3, lw=1))
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)
         ax.set_xlim(0, 1)
-        ax.set_xlabel("prevalence (fraction true)")
+        ax.set_xlabel("prevalence")
         ax.set_title(task)
         ax.grid(True, axis="x", alpha=0.3)
     key = [
@@ -135,7 +153,9 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
     ]
     fig.legend(handles=key, loc="lower center", ncol=3, fontsize=8,
                frameon=False, bbox_to_anchor=(0.5, -0.04))
-    fig.suptitle("Label prevalence (fraction true)")
+    fig.suptitle("Label prevalence")
+    fig.text(0.995, 0.005, "bars: fraction true · whiskers: 95% Wilson CI",
+             ha="right", va="bottom", fontsize=7, style="italic", color="#555555")
     _save(fig, out / "label_prevalence.png")
     return True
 
