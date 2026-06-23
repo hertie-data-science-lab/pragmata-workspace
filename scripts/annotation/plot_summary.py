@@ -30,6 +30,11 @@ import workspace as ws  # noqa: E402
 
 TASK_ORDER = ["retrieval", "grounding", "generation"]
 
+# Default matplotlib cycle with the leading blue (#1f77b4) dropped, so the
+# per-domain lines never collide with the blue TOTAL line in the rows above.
+DOMAIN_COLORS = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                 "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
+
 
 def _save(fig, path: Path) -> None:
     fig.tight_layout()
@@ -57,21 +62,25 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
                 down.setdefault(name, []).append((t, v["count"]["pending_records"]))
     if len(snaps) < 2:
         return False
-    def line(ax, name, pts, lw):
+    def line(ax, name, pts, lw, color=None):
         # Plot against real timestamps so points sit at their true time distance
         # apart (matplotlib date axis), not at fixed categorical intervals.
         xs = [ws.local_dt(p[0]) for p in pts]
-        ax.plot(xs, [p[1] for p in pts], marker="o", lw=lw, label=name)
+        ax.plot(xs, [p[1] for p in pts], marker="o", lw=lw, label=name, color=color)
 
     fig, ((ax_tu, ax_td), (ax_du, ax_dd)) = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
 
-    # Row 1: TOTAL alone (own scale). Row 2: per-domain lines.
+    # Row 1: TOTAL alone (own scale). Row 2: per-domain lines, sharing one
+    # colour per domain across both panels so the single legend reads true.
     line(ax_tu, "TOTAL", up["TOTAL"], 2)
     line(ax_td, "TOTAL", down["TOTAL"], 2)
-    for name in sorted(k for k in up if k != "TOTAL"):
-        line(ax_du, name, up[name], 1)
+    domains = sorted(k for k in up if k != "TOTAL")
+    domain_color = {name: DOMAIN_COLORS[i % len(DOMAIN_COLORS)]
+                    for i, name in enumerate(domains)}
+    for name in domains:
+        line(ax_du, name, up[name], 1, domain_color[name])
     for name in sorted(k for k in down if k != "TOTAL"):
-        line(ax_dd, name, down[name], 1)
+        line(ax_dd, name, down[name], 1, domain_color.get(name))
 
     ax_tu.set_title("Total submitted (burn-up)")
     ax_td.set_title("Total remaining (burn-down)")
@@ -82,6 +91,11 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     ax_td.set_ylabel("records remaining")
     ax_dd.set_ylabel("records remaining")
     ax_du.legend(fontsize=7, ncol=2)
+
+    # Burn-down panels start at 0 so "remaining" reads against an absolute
+    # floor; burn-up panels keep their autoscaled range.
+    ax_td.set_ylim(bottom=0)
+    ax_dd.set_ylim(bottom=0)
 
     for ax in (ax_tu, ax_td, ax_du, ax_dd):
         ax.grid(True, alpha=0.3)
