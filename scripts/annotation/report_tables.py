@@ -90,6 +90,7 @@ def _note(text: str) -> str:
 _RED_BG = "#ffd9d9"  # α < 0: agreement worse than chance
 _YELLOW_BG = "#fff3cd"  # 0 ≤ α < ALPHA_RELIABLE: below the reliability cutoff
 _RIGHT = ' style="text-align:right"'
+_SEP = ' style="border-left:2px solid #d0d7de"'  # divider between column groups
 ALPHA_RELIABLE = 0.667  # Krippendorff's conventional reliability cutoff
 
 
@@ -98,17 +99,19 @@ def _shaded(color: str, right: bool = False) -> str:
     return f' style="background-color:{color}{";text-align:right" if right else ""}"'
 
 
-def _html_table(headers: list[str], rows: list[list]) -> str:
-    """HTML table; each cell is a plain string, or an (html, attr) tuple when it needs
-    inline styling - background shading / right alignment - that a markdown pipe-table
-    can't express. Plain tables use _table(); reserve this for shaded ones."""
+def _html_table(headers: list, rows: list[list]) -> str:
+    """HTML table; each header/body cell is a plain string, or an (html, attr) tuple when
+    it needs inline styling - background shading / alignment / group-divider borders - that
+    a markdown pipe-table can't express. Plain tables use _table(); reserve this for those."""
 
-    def td(cell) -> str:
-        text, attr = cell if isinstance(cell, tuple) else (cell, "")
-        return f"<td{attr}>{text}</td>"
+    def cell(tag: str, c) -> str:
+        text, attr = c if isinstance(c, tuple) else (c, "")
+        return f"<{tag}{attr}>{text}</{tag}>"
 
-    head = "".join(f"<th>{h}</th>" for h in headers)
-    body = "\n".join("<tr>" + "".join(td(c) for c in row) + "</tr>" for row in rows)
+    head = "".join(cell("th", h) for h in headers)
+    body = "\n".join(
+        "<tr>" + "".join(cell("td", c) for c in row) + "</tr>" for row in rows
+    )
     return (
         f"<table>\n<thead><tr>{head}</tr></thead>\n<tbody>\n{body}\n</tbody>\n</table>"
     )
@@ -205,27 +208,42 @@ def overall_counts(total: dict) -> str:
 
 
 def progress_by_domain(domains: dict) -> str:
+    """Per-domain progress in one table: record-level counts (items submitted, records
+    completed) with the retrieval panel-completeness columns appended. A panel is one
+    query's k-chunk set, complete only when every chunk is annotated (stricter than a
+    record); panel cells are '-' for domains the snapshot carries no completeness for."""
     items = sorted(
         domains.items(), key=lambda kv: (-kv[1]["count"]["submitted_responses"], kv[0])
     )
+    # A vertical divider (_SEP) opens each column group - items | records | panels | ann -
+    # and the per-group completion column is bolded as the figure that matters most.
+    headers = [
+        "Domain",
+        ("Total (items)", _SEP),
+        "Subm. (items)",
+        ("Compl. (records)", _SEP),
+        "% Compl. (records)",
+        ("Compl. (panels)", _SEP),
+        "% Compl. (panels)",
+        ("Ann.", _SEP),
+    ]
     rows = []
     for name, v in items:
         c = v["count"]
+        comp = v.get("completeness") or {}
         rows.append(
             [
                 name,
-                _int(c["total_records"]),
+                (_int(c["total_records"]), _SEP),
                 _int(c["submitted_responses"]),
-                _int(c["completed_records"]),
+                (f"<b>{_int(c['completed_records'])}</b>", _SEP),
                 _pctc(c["completed_records"], c["total_records"]),
-                str(c["n_annotators"]),
+                (f"<b>{_int(comp.get('n_complete'))}</b>", _SEP),
+                _pct(comp.get("fraction_complete")),
+                (str(c["n_annotators"]), _SEP),
             ]
         )
-    return _table(
-        ["Domain", "Total", "Subm.", "Compl.", "% Compl.", "Ann."],
-        ["l", "r", "r", "r", "r", "r"],
-        rows,
-    )
+    return _html_table(headers, rows)
 
 
 def per_task_counts(domains: dict) -> str:
@@ -302,6 +320,29 @@ def iaa_by_task(domains: dict) -> str:
     if not rows:
         return ""
     return _html_table(["Task", "mean α", "Labels‡"], rows)
+
+
+def iaa_by_label(domains: dict) -> str:
+    """Pooled α per label across all domains (n_items-weighted mean of each label's
+    per-domain α, within its task). One level finer than the by-task view, one coarser
+    than the detailed by-domain×task×label breakdown."""
+    agg: dict[tuple[str, str], list[tuple[float, int]]] = {}
+    for v in domains.values():
+        for task, tv in v.get("tasks", {}).items():
+            for lbl, lv in (tv["agreement"].get("per_label") or {}).items():
+                if lv.get("alpha") is not None and lv.get("n_items", 0) > 0:
+                    agg.setdefault((task, lbl), []).append((lv["alpha"], lv["n_items"]))
+    rows = []
+    for task in TASK_ORDER:
+        entries = [(lbl, pairs) for (t, lbl), pairs in agg.items() if t == task]
+        entries.sort(key=lambda e: -_wmean(e[1]))  # highest mean α first
+        for lbl, pairs in entries:
+            rows.append(
+                [task, lbl, _alpha_cell(_wmean(pairs)), (str(len(pairs)), _RIGHT)]
+            )
+    if not rows:
+        return ""
+    return _html_table(["Task", "Label", "mean α", "Labels‡"], rows)
 
 
 def iaa_per_label(domains: dict) -> str:
@@ -443,33 +484,6 @@ def constraint_violations(domains: dict, total: dict) -> str:
     return _table(["Domain", "Violations", "By constraint"], ["l", "r", "l"], rows)
 
 
-def completeness(domains: dict, total: dict) -> str:
-    """Retrieval panel completeness: fraction of K-chunk panels fully annotated."""
-    rows = []
-
-    def emit(name, c):
-        if not c:
-            return
-        rows.append(
-            [
-                name,
-                _int(c["n_panels"]),
-                _int(c["n_complete"]),
-                _pct(c["fraction_complete"]),
-            ]
-        )
-
-    for name, v in sorted(domains.items()):
-        emit(name, v.get("completeness"))
-    emit("**TOTAL**", total.get("completeness"))
-    if not rows:
-        return ""
-    # Per-domain breakdown; the panel-vs-record completion distinction is explained in Overall counts.
-    return _table(
-        ["Domain", "Panels", "Compl.", "% Compl."], ["l", "r", "r", "r"], rows
-    )
-
-
 BIAS_FLAG_PP = (
     20  # |Δ| at/above this (percentage points) counts as a substantial deviation
 )
@@ -581,14 +595,22 @@ def per_annotator_timing(total: dict) -> str:
                     str(v["n_events"]),
                     _f(active_h, 2),
                     _f(v["median_active_gap_s"], 1),
+                    str(v["n_gaps_used"]),
                     _f(pace, 1),
                 ],
             )
         )
     rows.sort(key=lambda r: -r[0])
     return _table(
-        ["Annotator", "Events", "Active time (h)", "Median gap (s)", "Pace (rec/h)"],
-        ["l", "r", "r", "r", "r"],
+        [
+            "Annotator",
+            "Events",
+            "Active time (h)",
+            "Median gap (s)",
+            "Gaps",
+            "Pace (rec/h)",
+        ],
+        ["l", "r", "r", "r", "r", "r"],
         [r[1] for r in rows],
     )
 
@@ -598,12 +620,16 @@ def domain_pace(domains: dict) -> str:
     for name, v in domains.items():
         pa = v["timing"]["per_annotator"]
         gap = pa["pooled_median_active_gap_s"]
-        (timed if gap is not None else untimed).append((name, gap, pa["n_annotators"]))
+        (timed if gap is not None else untimed).append(
+            (name, gap, pa["n_gaps_used"], pa["n_annotators"])
+        )
     timed.sort(key=lambda r: r[1])
-    rows = [[name, _f(gap, 1), str(n)] for name, gap, n in timed]
+    rows = [[name, _f(gap, 1), str(ngaps), str(n)] for name, gap, ngaps, n in timed]
     if untimed:
-        rows.append([" / ".join(sorted(n for n, _, _ in untimed)), "-", "0"])
-    return _table(["Domain", "Median gap (s)", "Annotators"], ["l", "r", "r"], rows)
+        rows.append([" / ".join(sorted(n for n, *_ in untimed)), "-", "-", "0"])
+    return _table(
+        ["Domain", "Median gap (s)", "Gaps", "Annotators"], ["l", "r", "r", "r"], rows
+    )
 
 
 def task_pace(domains: dict, total: dict) -> str:
@@ -627,12 +653,21 @@ def task_pace(domains: dict, total: dict) -> str:
         pairs = agg.get(task)
         wmean = _wmean(pairs) if pairs else None
         rows.append(
-            (pooled, [task, _f(pooled, 1), _f(wmean, 1), str(pa["n_annotators"])])
+            (
+                pooled,
+                [
+                    task,
+                    _f(pooled, 1),
+                    str(pa["n_gaps_used"]),
+                    _f(wmean, 1),
+                    str(pa["n_annotators"]),
+                ],
+            )
         )
     rows.sort(key=lambda r: r[0])
     return _table(
-        ["Task", "Median gap (s)", "Weighted mean (s)", "Annotators"],
-        ["l", "r", "r", "r"],
+        ["Task", "Median gap (s)", "Gaps", "Weighted mean (s)", "Annotators"],
+        ["l", "r", "r", "r", "r"],
         [r[1] for r in rows],
     )
 
@@ -644,11 +679,16 @@ def task_x_domain_pace(domains: dict) -> str:
             pa = tv["timing"]["per_annotator"]
             gap = pa["pooled_median_active_gap_s"]
             if gap is not None:
-                timed.append((name, task, gap, pa["n_annotators"]))
+                timed.append((name, task, gap, pa["n_gaps_used"], pa["n_annotators"]))
     timed.sort(key=lambda r: r[2])
-    rows = [[name, task, _f(gap, 1), str(n)] for name, task, gap, n in timed]
+    rows = [
+        [name, task, _f(gap, 1), str(ngaps), str(n)]
+        for name, task, gap, ngaps, n in timed
+    ]
     return _table(
-        ["Domain", "Task", "Median gap (s)", "Annotators"], ["l", "l", "r", "r"], rows
+        ["Domain", "Task", "Median gap (s)", "Gaps", "Annotators"],
+        ["l", "l", "r", "r", "r"],
+        rows,
     )
 
 
@@ -659,26 +699,28 @@ def render(snap: dict) -> str:
     total, domains = snap["total"], snap["domains"]
     parts = [
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
+        (
+            "<small>**Counting units**:\n"
+            "- an **item** is one submitted annotation,\n"
+            "- a **panel** is a query's k-chunk retrieval set (complete only once every "
+            "chunk is annotated),\n"
+            "- a **record** is a fully completed end-to-end annotation for one query-answer "
+            "pair (incl all retrieval panels, all min_submitted).</small>"
+        ),
         "## Overall counts\n\n" + overall_counts(total),
-    ]
-    # Panel-level progress (retrieval k-chunk completeness) precedes record-level
-    # progress; omitted when the snapshot carries no completeness data.
-    comp = completeness(domains, total)
-    if comp:
-        parts.append(
-            "## Progress (per panel)\n\n### Retrieval k-chunk completeness\n\n" + comp
-        )
-    parts += [
-        "## Progress (per record)",
+        # Per-domain progress: record-level counts with retrieval panel completeness
+        # columns appended (panel data is dropped per-domain when the snapshot lacks it).
+        "## Progress",
         "### By domain\n\n" + progress_by_domain(domains),
         _collapsible("By domain x task", per_task_counts(domains)),
     ]
     # Inter-annotator agreement - own section, three granularities. α-shading legend up
     # top; each per-column footnote sits below the first table that uses its marker.
     bd, bt = iaa_by_domain(domains, total), iaa_by_task(domains)
+    bl = iaa_by_label(domains)
     by_label = iaa_per_label(domains)  # long - collapsed by default
     iaa_parts = []
-    if bd or bt or by_label:
+    if bd or bt or bl or by_label:
         iaa_parts.append(
             _note(
                 f"Cell shading flags low agreement - **yellow**: α below {ALPHA_RELIABLE} "
@@ -700,22 +742,34 @@ def render(snap: dict) -> str:
         iaa_parts.append(f"### By task\n\n{bt}")
         if not labels_done:
             iaa_parts.append(labels_note)
-    if by_label:  # Prev.* and Items† first appear in this table
-        iaa_parts += [
-            _collapsible("Detailed breakdown by label", by_label),
-            _note(
-                "**\\*Prev. = prevalence**: the share of submitted annotations where the "
-                "label is true. We track it to catch degenerate or near-degenerate labels (one class "
-                "almost never chosen), which flag an ambiguous guideline or a label too one-sided to "
-                "yield meaningful agreement."
-            ),
-            _note(
-                "**†Items**: the number of calibration-overlap items Krippendorff's α is "
-                "computed on (records annotated by ≥2 people in the calibration split), with **Ann.** "
-                "the annotators in that overlap. α is **not** computed over the submitted/completed "
-                "production counts in the progress tables - those measure coverage, not agreement."
-            ),
-        ]
+            labels_done = True
+    if bl:
+        iaa_parts.append(f"### By label\n\n{bl}")
+        if not labels_done:
+            iaa_parts.append(labels_note)
+            labels_done = True
+    if by_label:  # Prev.* and Items† first appear in this table; their notes live with it
+        label_notes = "\n\n".join(
+            [
+                _note(
+                    "**\\*Prev. = prevalence**: the share of submitted annotations where the "
+                    "label is true. We track it to catch degenerate or near-degenerate labels (one class "
+                    "almost never chosen), which flag an ambiguous guideline or a label too one-sided to "
+                    "yield meaningful agreement."
+                ),
+                _note(
+                    "**†Items**: the number of calibration-overlap items Krippendorff's α is "
+                    "computed on (records annotated by ≥2 people in the calibration split), with **Ann.** "
+                    "the annotators in that overlap. α is **not** computed over the submitted/completed "
+                    "production counts in the progress tables - those measure coverage, not agreement."
+                ),
+            ]
+        )
+        iaa_parts.append(
+            _collapsible(
+                "Detailed breakdown by label", f"{by_label}\n\n{label_notes}"
+            )
+        )
     if iaa_parts:
         parts.append(
             "## Inter-annotator agreement (Krippendorff's α)\n\n"
@@ -724,13 +778,14 @@ def render(snap: dict) -> str:
     # Label-value statistics (omit a section when the snapshot carries no data for it).
     label_parts = []
     if label_tot := label_distribution_totals(total):
-        label_parts.append(f"### Totals\n\n{label_tot}")
+        label_parts.append(_collapsible("Totals", label_tot))
     if label_dom := label_distribution_by_domain(
         domains
     ):  # long - collapsed by default
         label_parts.append(_collapsible("By domain", label_dom))
     label_block = "\n\n".join(label_parts)
     disc, viol = discards(domains, total), constraint_violations(domains, total)
+    bias = annotator_bias(domains)  # note + table; collapsed as one block
     for title, body in [
         ("## Label distribution", label_block),
         ("## Discards", _collapsible("By domain", disc) if disc else ""),
@@ -740,25 +795,27 @@ def render(snap: dict) -> str:
         ),
         (
             "## Per-annotator label bias",
-            annotator_bias(domains),
-        ),  # Δ/n/Pool note sits above its table
+            _collapsible("By annotator", bias) if bias else "",
+        ),
     ]:
         if body:
             parts.append(f"{title}\n\n{body}")
     parts += [
         "## Rate of annotation\n\n"
-        + _collapsible("By annotator", per_annotator_timing(total)),
-        _note(
-            "**Median gap** is a *constructed* proxy for pace, not a direct measure of effort. "
+        + _note(
+            "NB: **Median gap** is a *constructed* proxy for pace, not a direct measure of effort. "
             "It is built from each annotator's submission timestamps: sort their submissions, take "
             "the gaps between consecutive ones, drop any longer than the **session-gap threshold** "
             f"({snap['session_gap_threshold_s'] // 60} min) as breaks, and take the median of what "
             "remains. So it assumes continuous work between submissions - real time-on-task "
             "(multitasking, thinking time, idle spells under the threshold) is invisible to it. "
-            "Lower = faster; **Pace** is its inverse (records/hour)."
-        ),
-        "### Domain-level pace\n\n" + domain_pace(domains),
-        "### Task-level pace\n\n" + task_pace(domains, total),
+            "**Gaps** is how many within-session gaps the median is built from (the more, the "
+            "more trustworthy). Lower median = faster; **Pace** is its inverse (records/hour)."
+        )
+        + "\n\n"
+        + _collapsible("By annotator", per_annotator_timing(total)),
+        _collapsible("Domain-level pace", domain_pace(domains)),
+        _collapsible("Task-level pace", task_pace(domains, total)),
         _collapsible("Task × domain pace", task_x_domain_pace(domains)),
     ]
     return "\n\n".join(parts) + "\n"
