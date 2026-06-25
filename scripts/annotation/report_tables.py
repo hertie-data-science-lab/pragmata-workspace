@@ -334,12 +334,14 @@ def iaa_by_label(domains: dict) -> str:
                     agg.setdefault((task, lbl), []).append((lv["alpha"], lv["n_items"]))
     rows = []
     for task in TASK_ORDER:
-        entries = [(lbl, pairs) for (t, lbl), pairs in agg.items() if t == task]
-        entries.sort(key=lambda e: -_wmean(e[1]))  # highest mean α first
-        for lbl, pairs in entries:
-            rows.append(
-                [task, lbl, _alpha_cell(_wmean(pairs)), (str(len(pairs)), _RIGHT)]
-            )
+        entries = [
+            (lbl, _wmean(pairs), len(pairs))
+            for (t, lbl), pairs in agg.items()
+            if t == task
+        ]
+        entries.sort(key=lambda e: -e[1])  # highest mean α first
+        for lbl, mean_a, n in entries:
+            rows.append([task, lbl, _alpha_cell(mean_a), (str(n), _RIGHT)])
     if not rows:
         return ""
     return _html_table(["Task", "Label", "mean α", "Labels‡"], rows)
