@@ -178,13 +178,23 @@ response status, so a naive dump can't restore annotations faithfully). Read-onl
 writes a timestamped tree under `argilla_backup/<UTC-ts>/` plus a `manifest.json`.
 
 ```bash
-make backup                                     # dump all datasets
-make backup ARGS="restore argilla_backup/<ts>"  # restore a dump back into Argilla
+make backup                                             # dump all datasets
+make backup ARGS="restore argilla_backup/<ts>"          # preview restoring the FULL snapshot (dry-run)
+make backup ARGS="restore argilla_backup/<ts> --apply"  # write it
 ```
 
-`restore` recreates each dataset in its original workspace (or pass `--workspace
-<ws>` to put them all in one), skipping any that already exist - it never
-overwrites. Take a backup before any bulk or in-place edit of live annotation data.
+`restore` restores the full snapshot (fields, metadata, suggestions, responses) back
+into Argilla - creating any dataset that no longer exists, and writing onto ones that
+still exist alike. It **always previews first** (record counts, and any response/metadata
+that would be overwritten with a different live value) and only writes with `--apply`.
+
+Narrow the scope with `--workspace WS` / `--dataset NAME` / `--record-id ID` (each
+repeatable, AND'd together; omit for "everything in the manifest"), or restrict which
+attributes get restored with `--only {metadata,suggestions,responses}` (fields are
+always restored; omit for the full snapshot). Take a fresh backup before restoring onto
+a live dataset - restoring reverts to that point in time, including any annotator
+activity recorded after the snapshot for the records/attributes in scope (the preview
+flags this before you apply).
 
 ## Layout
 
