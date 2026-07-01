@@ -36,6 +36,7 @@ Modes:
   --max-per-spec N     : cap queries per spec (smoke testing)
   (no flags)           : process all specs found, all queries, with resume
 """
+
 import argparse
 import csv
 import json
@@ -73,13 +74,24 @@ HTTP_5XX_BACKOFFS = [10.0, 30.0]
 
 # --- token management -------------------------------------------------------
 
+
 def fetch_aad_token() -> str:
     """Fresh Azure AD bearer for Microsoft Graph (publikationsbot's is_authorized check)."""
     r = subprocess.run(
-        ["az", "account", "get-access-token",
-         "--resource", "https://graph.microsoft.com",
-         "--query", "accessToken", "-o", "tsv"],
-        check=True, capture_output=True, text=True,
+        [
+            "az",
+            "account",
+            "get-access-token",
+            "--resource",
+            "https://graph.microsoft.com",
+            "--query",
+            "accessToken",
+            "-o",
+            "tsv",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return r.stdout.strip()
 
@@ -101,6 +113,7 @@ class TokenManager:
 
 
 # --- bot calls --------------------------------------------------------------
+
 
 def login(client: httpx.Client, auth_token: str) -> None:
     """Verify auth with /login. The bot returns {'authenticated': true} only —
@@ -158,8 +171,8 @@ def stream_query(
     if raw_text.startswith("<data>"):
         end = raw_text.find("</data>")
         if end >= 0:
-            data_json = raw_text[len("<data>"):end]
-            answer = raw_text[end + len("</data>"):]
+            data_json = raw_text[len("<data>") : end]
+            answer = raw_text[end + len("</data>") :]
             try:
                 obj = json.loads(data_json)
                 if isinstance(obj, dict):
@@ -209,25 +222,30 @@ def normalize_chunks(raw_docs: list[dict]) -> list[dict]:
         kwargs = doc.get("kwargs")
         if not isinstance(kwargs, dict):
             continue
-        meta = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
+        meta = (
+            kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
+        )
         text = (kwargs.get("page_content") or "").strip()
         if not text:
             continue
         doc_id = str(meta.get("id") or meta.get("url") or f"doc{i}")
         rank = int(meta.get("ref") or i)
-        out.append({
-            "chunk_id": f"{doc_id}-c1",
-            "doc_id": doc_id,
-            "chunk_rank": rank,
-            # bot's native main title (= vectorstore `hst`); shown inline in the
-            # context_set header. Subtitle (hst_zu) is not in the bot response.
-            "title": meta.get("title"),
-            "text": text,
-        })
+        out.append(
+            {
+                "chunk_id": f"{doc_id}-c1",
+                "doc_id": doc_id,
+                "chunk_rank": rank,
+                # bot's native main title (= vectorstore `hst`); shown inline in the
+                # context_set header. Subtitle (hst_zu) is not in the bot response.
+                "title": meta.get("title"),
+                "text": text,
+            }
+        )
     return out
 
 
 # --- per-spec processing ----------------------------------------------------
+
 
 def load_done_query_ids(out_path: Path) -> set[str]:
     if not out_path.exists():
@@ -248,9 +266,17 @@ def load_done_query_ids(out_path: Path) -> set[str]:
     return done
 
 
-def _log_error(err_path: Path, *, query_id: str, spec_stem: str, error_type: str,
-               message: str, attempt_count: int, status_code: int | None = None,
-               response_body: str | None = None) -> None:
+def _log_error(
+    err_path: Path,
+    *,
+    query_id: str,
+    spec_stem: str,
+    error_type: str,
+    message: str,
+    attempt_count: int,
+    status_code: int | None = None,
+    response_body: str | None = None,
+) -> None:
     """Append one structured error record to <spec>.errors.jsonl. Lazy-created.
 
     response_body: optional truncated bot response body for 5xx debugging.
@@ -285,8 +311,16 @@ def _safe_body(exc: Exception) -> str | None:
     return text[:1000] if text else None
 
 
-def _log_no_retrieval(nr_path: Path, *, query_id: str, spec_stem: str, query: str,
-                       answer: str, attempt_count: int, csv_row: dict) -> None:
+def _log_no_retrieval(
+    nr_path: Path,
+    *,
+    query_id: str,
+    spec_stem: str,
+    query: str,
+    answer: str,
+    attempt_count: int,
+    csv_row: dict,
+) -> None:
     """Append a no-retrieval record to <spec>.no_retrieval.jsonl.
 
     Captures cases where the bot processed the query and produced an answer
@@ -315,8 +349,13 @@ def _log_no_retrieval(nr_path: Path, *, query_id: str, spec_stem: str, query: st
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = None,
-                 delay_s: float = INTER_QUERY_DELAY_S) -> tuple[int, int, int]:
+def process_spec(
+    spec_stem: str,
+    tm: TokenManager,
+    *,
+    max_queries: int | None = None,
+    delay_s: float = INTER_QUERY_DELAY_S,
+) -> tuple[int, int, int]:
     csv_path = RUNS_DIR / spec_stem / "synthetic_queries.csv"
     out_path = OUT_DIR / f"{spec_stem}.jsonl"
     err_path = OUT_DIR / f"{spec_stem}.errors.jsonl"
@@ -328,12 +367,18 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
     done = load_done_query_ids(out_path)
     n_added = n_skipped = n_error = n_retried = n_no_retrieval = 0
 
-    with csv_path.open() as f, out_path.open("a") as out, httpx.Client(timeout=240.0) as client:
+    with (
+        csv_path.open() as f,
+        out_path.open("a") as out,
+        httpx.Client(timeout=240.0) as client,
+    ):
         rows = list(csv.DictReader(f))
         if max_queries:
             rows = rows[:max_queries]
         total = len(rows)
-        print(f"  {total} rows, {len(done)} already done, {total - len(done)} to process")
+        print(
+            f"  {total} rows, {len(done)} already done, {total - len(done)} to process"
+        )
 
         token = tm.get()
         login(client, token)  # verify auth upfront; bot issues no sessionToken
@@ -349,21 +394,32 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
             answer = None
             raw_chunks = None
             try:
-                answer, raw_chunks, _ = stream_query(client, token, session, row["query"])
+                answer, raw_chunks, _ = stream_query(
+                    client, token, session, row["query"]
+                )
             except httpx.HTTPStatusError as e:
                 sc = e.response.status_code
                 if sc == 401:
                     token = tm.refresh()
                     login(client, token)
                     try:
-                        answer, raw_chunks, _ = stream_query(client, token, session, row["query"])
+                        answer, raw_chunks, _ = stream_query(
+                            client, token, session, row["query"]
+                        )
                     except Exception as e2:
-                        print(f"    ! {qid}: 401 retry failed: {type(e2).__name__}: {e2}")
-                        _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                                   error_type="auth_retry_failed",
-                                   message=f"{type(e2).__name__}: {e2}",
-                                   attempt_count=2, status_code=401,
-                                   response_body=_safe_body(e2))
+                        print(
+                            f"    ! {qid}: 401 retry failed: {type(e2).__name__}: {e2}"
+                        )
+                        _log_error(
+                            err_path,
+                            query_id=qid,
+                            spec_stem=spec_stem,
+                            error_type="auth_retry_failed",
+                            message=f"{type(e2).__name__}: {e2}",
+                            attempt_count=2,
+                            status_code=401,
+                            response_body=_safe_body(e2),
+                        )
                         n_error += 1
                         time.sleep(delay_s)
                         continue
@@ -373,12 +429,18 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
                     final_sc = sc
                     final_body = _safe_body(e)
                     for attempt_idx, wait in enumerate(HTTP_5XX_BACKOFFS, start=2):
-                        print(f"    [{i}/{total}] {qid}: HTTP {sc}, sleeping {wait}s before attempt {attempt_idx}...")
+                        print(
+                            f"    [{i}/{total}] {qid}: HTTP {sc}, sleeping {wait}s before attempt {attempt_idx}..."
+                        )
                         time.sleep(wait)
                         try:
-                            answer, raw_chunks, _ = stream_query(client, token, session, row["query"])
+                            answer, raw_chunks, _ = stream_query(
+                                client, token, session, row["query"]
+                            )
                             recovered = True
-                            print(f"    [{i}/{total}] {qid}: recovered on attempt {attempt_idx}")
+                            print(
+                                f"    [{i}/{total}] {qid}: recovered on attempt {attempt_idx}"
+                            )
                             break
                         except httpx.HTTPStatusError as e2:
                             final_sc = e2.response.status_code
@@ -386,35 +448,52 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
                             if final_sc not in (500, 502, 503, 504):
                                 break  # different error class — don't keep retrying
                         except Exception as e2:
-                            print(f"    [{i}/{total}] {qid}: backoff retry threw {type(e2).__name__}")
+                            print(
+                                f"    [{i}/{total}] {qid}: backoff retry threw {type(e2).__name__}"
+                            )
                             break
                     if not recovered:
-                        print(f"    ! {qid}: HTTP {final_sc} after {len(HTTP_5XX_BACKOFFS) + 1} attempts")
-                        _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                                   error_type="http_5xx_after_backoff",
-                                   message=f"HTTP {final_sc}",
-                                   attempt_count=len(HTTP_5XX_BACKOFFS) + 1,
-                                   status_code=final_sc,
-                                   response_body=final_body)
+                        print(
+                            f"    ! {qid}: HTTP {final_sc} after {len(HTTP_5XX_BACKOFFS) + 1} attempts"
+                        )
+                        _log_error(
+                            err_path,
+                            query_id=qid,
+                            spec_stem=spec_stem,
+                            error_type="http_5xx_after_backoff",
+                            message=f"HTTP {final_sc}",
+                            attempt_count=len(HTTP_5XX_BACKOFFS) + 1,
+                            status_code=final_sc,
+                            response_body=final_body,
+                        )
                         n_error += 1
                         time.sleep(delay_s)
                         continue
                 else:
                     print(f"    ! {qid}: HTTP {sc}")
-                    _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                               error_type="http_error",
-                               message=f"HTTP {sc}",
-                               attempt_count=1, status_code=sc,
-                               response_body=_safe_body(e))
+                    _log_error(
+                        err_path,
+                        query_id=qid,
+                        spec_stem=spec_stem,
+                        error_type="http_error",
+                        message=f"HTTP {sc}",
+                        attempt_count=1,
+                        status_code=sc,
+                        response_body=_safe_body(e),
+                    )
                     n_error += 1
                     time.sleep(delay_s)
                     continue
             except Exception as e:
                 print(f"    ! {qid}: {type(e).__name__}: {e}")
-                _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                           error_type="exception",
-                           message=f"{type(e).__name__}: {e}",
-                           attempt_count=1)
+                _log_error(
+                    err_path,
+                    query_id=qid,
+                    spec_stem=spec_stem,
+                    error_type="exception",
+                    message=f"{type(e).__name__}: {e}",
+                    attempt_count=1,
+                )
                 n_error += 1
                 time.sleep(delay_s)
                 continue
@@ -430,35 +509,57 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
                 print(f"    [{i}/{total}] {qid}: chunks=0 on attempt 1, retrying...")
                 time.sleep(2)
                 try:
-                    retry_answer, retry_raw, _ = stream_query(client, token, session, row["query"])
+                    retry_answer, retry_raw, _ = stream_query(
+                        client, token, session, row["query"]
+                    )
                     retry_chunks = normalize_chunks(retry_raw)
                     if retry_chunks:
                         chunks = retry_chunks
                         answer = retry_answer.strip()
                         retried = True
                         n_retried += 1
-                        print(f"    [{i}/{total}] {qid}: retry recovered {len(chunks)} chunks")
+                        print(
+                            f"    [{i}/{total}] {qid}: retry recovered {len(chunks)} chunks"
+                        )
                 except Exception as e:
-                    print(f"    [{i}/{total}] {qid}: retry failed: {type(e).__name__}: {e}")
-                    _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                               error_type="retry_exception",
-                               message=f"{type(e).__name__}: {e}",
-                               attempt_count=2,
-                               response_body=_safe_body(e))
+                    print(
+                        f"    [{i}/{total}] {qid}: retry failed: {type(e).__name__}: {e}"
+                    )
+                    _log_error(
+                        err_path,
+                        query_id=qid,
+                        spec_stem=spec_stem,
+                        error_type="retry_exception",
+                        message=f"{type(e).__name__}: {e}",
+                        attempt_count=2,
+                        response_body=_safe_body(e),
+                    )
 
             if not chunks or not answer:
                 attempts = 2 if answer else 1
-                print(f"    ! {qid}: empty response after retry (chunks={len(chunks)}, answer_len={len(answer)})")
-                _log_error(err_path, query_id=qid, spec_stem=spec_stem,
-                           error_type="empty_response_after_retry",
-                           message=f"chunks={len(chunks)}, answer_len={len(answer)}",
-                           attempt_count=attempts)
+                print(
+                    f"    ! {qid}: empty response after retry (chunks={len(chunks)}, answer_len={len(answer)})"
+                )
+                _log_error(
+                    err_path,
+                    query_id=qid,
+                    spec_stem=spec_stem,
+                    error_type="empty_response_after_retry",
+                    message=f"chunks={len(chunks)}, answer_len={len(answer)}",
+                    attempt_count=attempts,
+                )
                 # Sidecar: when bot produced an answer but no chunks, preserve
                 # the answer text for later analysis of retrieval-gap behaviour.
                 if answer and not chunks:
-                    _log_no_retrieval(nr_path, query_id=qid, spec_stem=spec_stem,
-                                       query=row["query"], answer=answer,
-                                       attempt_count=attempts, csv_row=row)
+                    _log_no_retrieval(
+                        nr_path,
+                        query_id=qid,
+                        spec_stem=spec_stem,
+                        query=row["query"],
+                        answer=answer,
+                        attempt_count=attempts,
+                        csv_row=row,
+                    )
                     n_no_retrieval += 1
                 n_error += 1
                 time.sleep(delay_s)
@@ -481,7 +582,9 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
                     f"({c.get('title') or 'title unavailable'}) • {c['chunk_id']}]**\n\n{c['text']}"
                     for c in chunks
                 ),
-                "language": LANG_MAP.get(row.get("language", "").lower(), row.get("language") or None),
+                "language": LANG_MAP.get(
+                    row.get("language", "").lower(), row.get("language") or None
+                ),
                 # extras (strip at annotation-import time):
                 "query_id": qid,
                 "domain": row.get("domain"),
@@ -497,13 +600,17 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
             out.flush()
             n_added += 1
-            print(f"    [{i}/{total}] {qid}: ok ({len(chunks)} chunks, {len(answer)}-char answer{', retried' if retried else ''})")
+            print(
+                f"    [{i}/{total}] {qid}: ok ({len(chunks)} chunks, {len(answer)}-char answer{', retried' if retried else ''})"
+            )
             time.sleep(delay_s)
 
     if n_error:
         print(f"  errors logged to: {err_path}")
     if n_no_retrieval:
-        print(f"  no-retrieval cases (answer w/ 0 chunks) saved to: {nr_path}  ({n_no_retrieval} records)")
+        print(
+            f"  no-retrieval cases (answer w/ 0 chunks) saved to: {nr_path}  ({n_no_retrieval} records)"
+        )
     if n_retried:
         print(f"  recovered via retry-once: {n_retried}")
     return n_added, n_skipped, n_error
@@ -511,10 +618,12 @@ def process_spec(spec_stem: str, tm: TokenManager, *, max_queries: int | None = 
 
 # --- probe mode -------------------------------------------------------------
 
+
 def probe_mode(spec_stem: str | None) -> int:
     if spec_stem is None:
         candidates = sorted(
-            p.name for p in RUNS_DIR.iterdir()
+            p.name
+            for p in RUNS_DIR.iterdir()
             if p.is_dir() and (p / "synthetic_queries.csv").exists()
         )
         if not candidates:
@@ -528,14 +637,18 @@ def probe_mode(spec_stem: str | None) -> int:
     with csv_path.open() as f:
         first = next(csv.DictReader(f))
     print(f"  query_id: {first['query_id']}")
-    print(f"  query   : {first['query'][:140]}{'...' if len(first['query']) > 140 else ''}")
+    print(
+        f"  query   : {first['query'][:140]}{'...' if len(first['query']) > 140 else ''}"
+    )
 
     tm = TokenManager()
     with httpx.Client(timeout=240.0) as client:
         token = tm.get()
         print(f"  [token] {len(token)} chars")
         login(client, token)
-        print(f"  [login] ok (bot returns {{authenticated: true}}; no sessionToken issued)")
+        print(
+            "  [login] ok (bot returns {authenticated: true}; no sessionToken issued)"
+        )
 
         session = f"pragmata-eval-{first['query_id']}"
         print(f"  [session] synthesized: {session}")
@@ -543,7 +656,11 @@ def probe_mode(spec_stem: str | None) -> int:
         print(f"  [stream] POST {PRD}/stream ...")
         t0 = time.time()
         answer, raw_chunks, raw_lines = stream_query(
-            client, token, session, first["query"], capture_raw=True,
+            client,
+            token,
+            session,
+            first["query"],
+            capture_raw=True,
         )
         dt = time.time() - t0
         print(f"  [stream] done in {dt:.1f}s, {len(raw_lines)} SSE lines captured")
@@ -555,33 +672,52 @@ def probe_mode(spec_stem: str | None) -> int:
 
     chunks = normalize_chunks(raw_chunks)
     print(f"\n  parsed answer: {len(answer)} chars")
-    print(f"  parsed retrieved_docs: {len(raw_chunks)} raw -> {len(chunks)} normalized chunks")
+    print(
+        f"  parsed retrieved_docs: {len(raw_chunks)} raw -> {len(chunks)} normalized chunks"
+    )
     if raw_chunks and isinstance(raw_chunks[0], dict):
         first_doc = raw_chunks[0]
-        kw = first_doc.get("kwargs", {}) if isinstance(first_doc.get("kwargs"), dict) else {}
+        kw = (
+            first_doc.get("kwargs", {})
+            if isinstance(first_doc.get("kwargs"), dict)
+            else {}
+        )
         meta = kw.get("metadata", {}) if isinstance(kw.get("metadata"), dict) else {}
         print(f"  doc[0] metadata keys: {list(meta.keys())}")
-        print(f"  doc[0] meta sample : id={meta.get('id')}, ref={meta.get('ref')}, title={meta.get('title')!r}, year={meta.get('year')}")
+        print(
+            f"  doc[0] meta sample : id={meta.get('id')}, ref={meta.get('ref')}, title={meta.get('title')!r}, year={meta.get('year')}"
+        )
         print(f"  doc[0] page_content[:300]: {(kw.get('page_content') or '')[:300]!r}")
     if chunks:
         c0 = chunks[0]
-        print(f"  normalized chunk[0]: chunk_id={c0['chunk_id']!r}, doc_id={c0['doc_id']!r}, chunk_rank={c0['chunk_rank']}, text_len={len(c0['text'])}")
+        print(
+            f"  normalized chunk[0]: chunk_id={c0['chunk_id']!r}, doc_id={c0['doc_id']!r}, chunk_rank={c0['chunk_rank']}, text_len={len(c0['text'])}"
+        )
     print(f"\n  answer preview: {answer[:300]}{'...' if len(answer) > 300 else ''}")
     return 0
 
 
 # --- main -------------------------------------------------------------------
 
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--probe", action="store_true",
-                    help="Single-query inspect mode; no JSONL write.")
+    ap.add_argument(
+        "--probe",
+        action="store_true",
+        help="Single-query inspect mode; no JSONL write.",
+    )
     ap.add_argument("--spec", help="Process only this spec stem (default: all).")
-    ap.add_argument("--max-per-spec", type=int,
-                    help="Cap queries per spec (smoke testing).")
-    ap.add_argument("--delay", type=float, default=INTER_QUERY_DELAY_S,
-                    help=f"Seconds to sleep after each network-touching query (default: {INTER_QUERY_DELAY_S}). "
-                         "Tune higher if the bot returns 5xx; lower at your own risk.")
+    ap.add_argument(
+        "--max-per-spec", type=int, help="Cap queries per spec (smoke testing)."
+    )
+    ap.add_argument(
+        "--delay",
+        type=float,
+        default=INTER_QUERY_DELAY_S,
+        help=f"Seconds to sleep after each network-touching query (default: {INTER_QUERY_DELAY_S}). "
+        "Tune higher if the bot returns 5xx; lower at your own risk.",
+    )
     args = ap.parse_args()
 
     if args.probe:
@@ -595,13 +731,17 @@ def main() -> int:
         print(f"No specs found under {RUNS_DIR}")
         return 1
 
-    print(f"Processing {len(specs)} spec(s) (inter-query delay: {args.delay}s, 5xx backoff: {HTTP_5XX_BACKOFFS})...")
+    print(
+        f"Processing {len(specs)} spec(s) (inter-query delay: {args.delay}s, 5xx backoff: {HTTP_5XX_BACKOFFS})..."
+    )
     tm = TokenManager()
     totals = {"added": 0, "skipped": 0, "error": 0}
     for stem in specs:
         print(f"\n=== {stem} ===")
         try:
-            a, s, e = process_spec(stem, tm, max_queries=args.max_per_spec, delay_s=args.delay)
+            a, s, e = process_spec(
+                stem, tm, max_queries=args.max_per_spec, delay_s=args.delay
+            )
         except Exception as exc:
             print(f"  !! fatal in {stem}: {type(exc).__name__}: {exc}")
             continue
@@ -610,7 +750,9 @@ def main() -> int:
         totals["error"] += e
         print(f"  -> +{a} new, {s} skipped, {e} errors")
 
-    print(f"\nTOTAL: +{totals['added']} new, {totals['skipped']} skipped, {totals['error']} errors")
+    print(
+        f"\nTOTAL: +{totals['added']} new, {totals['skipped']} skipped, {totals['error']} errors"
+    )
     return 0 if totals["error"] == 0 else 1
 
 
