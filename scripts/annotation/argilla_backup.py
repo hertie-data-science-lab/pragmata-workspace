@@ -505,6 +505,13 @@ def main() -> None:
         help="restore only this record id (repeatable). default: every record in scope",
     )
     r.add_argument(
+        "--record-id-file",
+        action="append",
+        dest="record_id_files",
+        default=None,
+        help="file of newline-delimited record ids to restore (repeatable); unioned with --record-id",
+    )
+    r.add_argument(
         "--only",
         action="append",
         dest="only",
@@ -522,11 +529,16 @@ def main() -> None:
     if args.cmd in (None, "dump"):
         cmd_dump()
     elif args.cmd == "restore":
+        record_ids = list(args.record_ids) if args.record_ids else []
+        for f in args.record_id_files or []:
+            record_ids.extend(
+                line.strip() for line in Path(f).read_text().splitlines() if line.strip()
+            )
         cmd_restore(
             args.backup_dir,
             args.workspaces,
             args.datasets,
-            args.record_ids,
+            record_ids or None,
             args.only,
             args.apply,
         )
