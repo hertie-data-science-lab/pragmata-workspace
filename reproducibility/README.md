@@ -14,5 +14,5 @@ corpus, then prunes to stage 2's keep-lists). The reusable tooling lives in `scr
 (`prune_to_keeplist.py`, `import.sh`, `argilla_backup.py`), not in the bundles.
 
 Large artifacts (the full corpus, Argilla backups) are **not** in git — they're pinned by
-SHA256 in stage 1's `checksums.sha256` and stored externally. See the root
-[README Reproducibility section](../README.md#reproducibility).
+SHA256 in stage 1's `checksums.sha256` and stored externally. See the
+[Reproducibility](../docs/reproducibility.md) doc.
