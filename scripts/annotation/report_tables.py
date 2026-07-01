@@ -207,7 +207,7 @@ def overall_counts(total: dict) -> str:
     return f"{table}\n\n{note}"
 
 
-def progress_by_domain(domains: dict) -> str:
+def progress_by_domain(domains: dict, total: dict) -> str:
     """Per-domain progress in one table: record-level counts (items submitted, records
     completed) with the retrieval panel-completeness columns appended. A panel is one
     query's k-chunk set, complete only when every chunk is annotated (stricter than a
@@ -243,6 +243,20 @@ def progress_by_domain(domains: dict) -> str:
                 (str(c["n_annotators"]), _SEP),
             ]
         )
+    tc = total["count"]
+    tcomp = total.get("completeness") or {}
+    rows.append(
+        [
+            "<b>TOTAL</b>",
+            (f"<b>{_int(tc['total_records'])}</b>", _SEP),
+            f"<b>{_int(tc['submitted_responses'])}</b>",
+            (f"<b>{_int(tc['completed_records'])}</b>", _SEP),
+            f"<b>{_pctc(tc['completed_records'], tc['total_records'])}</b>",
+            (f"<b>{_int(tcomp.get('n_complete'))}</b>", _SEP),
+            f"<b>{_pct(tcomp.get('fraction_complete'))}</b>",
+            ("<b>-</b>", _SEP),
+        ]
+    )
     return _html_table(headers, rows)
 
 
@@ -713,7 +727,7 @@ def render(snap: dict) -> str:
         # Per-domain progress: record-level counts with retrieval panel completeness
         # columns appended (panel data is dropped per-domain when the snapshot lacks it).
         "## Progress",
-        "### By domain\n\n" + progress_by_domain(domains),
+        "### By domain\n\n" + progress_by_domain(domains, total),
         _collapsible("By domain x task", per_task_counts(domains)),
     ]
     # Inter-annotator agreement - own section, three granularities. α-shading legend up
