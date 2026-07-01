@@ -8,9 +8,13 @@ configs/annotation/users.json
 .venv/
 
 # --- data, outputs, run state (not version-controlled) ---
+# Tracked scaffolds (README/.gitkeep) inside these dirs are force-added.
 /data/
 /logs/
 /reports/
+# Large local-only trees (previously only in .git/info/exclude, i.e. per-machine).
+argilla_backup/
+tmp/
 *.log
 .pipeline.lock
 
