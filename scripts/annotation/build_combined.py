@@ -46,6 +46,7 @@ Usage:
   scripts/annotation/build_combined.py demokratie-und-zusammenhalt        # one
   scripts/annotation/build_combined.py demokratie-und-zusammenhalt europas-zukunft  # subset
 """
+
 from __future__ import annotations
 
 import random
@@ -58,7 +59,7 @@ import workspace as ws
 from workspace import read_jsonl, write_jsonl
 
 # Interspersion algorithm parameters (rarely changed; not operational knobs).
-LEAD = 10            # first N records are baseline-only (warm-up)
+LEAD = 10  # first N records are baseline-only (warm-up)
 WINDOW_FRAC = 1 / 3  # all edgecases land within the first third of the run
 OUT_DIR = ws.OUT_DIR
 
@@ -143,8 +144,7 @@ def build_for_domain(domain: str) -> int:
     write_jsonl(combined_path, combined)
 
     edge_positions = [
-        i for i, r in enumerate(combined)
-        if "_edgecase_" in r.get("query_id", "")
+        i for i, r in enumerate(combined) if "_edgecase_" in r.get("query_id", "")
     ]
     base_src = ", ".join(p.name for p in base_paths)
     edge_src = ", ".join(p.name for p in edge_paths) if edge_paths else "(none)"

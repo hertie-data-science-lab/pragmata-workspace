@@ -13,6 +13,7 @@ in the running result.
 Usage:
     python scripts/merge_yaml.py runtime.yaml spec.yaml > merged.yaml
 """
+
 import sys
 from pathlib import Path
 

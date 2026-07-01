@@ -11,6 +11,7 @@ Centralizes the workspace layout, the .env / config loader ("existing env
 wins", matching scripts/lib/common.sh), the domain list (derived from
 configs/annotation/ rather than hardcoded), and JSONL read/write.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,8 +23,8 @@ from zoneinfo import ZoneInfo
 
 # This file is scripts/lib/workspace.py -> parents[2] is the workspace root.
 ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = ROOT / "data"                          # pragmata base_dir; tools write DATA_DIR/<tool>
-SETTINGS = ROOT / "configs" / "settings.conf"     # workspace-global operational tunables
+DATA_DIR = ROOT / "data"  # pragmata base_dir; tools write DATA_DIR/<tool>
+SETTINGS = ROOT / "configs" / "settings.conf"  # workspace-global operational tunables
 
 
 def stage(tool: str) -> SimpleNamespace:
@@ -44,14 +45,14 @@ def stage(tool: str) -> SimpleNamespace:
 # Annotation stage (the only stage today; eval/ is a stub). Eval scripts call stage("eval").
 _A = stage("annotation")
 SCRIPTS_DIR = _A.scripts
-CONFIGS_DIR = _A.configs                           # domains/, querygen_specs/, users.*
-DOMAINS_DIR = CONFIGS_DIR / "domains"              # per-domain annotation task YAMLs
+CONFIGS_DIR = _A.configs  # domains/, querygen_specs/, users.*
+DOMAINS_DIR = CONFIGS_DIR / "domains"  # per-domain annotation task YAMLs
 SPECS_DIR = CONFIGS_DIR / "querygen_specs"
-LOGS_DIR = _A.logs                                 # log.jsonl + run logs (flat)
-REPORTS_DIR = _A.reports                           # rendered tables + plots
-EXPORTS_DIR = _A.data / "exports"                  # pragmata annotation tool: exports/imports
-RUNS_DIR = DATA_DIR / "querygen" / "runs"          # querygen tool (pragmata sibling)
-OUT_DIR = DATA_DIR / "publikationsbot"             # workspace bot output (sibling)
+LOGS_DIR = _A.logs  # log.jsonl + run logs (flat)
+REPORTS_DIR = _A.reports  # rendered tables + plots
+EXPORTS_DIR = _A.data / "exports"  # pragmata annotation tool: exports/imports
+RUNS_DIR = DATA_DIR / "querygen" / "runs"  # querygen tool (pragmata sibling)
+OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 
 
 def load_dotenv(path: Path) -> None:
@@ -77,7 +78,9 @@ def local_dt(run_at: str) -> datetime:
 
     Snapshots store run_at in UTC; reports show it in the configured local zone.
     """
-    return datetime.fromisoformat(run_at).astimezone(ZoneInfo(os.environ.get("REPORT_TZ", "UTC")))
+    return datetime.fromisoformat(run_at).astimezone(
+        ZoneInfo(os.environ.get("REPORT_TZ", "UTC"))
+    )
 
 
 def report_dir(run_at: str) -> Path:
