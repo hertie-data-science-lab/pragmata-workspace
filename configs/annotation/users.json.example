@@ -1,0 +1,16 @@
+[
+  {
+    "username": "owner.example",
+    "role": "owner"
+  },
+  {
+    "username": "senior.example",
+    "role": "annotator",
+    "workspaces": ["Example-Domain_generation"]
+  },
+  {
+    "username": "junior.example",
+    "role": "annotator",
+    "workspaces": ["Example-Domain_retrieval", "Example-Domain_grounding"]
+  }
+]
