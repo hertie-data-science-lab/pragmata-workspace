@@ -21,13 +21,16 @@
 SHELL := /bin/bash
 PY := .venv/bin/python
 
+# Reproducibility bundle for the 2026-07-01 annotation curation.
+CURATION := reproducibility/2026-07-01-annotation-curation
+
 # Pass-through flags for pipeline.sh / plan, built from make vars.
 PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(TO),--to $(TO),) $(if $(FILTER),--filter $(FILTER),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup
+.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup reproduce-curation
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -79,3 +82,17 @@ daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report
 
 backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
 	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
+
+reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
+	@echo "== verifying artifact checksums =="; \
+	sha256sum -c $(CURATION)/checksums.sha256 2>/dev/null \
+	  || echo "(corpus/backup not present locally — fetch the external artifacts first)"; \
+	if [ "$(MODE)" = "structure" ] && [ -n "$(APPLY)" ]; then \
+	  for y in configs/annotation/domains/*.yaml; do d=$$(basename $$y .yaml); \
+	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; done; \
+	elif [ "$(MODE)" = "responses" ] && [ -n "$(APPLY)" ]; then \
+	  test -n "$(BACKUP)" || { echo "usage: make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1"; exit 2; }; \
+	  $(PY) scripts/annotation/argilla_backup.py restore "$(BACKUP)" --apply; \
+	fi; \
+	echo "== prune live -> curated keep-lists =="; \
+	$(PY) $(CURATION)/scripts/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)

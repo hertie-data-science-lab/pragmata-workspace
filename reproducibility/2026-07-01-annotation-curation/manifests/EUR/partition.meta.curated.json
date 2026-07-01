@@ -1,0 +1,3286 @@
+{
+  "dataset_id": "EUR",
+  "created_at": "2026-05-30T07:39:20.302424Z",
+  "updated_at": "2026-07-01T21:06:31.399373+00:00",
+  "partition_seed": 0,
+  "assignments": {
+    "d2819baeb2a6717497a58f787735841c195cddb1f764cc1deda6c400414184f1": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40369-c1": false,
+        "40367-c1": false,
+        "40386-c1": false,
+        "53632-c1": false,
+        "55676-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "9fbfea41a401d45271b5ad10484090be1c9be2fd5acfbcf6c7e9d248ffc13d58": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48616-c1": false,
+        "52633-c1": false,
+        "50864-c1": false,
+        "55541-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ccf45fb36f09a92707cff92d5fe42ed7cdb9e2811e6bcd427bcc015afb214fde": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "55326-c1": false,
+        "54481-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "18e9603a751dc492170c78e74ac4748dab7968e5ebbec05bd71f9983a8e1d52d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "52633-c1": false,
+        "52644-c1": false,
+        "50864-c1": false,
+        "52634-c1": false,
+        "55541-c1": false,
+        "54629-c1": false,
+        "52647-c1": true,
+        "52645-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "8d299d88e8c2586c3ce8f77f9840588fb954e6d44bbd39d08ec35fe703f72202": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "50156-c1": false,
+        "55838-c1": false,
+        "55673-c1": false,
+        "55714-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "662e06b89a0471effb59f58a266336118437e4816d9c970616f498f79354ca61": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "42419-c1": false,
+        "37944-c1": false,
+        "44806-c1": false,
+        "46137-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "53c24a3cf4aec7a06055a6192ff88d104c98904995b2f033f44446fb61660c2c": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "46291-c1": false,
+        "49856-c1": false,
+        "50845-c1": false,
+        "52564-c1": false,
+        "55467-c1": false,
+        "52329-c1": false,
+        "49087-c1": false,
+        "53386-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "7b9e49a8ee67d43ccf5cef1bbb69393f72ffd4d0a60e512bda6700b40cbd987a": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49344-c1": false,
+        "40199-c1": false,
+        "54798-c1": false,
+        "55673-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "170df25ca4cec4e7df0c46d258e3864ea2836731a97a407a1df2127c4dd4af5b": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53419-c1": false,
+        "54254-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ebf3bc07d7dd002f570e90027abbc2c074fc7b9d876bccaf281f98deabb87be6": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "49778-c1": false,
+        "53924-c1": false,
+        "40918-c1": false,
+        "50101-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "b8ebaf0c629d9bf56eb1e5e2d1ce9357ada9fde52ef2316dbe0ec8be0bae3ff1": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "42933-c1": false,
+        "51111-c1": false,
+        "54939-c1": false,
+        "53924-c1": false,
+        "54641-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "6ecedfe15468638fd6c17c268c1bee39bb311512b9958335266545f3ca62c612": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "52644-c1": false,
+        "48616-c1": false,
+        "53363-c1": false,
+        "54253-c1": false,
+        "54629-c1": false,
+        "52633-c1": false,
+        "54449-c1": false,
+        "55541-c1": false,
+        "53364-c1": false,
+        "53385-c1": false,
+        "52426-c1": false,
+        "53469-c1": false,
+        "53472-c1": false,
+        "55540-c1": false,
+        "54477-c1": false,
+        "53234-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "75d5727177d438ba6f58d1484f147a61d1be8903d8ea3c5f257e95f33fbc82ac": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40920-c1": false,
+        "38282-c1": false,
+        "35758-c1": false,
+        "35741-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "3d43648d9e485af33324a2c52369fc53dda8def7f3dd6dd33c535edb965dd59c": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53297-c1": false,
+        "54842-c1": false,
+        "53070-c1": false,
+        "53419-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f3a773538f83abcdd11fd6221d1f5df0d1f5dfd4b79f030bca66df07fcbe9704": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40369-c1": false,
+        "40386-c1": false,
+        "55676-c1": false,
+        "55182-c1": false,
+        "54775-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4d6d5d10da037f5133f75dfdfb967a436960135515477734da702948b5586ac6": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49139-c1": false,
+        "50101-c1": false,
+        "51431-c1": false,
+        "55090-c1": false,
+        "54798-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a56e7f87a232243afde5ee6c42504b91555e2fc91d6a4a6d7fbf62b2fa68ea31": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "55467-c1": false,
+        "49087-c1": false,
+        "53386-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "c25584d16de261a61364f1d3606bfe62f27e0928a4ec07a15ddcfd03864d9f13": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "54254-c1": false,
+        "54842-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "0aa4d5ffad17fd3a4b306beb2bc693dc074f3cfb98d09e5e4bc59041d8fa117b": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "42691-c1": false,
+        "49251-c1": false,
+        "55084-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "00830eb89dc04ab89de439b193ca7091c44e35e71c4cc3eea0c08babc3328376": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54531-c1": false,
+        "52633-c1": false,
+        "54755-c1": false,
+        "54798-c1": false,
+        "54641-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "602676a65a3f4adb099418a746e04152e1ddc9e0ba88224e950f764ce29a313f": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "55676-c1": false,
+        "26686-c1": false,
+        "40367-c1": false,
+        "54775-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e0782114801c363773b0e06c81798efb72758e4c9a502f0cb5adb53a6799a065": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "50098-c1": false,
+        "46655-c1": false,
+        "40386-c1": false,
+        "53297-c1": false,
+        "53632-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "896b54a88b0916649537c6040d6d2112c722ba951d1c4ba8cf49a9504dc82949": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "46291-c1": false,
+        "48236-c1": false,
+        "55467-c1": false,
+        "49087-c1": false,
+        "53386-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "050738857d7118c3ef624d3746d1f9b4728072df41c223e1ca5db98aaa3043b0": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "38282-c1": false,
+        "40651-c1": false,
+        "46137-c1": false,
+        "46399-c1": false,
+        "40919-c1": false,
+        "40918-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "388f6936048967b119d5bbeaacfc9bfb53f797bce3421eb41f9ed0776eacf9f5": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49344-c1": false,
+        "54756-c1": false,
+        "55738-c1": true,
+        "53070-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "df8dc93e20c347922a68507c3391ae6dc8399efd27fa111360b3d7ac4ae648f8": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48236-c1": false,
+        "48287-c1": false,
+        "55393-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4a98a8aaafd19957adb379c240ba161bf60c5498a7c1ce3e63915ffe2fceefd2": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40165-c1": false,
+        "46655-c1": false,
+        "45372-c1": false,
+        "45370-c1": false,
+        "45371-c1": false,
+        "55702-c1": false,
+        "54621-c1": false,
+        "49733-c1": false,
+        "55213-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a60b13c0380e4a184d01764ae45c4e4c17b5b2c0ea1a28e4b655f88e1020d710": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "52472-c1": false,
+        "55580-c1": false,
+        "55738-c1": false,
+        "53634-c1": false,
+        "55673-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ceb5f03c53aa3379d9e30ef8b47273a81f0a270b63161fb9025e5e9e07045266": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "45230-c1": false,
+        "50301-c1": false,
+        "53133-c1": false,
+        "35651-c1": false,
+        "35650-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ccc83c90a0d3717d8bc3f2a97b11e0103825be14f2381a942e93d6daad8743ba": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53419-c1": false,
+        "54254-c1": false,
+        "53297-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ebc6bfb94228c3519cebc45b0ae286d1aa3dbf9ee76a7db6330e3de383acb065": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "38067-c1": false,
+        "49747-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "9a0c2a1e07d2ea8012afdf380c00b54b18a7db66a4a664f987d9eb416e251333": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "54842-c1": false,
+        "53070-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "7af3ab2c21c2155a4aca534c2cb1fbcbb638002196dc0005960a662ae4c8664d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40386-c1": false,
+        "40165-c1": false,
+        "54621-c1": false,
+        "50935-c1": false,
+        "45370-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "13ab858f7ee757521394246951532f669156c390defca10dd0bb779ce0e5816b": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "42691-c1": false,
+        "55084-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "d37468aa5218ed47c365cd28ebafef7c1e0797501148b401d10bea2c525cda10": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "54755-c1": false,
+        "54254-c1": false,
+        "53297-c1": false,
+        "53070-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "3a5d136a8d62ca5df3fa636b079f526bc03fee067511ae811159a4bf68741408": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "52397-c1": false,
+        "50881-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e86f4d68834be4dc9fee887728fa6848a3e9495b400a2c3a64e03fb689c5b8a7": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "48616-c1": false,
+        "52633-c1": false,
+        "55467-c1": false,
+        "53386-c1": false,
+        "52472-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "58e0b9c8f6c8118016ce28221f2f61d13601cec72f331f49a7838fc7fbe7991d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "54254-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "025281132819b005563f3b2f263a0dbea5f039cb7b39af313461c121ff7f90c3": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "41987-c1": false,
+        "46405-c1": false,
+        "49087-c1": false,
+        "54449-c1": false,
+        "54253-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "db164c738ea2942bd5312a45d48f77dcf0fdcda0bb9b57c725b01a6a752da918": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49139-c1": false,
+        "50101-c1": false,
+        "51879-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "0661722f095c1298cf734d10e1865cd42dd85661b5bc3521a5e36a2d3e75f0b3": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53070-c1": false,
+        "54755-c1": false,
+        "53632-c1": true,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "d9ee24c53bb8e9fe0de8686415fedadf65e18de5c68c4037c36d19304d74ffd4": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49139-c1": false,
+        "51879-c1": false,
+        "40199-c1": false,
+        "40639-c1": false,
+        "40918-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "585caee48c5c50ce8c1cb5423bdb792977c63e73d3b26081cc66b57a5fb250b3": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48616-c1": false,
+        "52633-c1": false,
+        "54629-c1": false,
+        "50864-c1": false,
+        "52472-c1": false,
+        "49087-c1": true,
+        "53989-c1": true,
+        "46291-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "cf18146315d018a70c36b23536986d52c0cc4a09aa71fe3a694377c50646026e": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48616-c1": false,
+        "49087-c1": false,
+        "55467-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "794a100547b356ea4b30f2fea319f8b5df9a0ad51f2aa691b859c6f16b340d99": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53419-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "c85a08c90e3d9461fe654079bed788a66470c910fc74dec014366fb5a750b83b": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "50156-c1": false,
+        "53297-c1": false,
+        "54755-c1": false,
+        "53632-c1": false,
+        "53070-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4de8635b21f41a6004de94f7d421e2359d2235b332e3da094736beacd2462504": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "54579-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "667c621e1f425b5f0b592e638f8d2caf749237ae3ee60175d77b2fb3022fbf44": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "42691-c1": false,
+        "42859-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "2880f63749d723c6a2e9094c81ef2891370b5ed347732369886962980f7c8f88": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48594-c1": false,
+        "51092-c1": false,
+        "53107-c1": false,
+        "51466-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ef0c7ef505fc570719a9ad65a08973e0aee92e500135463f105568e36b4bd50d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "46137-c1": false,
+        "40921-c1": false,
+        "55085-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "203e350aae0adc94b63a13362c4edfa65118d1021efedda3ce4809150a8cbd0b": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "45201-c1": false,
+        "49087-c1": false,
+        "53498-c1": false,
+        "54253-c1": false,
+        "38067-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "12f9f1b12d8232f5a39f9aa825db1230af05ca4c5dc93c121afc958adda8593a": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "46291-c1": false,
+        "52633-c1": false,
+        "55467-c1": false,
+        "50392-c1": false,
+        "50881-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e22390a379f32d601bf0447993f5c84a075c3a4c4712a68335997f51edea2aa9": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53070-c1": false,
+        "53297-c1": false,
+        "54254-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "6c6945a823022313f0959bd16fecf061f939124db162da656193ead5a463d0b0": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53297-c1": false,
+        "53419-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f1f6225366476eade38b71d1c2b5d2e6b394470584159039af4c7294f0ed8f91": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "49747-c1": false,
+        "40921-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "319384545523c08b1b439a45b1be0e22d23fbf49239a5bdf730854583424959d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "51596-c1": false,
+        "40918-c1": false,
+        "53559-c1": false,
+        "49139-c1": false,
+        "50101-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "cfc94a5d07bdccc04e5fd8f26129bacb9833373fc2b69271ff5f152610d0d321": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "40918-c1": false,
+        "46137-c1": false,
+        "53559-c1": false,
+        "40919-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "c92fbee28e45f35b0bc8ceddd16217a4ceabd4b784dfc4d3f306482515b356ce": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48760-c1": false,
+        "54254-c1": false,
+        "54959-c1": false,
+        "51726-c1": true,
+        "45274-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "19c9babe533bc45e721e1140a34b814ae5b3f2a46a560151363e7996551dcdcd": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48287-c1": false,
+        "48236-c1": false,
+        "54755-c1": false,
+        "54768-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "75dd06a1f690a0f2a40f2874bbcd65103d2e2ad8bcc178b00d515cdd82255ff6": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "3d151feda116ef279ef4ad7b1a29234f8efe5bcd09af29517cbe75edda1b386d": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "23245-c1": false,
+        "34139-c1": false,
+        "40048-c1": false,
+        "50881-c1": false,
+        "54918-c1": false,
+        "53296-c1": false,
+        "47254-c1": false,
+        "55785-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4a75efa3fd45218ea14e96ddabf537f1fd1b16ecba5d53c2b66e823c82ad9871": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "50845-c1": false,
+        "50506-c1": false,
+        "55467-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "1c737f445f105808f4065a3b998ace704370939280b1b0fda985572c4f4bd7b0": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48868-c1": false,
+        "48760-c1": false,
+        "55643-c1": false,
+        "55747-c1": false,
+        "53070-c1": false,
+        "55674-c1": false,
+        "42580-c1": false,
+        "49344-c1": true,
+        "51233-c1": false,
+        "54641-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "5962f6c2bfa32884eccdcb4f24e309eb3221592f81d5c5fa13fdbefe5166f8a7": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53632-c1": false,
+        "55326-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "766210af4c198e0a4b79cd41a3df0badf83d8aaa7d0906c0b24d7a23441bfe84": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "55676-c1": false,
+        "53632-c1": false,
+        "49733-c1": false,
+        "54775-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "dfbec43821bfdfc6d1ab1fd768cf712539fc72591519615e0fc088019ace6bc4": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "52633-c1": false,
+        "48616-c1": false,
+        "55467-c1": false,
+        "53386-c1": false,
+        "52564-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "3db84a04000dd96d63da3a9bbb9c7cafbeaf2261023a7dae97cfc1435c2f860f": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "2dbee27e693ca4adaf29097b746f21cc25fd5cc71f23fa2537924bd76c3fb07c": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "54755-c1": false,
+        "53632-c1": false,
+        "54579-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e2c9b9d7b0d71449404cc6c847fe90d6185dd8394f85c66813bfb9831687dd1a": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "53297-c1": false,
+        "54531-c1": false,
+        "53419-c1": false,
+        "54254-c1": false,
+        "53070-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "139562726e0c9634027744ea9065e41d21ee9b0b461f58e14cabea382df913fa": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "51596-c1": false,
+        "53559-c1": false,
+        "49282-c1": false,
+        "54971-c1": false,
+        "38067-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "d6f36f415c0b03b844bc3501c0b36f1cc31e8a28d1e2b9ef9cab82587dcf6c91": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "45370-c1": false,
+        "45372-c1": false,
+        "55676-c1": false,
+        "54775-c1": false,
+        "54621-c1": false,
+        "40386-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "78529b227e3eacd9ded76f1fa8da07f57f2d22d5d3429b8e6408a7573940ba15": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "47254-c1": false,
+        "40386-c1": false,
+        "53297-c1": false,
+        "53632-c1": false,
+        "55098-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "dc46cdc551205ad2c3b3da2ed0782ac6a1d9ee606298a74cd33570e195d0b79d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "47254-c1": false,
+        "47711-c1": false,
+        "52397-c1": false,
+        "53564-c1": false,
+        "53798-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "804c9e3698ddcd8e084a361abad7b87ced304ba71f699075251ffde4cc668668": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54254-c1": false,
+        "53419-c1": false,
+        "55673-c1": false,
+        "53070-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ea94de4c9b077615e413425dd37fbac5100af877190c660e3d7f1d158ef6e89d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "55738-c1": false,
+        "55248-c1": false,
+        "54254-c1": false,
+        "55643-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f2505e992a72d0e52b6a1e618be5e28371b6990cfade5ac31ec7d91160e1e070": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "50864-c1": false,
+        "52633-c1": false,
+        "54629-c1": false,
+        "53234-c1": false,
+        "53363-c1": false,
+        "53498-c1": false,
+        "52644-c1": true,
+        "53364-c1": true,
+        "55790-c1": false,
+        "48616-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a81a536ec45408863fa60b8c9975ea7846472e8b6e40909e7b6894108a72df61": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "41a6e5dc1a2791ebe851c28c3b9b03a0fb69e2f4e96cb33328a6b24f2933f93d": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "52329-c1": false,
+        "53462-c1": false,
+        "45201-c1": false,
+        "55729-c1": false,
+        "54449-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a814ec259c54b497b1092e1138052da6c638adef34f73cc816cf0ef12c27b045": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "54842-c1": false,
+        "54531-c1": false,
+        "53634-c1": false,
+        "54755-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "2762a52599f1fed7f799c83f4c798b4b8072f8a5db690934e0d871ba8eadae1f": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "46655-c1": false,
+        "45371-c1": false,
+        "49733-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "9a7cf8e2d137704e667ab2726f56533bba2305ac6e6211846f5e8a07990d26bf": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "52860-c1": false,
+        "54755-c1": false,
+        "50156-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "cf61aa59d81906d04ab2cd5a23970ff5b9db246b0d38d290224a14e3b0b62b0a": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53297-c1": false,
+        "54755-c1": false,
+        "53419-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "cef33b3727202eba2ab4cfc8c39c0b5b79c554ca2a53c00580bfedfe34febd57": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "49733-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a06f242495a1ce86c73ff228fe3e9231322266cce031c292c11ea389a1b83511": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "51596-c1": false,
+        "53559-c1": false,
+        "42691-c1": false,
+        "40651-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4ce9d0f789c9a14f140717daeb63c5c7f8e8092886c020da531224b5593befc6": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38067-c1": false,
+        "40921-c1": false,
+        "51596-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "0ac832f89f0bf8a17044dd2e2acd7f2f077cee48fcb3c7301dda81bdefde9e9e": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "40165-c1": false,
+        "40386-c1": false,
+        "50098-c1": false,
+        "53632-c1": false,
+        "54941-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "5d25aba45a24c6ed7243ec1a03b17dbb4a8de2f740faaee84348600a61f02095": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "55083-c1": false,
+        "45274-c1": false,
+        "41960-c1": false,
+        "48760-c1": false,
+        "55099-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f825bda4d19f005f9138022f3dbc72cd61a8d59b7348c391a79b78d86999b0ae": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49087-c1": false,
+        "34522-c1": false,
+        "46291-c1": false,
+        "52329-c1": false,
+        "45658-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e84ad816c3d10f0edda436c71d948c965b935542054c9df9100758108c17a42c": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "48569-c1": false,
+        "53070-c1": false,
+        "55866-c1": false,
+        "49344-c1": true,
+        "21534-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "dd836554cf78072887613d9148d9eadc3500b1245c462ac426a28c0d7c9b05b7": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49344-c1": false,
+        "54755-c1": false,
+        "54756-c1": false,
+        "50874-c1": false,
+        "50876-c1": false,
+        "53070-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f47e4d927def85cf89f2fa513b1fe444cc1fe38dd5eb13d7e92bce9322baa707": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "52860-c1": false,
+        "53070-c1": false,
+        "54441-c1": false,
+        "54579-c1": false,
+        "54835-c1": false,
+        "55817-c1": false,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "50d6fbc0b8da3cdbd8f30b17f9a5e2123ebd7612da32c16ddf04e57c4697790b": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "22542-c1": false,
+        "45924-c1": false,
+        "39496-c1": false,
+        "46718-c1": false,
+        "53559-c1": true,
+        "54774-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "d77a186ab43b437665e9f5de6770e3d7c4e38fbfef079d99ce5bf816b485da0c": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40651-c1": false,
+        "40918-c1": false,
+        "44242-c1": false,
+        "38282-c1": true,
+        "51596-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "68dfbcfd786460975643a91b4e565c5d53133595140eacc2066aca9d856bc730": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40165-c1": false,
+        "40386-c1": false,
+        "46655-c1": false,
+        "50098-c1": false,
+        "53632-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "062ecba6de9fbd186800792ac3c6893eadd4ea81961295476751ec3c00652a52": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53401-c1": false,
+        "49139-c1": false,
+        "55091-c1": false,
+        "55345-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "7b40f6ecce31eba80d347ef7148cf4af263babbeecc33445e8eb5a15d5104220": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53419-c1": false,
+        "54835-c1": false,
+        "54531-c1": false,
+        "55673-c1": false,
+        "55674-c1": false,
+        "53297-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "14432e6c3dc7fe631b0f5d050f578fb8d27837f63edabb625ab03ed48482f76c": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "54884-c1": false,
+        "53070-c1": false,
+        "55673-c1": false,
+        "54755-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "b9deaa3f136fe57c0ce48f7da6238c45d238938ca895fff3b9bb3072d89ea787": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53235-c1": false,
+        "53462-c1": false,
+        "53364-c1": false,
+        "53385-c1": false,
+        "52426-c1": false,
+        "53234-c1": false,
+        "52342-c1": false,
+        "55467-c1": false,
+        "55540-c1": true,
+        "53363-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "fa66648f5d47068aa2adbdb15c8c3820b49f091f646c3ea37f4867259fbb5b40": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "52860-c1": false,
+        "53070-c1": false,
+        "54835-c1": false,
+        "54254-c1": false,
+        "54441-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "dd631664ecda532fb1c90b3a48570e3bc75cf8addde6380154e5d7c4b65fecee": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53297-c1": false,
+        "53419-c1": false,
+        "54531-c1": false,
+        "53070-c1": false,
+        "52860-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "4ab00a578ac359e3a0807e33bab732832de02e0d94255c2e25cd911a3650ff8d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53297-c1": false,
+        "55702-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "a7afa54731da160ee6c31c7087da185a01e1f2b3f8ea5584ba159cd65cafdd22": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "51596-c1": false,
+        "38282-c1": false,
+        "53559-c1": false,
+        "42002-c1": false,
+        "40651-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "6e1af841e0ef98f8ec377d97e814887b31a2459ba70710d4980d546876e3559b": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "42691-c1": false,
+        "42419-c1": false,
+        "55084-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "5f0401b70ba022cddfc0622604d8291f4e8f261f3f178dc56c62866c7358e3da": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "45370-c1": false,
+        "54775-c1": false,
+        "55182-c1": false,
+        "55676-c1": false,
+        "45372-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "b47ea5a9b61e1cb0158f1433a5a1a457c3a342b403d16b73c32750203247f461": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "53297-c1": false,
+        "54835-c1": false,
+        "54755-c1": false,
+        "52860-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "cbd2723bf53f531f017dda60687f146f70d6dd6b7f477f42398b50238991b1e4": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54254-c1": false,
+        "53925-c1": false,
+        "54775-c1": false,
+        "54755-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "3697fd3b8a53fbd0a8dcebe400270d411faa8086afb3c524f90cbffd9e5e626d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40165-c1": false,
+        "40386-c1": false,
+        "53632-c1": false,
+        "50322-c1": false,
+        "54138-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e2c8915972ec27c8381051e2edbee7e56784942834c9f775f7be51c27d686ac6": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54775-c1": false,
+        "55676-c1": false,
+        "45372-c1": false,
+        "45370-c1": false,
+        "46655-c1": false,
+        "55507-c1": true,
+        "55213-c1": false,
+        "55182-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "b19d9e95c01fce1e34ab37efb013b65f787f2181ed6fe38c2a5de0bbbee5e81d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "39803-c1": false,
+        "55681-c1": false,
+        "54755-c1": false,
+        "51111-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "b99ada4ebad90106c0394c42899b6286b8f934d555b971cf41831aca824f8721": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "54254-c1": false,
+        "54531-c1": false,
+        "53634-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "2e1073c3664a67f83155447b71a700f7165bcc2f9544ceb2f2092068f9c57c52": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "52860-c1": false,
+        "54254-c1": false,
+        "54835-c1": false,
+        "53925-c1": false,
+        "55673-c1": false,
+        "53297-c1": false,
+        "55817-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "f4399f135cb3ca52c791ee073d5f488f98e53052237448900833cb801188bde8": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "38282-c1": false,
+        "40918-c1": false,
+        "46399-c1": false,
+        "40651-c1": false,
+        "46137-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "0b52067692e61f5cdd8d1275ee5b63e88cfb42adfb853e121bc87d777a1c361e": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "49087-c1": false,
+        "49086-c1": false,
+        "54449-c1": false,
+        "49826-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "8230ddf3311f6e380579a8be2c563e5d2a8723ee2bd27685f9ef1734e37cb683": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "49087-c1": false,
+        "53385-c1": false,
+        "46291-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "400b1e5beddfd53341bdaf036ac73b3730f77da65dc29791ae2f478545d3d073": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54755-c1": false,
+        "55643-c1": false,
+        "55431-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "709878349d01a308dc3002485f201a4f128e152dd082f3d394c18a36ce60f81e": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53070-c1": false,
+        "54254-c1": false,
+        "55673-c1": false,
+        "53297-c1": false,
+        "54531-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "70605e167c820eff1c06c76bc63616cd22706b663d5fcad928f825d3a1a08e1e": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "50250-c1": false,
+        "54626-c1": false,
+        "51596-c1": false,
+        "53559-c1": false,
+        "40918-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "18dcde15e35fa42c0806d8c01a3f8ae9051e61b71299c15942194387191b43ac": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "50098-c1": false,
+        "53632-c1": false,
+        "54345-c1": false,
+        "54775-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "ef82f6c6a6d910e0d08ca4eece279ddeec5e439411c1dada8f3eedd81b2efe6d": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "45372-c1": false,
+        "45373-c1": false,
+        "55213-c1": false,
+        "45370-c1": true,
+        "46655-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "64ad831602a389e3d5cee3201e435e7e0e50c404d316b7ae0c1cd481e56801cd": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "54755-c1": false,
+        "48287-c1": true,
+        "48236-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "280b303959b18cc1ff9715a77d23ccf086e4fd12e8babf5152bf8ae6858d37e1": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "42308-c1": false,
+        "42933-c1": false,
+        "45648-c1": false,
+        "42934-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "63cbadb1f60a8e24b3301686cba3c92304adf5e86883f25a17f47017ce8a7bbc": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "51982-c1": false,
+        "54254-c1": false,
+        "53419-c1": false,
+        "53297-c1": false,
+        "52860-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "0978929fbd7b894825fbd942e6d8063ca6172ac2be38bcb7f459cdca910f42ee": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53070-c1": false,
+        "49344-c1": false,
+        "55782-c1": false,
+        "48572-c1": false,
+        "55866-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "c90e06c383e75d05b8d78b3af3690629b9cc6e95a924209fc8723799ee89cabb": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "51982-c1": false,
+        "53297-c1": false,
+        "53419-c1": false,
+        "54579-c1": false,
+        "54254-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "06bee361f980dd9a26d73c86bd434f92ee4fb47ef2608ac60dccaecea47d6546": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "52472-c1": false,
+        "53989-c1": false,
+        "55643-c1": false,
+        "50881-c1": false,
+        "53631-c1": true,
+        "53287-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "e97ab6da8274b27a37bbc035bb5852ea2d76b04e87f69fe761768363b9a41334": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "54579-c1": false,
+        "53297-c1": false,
+        "54755-c1": false,
+        "54299-c1": false,
+        "53419-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "c935b94a050cf3891244d336abc48d61eaa889f8c17598475d379cce30f5cd48": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53419-c1": false,
+        "53070-c1": false,
+        "54755-c1": false,
+        "54531-c1": true,
+        "53297-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "741f6401e8f2d4f579ca3471cb26ef11774a7f17f907f313e01338678b219de0": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "40918-c1": false,
+        "49747-c1": false,
+        "55343-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "dc7525dd92a2a861dbf55b045b024eb53d27a95a9c75593430a03be20e85d0d8": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "53386-c1": false,
+        "55467-c1": false,
+        "52634-c1": false,
+        "48616-c1": true,
+        "52633-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "688c0931d84892a4432575266b3e16a155f9c115898ddd3dc5ce5b0a9761be18": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "45201-c1": false,
+        "41987-c1": false,
+        "48449-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "d8196a3ef97fb5006c7af760cf25353945c5d1aa332da315054b3f1d99d0d80f": {
+      "grounding_generation_calibration": {
+        "grounding": false,
+        "generation": false
+      },
+      "retrieval_chunk_calibration": {
+        "21534-c1": false,
+        "34470-c1": false,
+        "39417-c1": false,
+        "49344-c1": false,
+        "45026-c1": true
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    },
+    "45579e72a0379e2fea1a93f6950baffe53be10d76360f292df610853c442ac2a": {
+      "grounding_generation_calibration": {
+        "grounding": true,
+        "generation": true
+      },
+      "retrieval_chunk_calibration": {
+        "38282-c1": false,
+        "40651-c1": false,
+        "40918-c1": false,
+        "46137-c1": false,
+        "53559-c1": false
+      },
+      "import_id": "20260530T073920252284",
+      "calibration_fraction_at_import": {
+        "retrieval": 0.2,
+        "grounding": 0.2,
+        "generation": 0.2
+      },
+      "calibration_max_records_at_import": {
+        "retrieval": 30,
+        "grounding": 30,
+        "generation": 30
+      },
+      "assigned_at": "2026-05-30T07:39:20.302462Z"
+    }
+  }
+}
