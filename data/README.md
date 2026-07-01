@@ -1,17 +1,18 @@
 # data/ (gitignored)
 
 Pipeline inputs and outputs. **Everything here except this README and the
-`.gitkeep` markers is gitignored** - it's large (~580M) and some of it carries PII
-(annotator names in exports). This file documents the expected structure so a fresh
-clone knows what belongs where and how to obtain it.
+`.gitkeep` markers is gitignored** - it's large and some of it carries PII. 
+This file documents the expected structure so a fresh clone knows what 
+belongs where and how to obtain it.
 
 ```
 data/
+├── querygen/            LLM querygen cache + run dirs (non-deterministic; regenerable)
 ├── publikationsbot/     source query corpora (<slug>_combined.jsonl) + querygen intermediates
-├── annotation/
-│   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
-│   └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
-└── querygen/            LLM querygen cache + run dirs (non-deterministic; regenerable)
+└── annotation/
+    ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
+    └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
+         LLM querygen cache + run dirs (non-deterministic; regenerable)
 ```
 
 ## How to populate

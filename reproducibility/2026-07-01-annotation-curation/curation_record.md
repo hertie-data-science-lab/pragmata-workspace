@@ -3,9 +3,10 @@
 Honest, complete record of the one-off curation that reduced the live Argilla
 annotation instance from the full imported corpus to the final "essential" set.
 Nothing is hidden: this documents what was imported, what was removed or added,
-why, and under exactly what criteria. It pairs with the machine-readable artifacts
-in this directory (`target.json`, `plan.json`, `apply_log.jsonl`, `keep_lists/`,
-`manifests/`) which let the end state be rebuilt exactly (see `README.md`).
+why, and under exactly what criteria. It pairs with the machine-readable artifacts:
+`keep_lists/` + `apply_log.jsonl` here, and the original import manifests + corpus/backup
+checksums in the stage-1 bundle `../2026-05-initial-import/`. Together they let the end
+state be rebuilt exactly (see `README.md`).
 
 ## Why
 
@@ -124,10 +125,16 @@ as the recovery source**.
 
 ## Provenance
 
-- Pre-prune backup (full original, exact incl. responses): `20260701T185359Z_backup_pre_prune`
+- **Run date:** 2026-07-01.
+- **Workspace git at curation time:** `485ce05` on `main`.
+- **Tooling:** Python 3.12.13, `argilla` client 2.8.0; `pragmata` CLI from the
+  `PRAGMATA_SRC` checkout (branch `demo-2026-05-26`).
+- **Pre-prune backup** (full original, exact incl. responses): `20260701T185359Z_backup_pre_prune`
   (48 datasets, 21,346 records; `manifest.json` sha256 in `checksums.sha256`).
-- Query generation: `configs/annotation/querygen_specs/` + `_runtime.yaml`
-  (model `gpt-5.4`, `reasoning_effort: high`). Querygen is non-deterministic LLM
-  output, so the curated corpus (`*_combined.curated.jsonl`, pinned in
-  `checksums.sha256`) is the versioned input, not something re-derived from scratch.
-- Workspace git at curation time: `485ce05` on `main`.
+- **Source corpus / query generation:** `data/publikationsbot/<slug>_combined.jsonl`
+  (pinned in `checksums.sha256`), generated via `configs/annotation/querygen_specs/` +
+  `_runtime.yaml` (model `gpt-5.4`, `reasoning_effort: high`). Querygen is
+  non-deterministic LLM output, so the corpus is the versioned input, not re-derived.
+- **Authoritative record:** this file. `data/annotation/imports/curation_changelog.md`
+  is a gitignored working copy generated during the run; if they ever disagree, this
+  committed record wins.

@@ -21,7 +21,8 @@
 SHELL := /bin/bash
 PY := .venv/bin/python
 
-# Reproducibility bundle for the 2026-07-01 annotation curation.
+# Reproducibility bundles (dated, one per operation).
+IMPORT := reproducibility/2026-05-initial-import
 CURATION := reproducibility/2026-07-01-annotation-curation
 
 # Pass-through flags for pipeline.sh / plan, built from make vars.
@@ -85,7 +86,7 @@ backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" t
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
 	@echo "== verifying artifact checksums =="; \
-	sha256sum -c $(CURATION)/checksums.sha256 2>/dev/null \
+	sha256sum -c $(IMPORT)/checksums.sha256 2>/dev/null \
 	  || echo "(corpus/backup not present locally — fetch the external artifacts first)"; \
 	if [ "$(MODE)" = "structure" ] && [ -n "$(APPLY)" ]; then \
 	  for y in configs/annotation/domains/*.yaml; do d=$$(basename $$y .yaml); \
@@ -94,5 +95,5 @@ reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|respon
 	  test -n "$(BACKUP)" || { echo "usage: make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1"; exit 2; }; \
 	  $(PY) scripts/annotation/argilla_backup.py restore "$(BACKUP)" --apply; \
 	fi; \
-	echo "== prune live -> curated keep-lists =="; \
-	$(PY) $(CURATION)/scripts/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)
+	echo "== prune live -> curated keep-lists (no APPLY = preview, doubles as verification) =="; \
+	$(PY) scripts/annotation/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)
