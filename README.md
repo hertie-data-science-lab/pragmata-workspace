@@ -6,6 +6,23 @@ pipeline against the BSt (Bertelsmann Stiftung) publikationsbot. Holds
 and deliberately do not belong in `pragmata` itself. It does **not** hold data
 or outputs (those stay local and gitignored, see [Data & secrets](#data--secrets)).
 
+## Setup
+
+Clone, then:
+
+1. `cp .env.example .env` and fill in the keys (Argilla, LLM, publikationsbot,
+   `PRAGMATA_SRC`). See [Configuration](#configuration).
+2. `cp configs/annotation/users.json.example configs/annotation/users.json` and
+   `cp configs/annotation/users.secrets.json.example configs/annotation/users.secrets.json`,
+   then fill in the real roster + passwords. Both stay gitignored. See
+   [Annotator roster](#annotator-roster).
+3. Point `PRAGMATA_SRC` at a `pragmata` checkout (provides the `pragmata` CLI) and
+   create the `.venv/` it expects.
+4. `make help` lists the targets; preview a run with `bash scripts/pipeline.sh --dry-run`.
+
+Data, logs, reports and Argilla backups are **not** committed — see
+[Data & secrets](#data--secrets) and [Reproducibility](#reproducibility).
+
 ## Pipeline
 
 ```
@@ -196,9 +213,37 @@ a live dataset - restoring reverts to that point in time, including any annotato
 activity recorded after the snapshot for the records/attributes in scope (the preview
 flags this before you apply).
 
+## Reproducibility
+
+`reproducibility/` holds one **dated bundle per operation** that produced the live
+instance (chronological, migration-style):
+1. `2026-05-initial-import/` — the original build + import: the original partition
+   manifests, `checksums.sha256` pinning the full source corpus + pre-prune backup
+   (external), and `provenance.md` (querygen model/dates, the non-determinism caveat).
+2. `2026-07-01-annotation-curation/` — the curation (21,346 → 4,244 records): the honest
+   `curation_record.md`, the per-dataset **keep-lists** (the declared end state), and
+   `apply_log.jsonl` (audit of what was deleted).
+
+Reproduction is **declarative**: the keep-lists are the desired state, and the reusable
+tool `scripts/annotation/prune_to_keeplist.py` reduces any superset to them (the
+`kubectl apply --prune` / `terraform` model). `make reproduce-curation` chains it; it
+leaves `import.sh` / the `import` subcommand untouched. Point
+`ARGILLA_API_URL`/`ARGILLA_API_KEY` at the target, fetch the pinned artifacts, then:
+
+```
+make reproduce-curation                                     # preview = verify (expect delete 0, 0 missing)
+make reproduce-curation MODE=structure APPLY=1              # import the full corpus, then prune to keep-lists
+make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1 # restore the backup, then prune to keep-lists
+```
+
+Both build a superset (import the full corpus, or restore the backup) then prune down to
+the keep-lists — a plain re-import cannot reproduce the curated set on its own (see
+[Known limitations](#known-limitations)). Full detail in the bundle's `README.md`.
+
 ## Layout
 
 ```
+.env.example           template for .env (committed; copy to .env and fill in)
 configs/
   settings.conf        workspace-global operational tunables (committed, loaded for all scripts)
   annotation/          annotation-stage configs
@@ -206,6 +251,10 @@ configs/
     querygen_specs/    per-domain querygen specs + _runtime.yaml (committed)
     users.json         annotator roster, no passwords (gitignored, local)
     users.secrets.json username -> password overlay (gitignored)
+    *.example          committed templates for the two gitignored files above
+reproducibility/       committed lineage records (one dated bundle per operation)
+  2026-05-initial-import/          original manifests + checksums (corpus+backup) + provenance
+  2026-07-01-annotation-curation/  curation record + keep-lists + apply_log
 scripts/
   lib/common.sh        shared shell helpers (logging, env, guards, venv paths)
   lib/workspace.py     shared python helpers (paths, env loader, domains(), jsonl io)
@@ -216,21 +265,25 @@ scripts/
     log.py             annotation logger: progress, IAA, cadence -> logs/annotation/log.jsonl
     report_tables.py   render a snapshot -> reports/annotation/<date>/report.md
     plot_summary.py    render summary plots -> reports/annotation/<date>/*.png
+    argilla_backup.py  status-preserving dump/restore (make backup)
+    prune_to_keeplist.py  reduce live Argilla to a keep-list (make reproduce-curation)
     merge_yaml.py      (helper)
-data/                  (gitignored)
+data/                  (gitignored except README + .gitkeep scaffolds)
   annotation/
-    exports/           export CSVs (one subdir per domain)
-    imports/           import artifacts
+    exports/           export CSVs (one subdir per domain) — carries annotator PII
+    imports/           import artifacts (partition manifests)
   querygen/runs/       querygen output (pragmata tool sibling of annotation/)
   publikationsbot/     bot output JSONL (sibling of annotation/)
-logs/                  (gitignored)
+logs/                  (gitignored except README + .gitkeep)
   annotation/
     log.jsonl          metrics history (one snapshot per run, appended)
     *.log              execution logs (run_bot.*, pipeline.log, ...)
-reports/               (gitignored)
+reports/               (gitignored except README + .gitkeep)
   annotation/
     <date>/            one report per snapshot: report.md + plots (PNGs)
     _latest -> <date>/ symlink to the newest report
+argilla_backup/        status-preserving Argilla dumps (gitignored, local/external)
+tmp/                   one-off local scratch (gitignored)
 ```
 
 All scripts share the same conventions via `scripts/lib/`: workspace-root
@@ -240,10 +293,10 @@ side and `scripts/lib/workspace.py` for the python side.
 
 ## Configuration
 
-- **Secrets** live in `.env` (gitignored). Required keys:
-  `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup);
-  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen);
-  `PUBLIKATIONSBOT_URL` (bot). For Azure, set `OPENAI_API_KEY`
+- **Secrets** live in `.env` (gitignored) — copy `.env.example` and fill in. Required
+  keys: `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup);
+  `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen); `PUBLIKATIONSBOT_URL` (bot);
+  `PRAGMATA_SRC` (path to the `pragmata` checkout). For Azure, set `OPENAI_API_KEY`
   to your Azure key and `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
 - **Operational tunables** live in `configs/settings.conf` (queries-per-spec,
   bot concurrency, throttle, disk thresholds). Committed and tracked.
@@ -257,9 +310,43 @@ side and `scripts/lib/workspace.py` for the python side.
 `configs/annotation/users.json` is the roster - usernames, roles, and workspace
 assignments, **no passwords**. It is kept **local (gitignored)**, not
 version-controlled, since it carries annotator names. Passwords live in
-`configs/annotation/users.secrets.json` (also gitignored).
+`configs/annotation/users.secrets.json` (also gitignored). Both have committed
+`.example` templates (dummy values) showing the expected shape — copy and fill in.
 
 ## Data & secrets
 
-Not version-controlled (gitignored): `.venv/`, `.env`, `configs/annotation/users.secrets.json`,
-`configs/annotation/users.json`, `data/`, `logs/`, `reports/`, `*.log`. Everything tracked is scripts, configs, and specs.
+Not version-controlled (gitignored): `.venv/`, `.env`,
+`configs/annotation/users.secrets.json`, `configs/annotation/users.json`, `data/`,
+`logs/`, `reports/`, `argilla_backup/`, `tmp/`, `*.log`. Everything tracked is
+scripts, configs, specs, and the `reproducibility/` bundle.
+
+### What's not committed, and how to obtain it
+
+| Not in git | Why | How to get it |
+|---|---|---|
+| `data/publikationsbot/*_combined*.jsonl` | large (~52M curated / ~549M full) | fetch the corpus artifact pinned in `reproducibility/.../checksums.sha256`, or regenerate via `make pipeline` (querygen is non-deterministic) |
+| `data/annotation/exports/` | annotator **PII** (real names, notes) | re-export from live Argilla (`make export`) |
+| `argilla_backup/` | large (~2.1G) | the pre-prune snapshot is an external archive, pinned by `checksums.sha256` |
+| `.env`, `users.json`, `users.secrets.json` | secrets / names | copy the committed `.example` templates and fill in |
+
+The curated annotation corpus is reproducible from the `reproducibility/` bundle —
+see [Reproducibility](#reproducibility).
+
+## Known limitations
+
+These live in the `pragmata` pipeline (not this glue repo) and are why reproduction
+needs a separate prune step rather than a plain re-import. Recommended future work:
+
+- **Import can't express per-task membership.** Every query fans out into all three
+  tasks; the manifest only flags each record calibration-vs-production. A curated set
+  that is heterogeneous per (query × task) can't be expressed by import alone.
+- **The partition manifest is append-only ("manifest lock").** It never shrinks or
+  reshuffles, so deleting queries from the source and re-importing re-adds them. The
+  on-disk `partition.meta.json` therefore drifts from the curated live state. A
+  first-class `prune`/`reconcile` subcommand (making the manifest the source of truth)
+  would remove the need for the external keep-lists here.
+- **Exports overwrite in place.** `export.sh` writes `data/annotation/exports/<domain>/`
+  with no timestamp/versioning or run lineage; a stale CSV is indistinguishable from a
+  fresh one. Versioned export snapshots would fix this.
+- **Three identifiers for one domain** (import `partition_scope` `BIL`, export
+  `export_id` slug, Argilla `dataset_id` `""`), wired only by shell-script convention.

@@ -1,70 +1,46 @@
-# Annotation curation — reproducibility bundle (2026-07-01)
+# Annotation curation — 2026-07-01
 
-Everything needed to **exactly rebuild** the curated Argilla annotation corpus, plus
-a full honest account of what the curation did. The corpus was reduced from the full
-imported set (21,346 records) to the final "essential" set (4,244 records) — see
-[`curation_record.md`](curation_record.md) for what was removed/added, why, and under
-what criteria, and the verification result.
+Stage 2 of the live annotation instance's lineage: the one-off curation that reduced the
+imported corpus (**21,346 records**) to the final "essential" set (**4,244 records**).
+Stage 1 (the original import + the pinned corpus/backup) is
+[`../2026-05-initial-import/`](../2026-05-initial-import/). See
+[`curation_record.md`](curation_record.md) for what was removed/added, why, under what
+criteria, the verification result, and provenance.
 
-## What's here
+## Contents
 
 | Path | What it is |
 |---|---|
-| `curation_record.md` | The honest history: criteria, per-domain removals, min_submitted changes, staffing flags, risks, audit result. |
-| `manifests/<SCOPE>/partition.meta.curated.json` | The 8 final curated partition manifests (calibration/production placement per surviving query). |
-| `keep_lists/<workspace>__<dataset>.ids` | **Authoritative** — the exact record-ids that should be live per dataset (48 files, 4,244 ids). Snapshot of the verified end state. `_counts.json` summarises. |
-| `checksums.sha256` | SHA256 of each curated corpus file + the pre-prune backup manifest — pins the external artifacts. |
-| `target.json` | Selection spec (per-domain uuids, id-sets, k-buckets) — the "what/why". |
-| `plan.json`, `apply_log.jsonl` | Machine-readable diff of the as-run prune (drop-lists / deletions). |
-| `scripts/prune_to_keeplist.py` | Reproduction primitive: prune live to the keep-lists (standalone, SDK-only). |
-| `scripts/select.py`, `prune.py`, `verify.py` | The as-run selection / drop-list prune / verification tools (auditable). |
+| `curation_record.md` | The honest record: criteria, per-domain removals, min_submitted changes, staffing flags, risks, audit result, provenance (incl. the 2026-07-01 date). |
+| `keep_lists/<workspace>__<dataset>.ids` | The **declared end state**: the exact record-ids to keep per dataset (48 files, 4,244 ids). `_counts.json` summarises. |
+| `apply_log.jsonl` | Audit log of what the as-run prune deleted (not needed to reproduce; kept for the record). |
 
-## External artifacts (not in git — too large)
-
-Pinned by `checksums.sha256`, stored as a release/archive alongside the repo:
-
-- **Curated corpus** `data/publikationsbot/<slug>_combined.curated.jsonl` (8 files, ~52M) — the query corpus the annotators saw. Querygen is non-deterministic LLM output (`gpt-5.4`, see `configs/annotation/querygen_specs/_runtime.yaml`), so this file **is** the versioned input.
-- **Pre-prune backup** `20260701T185359Z_backup_pre_prune` (~2.1G, 21,346 records with responses+status) — the exact original, for byte-faithful restore.
-
-Fetch them, then verify: `sha256sum -c checksums.sha256`.
+The corpus + backup pins live in stage 1's `checksums.sha256`; the reproduction **tool** is
+first-class at `scripts/annotation/prune_to_keeplist.py`.
 
 ## Reproduce
 
-Two recipes. Both finish by reconciling live to the keep-lists; `import.sh` and the
-`import` subcommand are **not** modified.
-
-Point `ARGILLA_API_URL`/`ARGILLA_API_KEY` at the target (ideally a scratch instance),
-then from the repo root:
+Declarative: the keep-lists are the desired end state; reproduction builds the full
+superset (stage 1) then prunes down to them. `import.sh` / the `import` subcommand are
+untouched. Point `ARGILLA_API_URL`/`ARGILLA_API_KEY` at the target, then from the repo root:
 
 ```
-make reproduce-curation MODE=structure   # from the corpus (records only, no responses)
-make reproduce-curation MODE=responses   # from the backup (exact, incl. annotations)
+make reproduce-curation                                     # preview = verify (expect delete 0, 0 missing)
+make reproduce-curation MODE=structure APPLY=1              # import the full corpus (stage 1), then prune to keep-lists
+make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1 # restore the backup (stage 1), then prune to keep-lists
 ```
 
-**MODE=structure** — rebuild the record structure from source:
-1. `sha256sum -c reproducibility/2026-07-01-annotation-curation/checksums.sha256`
-2. `scripts/annotation/import.sh <domain>` for each domain (fans every query into all
-   3 tasks — this over-creates relative to the curated set).
-3. `prune_to_keeplist.py --keep-lists .../keep_lists --apply` → deletes the over-created
-   records, leaving exactly the curated set.
+- **MODE=structure** rebuilds record structure from the corpus (no responses).
+- **MODE=responses** restores the exact state incl. annotations from the backup.
+- **No args** runs `prune_to_keeplist.py` in preview against the current instance — if it
+  reports `delete 0` and no missing keep-ids, live already equals the declared state. That
+  preview *is* the verification.
 
-**MODE=responses** — restore the exact state incl. annotations:
-1. `sha256sum -c .../checksums.sha256`
-2. `scripts/annotation/argilla_backup.py restore <backup> --apply` (the full original).
-3. `prune_to_keeplist.py --keep-lists .../keep_lists --apply` → prune back to the curated set.
-
-Verify either with:
-```
-reproducibility/2026-07-01-annotation-curation/scripts/verify.py \
-  --target reproducibility/2026-07-01-annotation-curation \
-  --backup <pre-prune-backup>
-```
-
-## Why a prune step is needed (not a plain re-import)
+## Why a prune step (not a plain re-import)
 
 Import fans every query into all three tasks and can only flag records
-calibration-vs-production — it cannot express "this query has no record in task X".
-The curated set is heterogeneous at the (query × task) level, so the only way to
-reach it is: build a superset (import or restore) then delete down to the keep-lists.
-The append-only import manifest also means a plain `import.sh` re-run would re-add
-pruned queries — hence the separate prune step here rather than a change to import.
+calibration-vs-production — it can't express "this query has no record in task X", and its
+manifest is append-only. So the curated set (heterogeneous per query × task) is only
+reachable by building the superset then deleting down to the keep-lists — the same
+declarative "reduce to declared state" model as `kubectl apply --prune` / `terraform apply`
+/ `rsync --delete`.
