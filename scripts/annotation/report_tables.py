@@ -362,7 +362,7 @@ def iaa_per_label(domains: dict) -> str:
             if not per_label:
                 continue
             first = next(iter(per_label.values()))
-            n_items, n_ann = first["n_items"], first["n_annotators"]
+            n_items = first["n_items"]
             if n_items == 0:  # no overlapping items → no agreement to report
                 continue
             lab = (tv.get("labels") or {}).get("per_label") or {}
@@ -750,7 +750,9 @@ def render(snap: dict) -> str:
         if not labels_done:
             iaa_parts.append(labels_note)
             labels_done = True
-    if by_label:  # Prev.* and Items† first appear in this table; their notes live with it
+    if (
+        by_label
+    ):  # Prev.* and Items† first appear in this table; their notes live with it
         label_notes = "\n\n".join(
             [
                 _note(
@@ -768,9 +770,7 @@ def render(snap: dict) -> str:
             ]
         )
         iaa_parts.append(
-            _collapsible(
-                "Detailed breakdown by label", f"{by_label}\n\n{label_notes}"
-            )
+            _collapsible("Detailed breakdown by label", f"{by_label}\n\n{label_notes}")
         )
     if iaa_parts:
         parts.append(

@@ -52,6 +52,7 @@ Usage:
                                             #   export for IAA instead of a throwaway one
   scripts/annotation/log.py --self-check    # run the cadence unit self-check and exit
 """
+
 from __future__ import annotations
 
 import argparse
@@ -116,7 +117,9 @@ _LABELS: dict[Task, list[str]] = {
     for t, c in _TASK_SCHEMA.items()
 }
 
-NEAR_DEGENERATE_FRAC = 0.05  # minority class below this (but >0) → flagged "near-degenerate"
+NEAR_DEGENERATE_FRAC = (
+    0.05  # minority class below this (but >0) → flagged "near-degenerate"
+)
 
 SESSION_GAP_S = float(os.environ.get("LOG_SESSION_GAP_MIN", "30")) * 60
 MIN_RECORDS = int(os.environ.get("LOG_MIN_RECORDS_FOR_TIMING", "5"))
@@ -136,6 +139,7 @@ def log(msg: str) -> None:
 
 # --- metric primitives ------------------------------------------------------
 
+
 def _split_gaps(points: list[tuple[str, datetime]], threshold_s: float):
     """Sort points by time; split consecutive gaps into kept vs session-break."""
     pts = sorted(points, key=lambda r: r[1])
@@ -144,19 +148,28 @@ def _split_gaps(points: list[tuple[str, datetime]], threshold_s: float):
     for i in range(1, len(pts)):
         gap = (pts[i][1] - pts[i - 1][1]).total_seconds()
         if gap > threshold_s:
-            excluded.append({
-                "after_record": pts[i - 1][0],
-                "before_record": pts[i][0],
-                "gap_s": round(gap, 1),
-                "after_at": pts[i - 1][1].isoformat(),
-            })
+            excluded.append(
+                {
+                    "after_record": pts[i - 1][0],
+                    "before_record": pts[i][0],
+                    "gap_s": round(gap, 1),
+                    "after_at": pts[i - 1][1].isoformat(),
+                }
+            )
         else:
             kept.append(gap)
     return pts, kept, excluded
 
 
-def _summarize(n: int, kept: list[float], excluded: list[dict], threshold_s: float,
-               min_records: int, *, with_excluded: bool = True) -> dict:
+def _summarize(
+    n: int,
+    kept: list[float],
+    excluded: list[dict],
+    threshold_s: float,
+    min_records: int,
+    *,
+    with_excluded: bool = True,
+) -> dict:
     out = {
         "median_active_gap_s": None,
         "session_gap_threshold_s": int(threshold_s),
@@ -176,8 +189,13 @@ def _summarize(n: int, kept: list[float], excluded: list[dict], threshold_s: flo
     return out
 
 
-def cadence(points: list[tuple[str, datetime]], *, threshold_s: float | None = None,
-            min_records: int | None = None, with_excluded: bool = True) -> dict:
+def cadence(
+    points: list[tuple[str, datetime]],
+    *,
+    threshold_s: float | None = None,
+    min_records: int | None = None,
+    with_excluded: bool = True,
+) -> dict:
     """Session-guarded median gap between consecutive submission timestamps.
 
     ``points`` is a list of ``(key, submitted_at)``. Gaps above ``threshold_s``
@@ -187,7 +205,9 @@ def cadence(points: list[tuple[str, datetime]], *, threshold_s: float | None = N
     threshold_s = SESSION_GAP_S if threshold_s is None else threshold_s
     min_records = MIN_RECORDS if min_records is None else min_records
     pts, kept, excluded = _split_gaps(points, threshold_s)
-    return _summarize(len(pts), kept, excluded, threshold_s, min_records, with_excluded=with_excluded)
+    return _summarize(
+        len(pts), kept, excluded, threshold_s, min_records, with_excluded=with_excluded
+    )
 
 
 def cadence_report(events: list[dict]) -> dict:
@@ -198,7 +218,9 @@ def cadence_report(events: list[dict]) -> dict:
       (their overnight breaks excluded), the kept gaps pooled into one median =
       true individual annotation speed, plus a per-annotator breakdown.
     """
-    glob = cadence([(e.get("record_id") or str(i), e["at"]) for i, e in enumerate(events)])
+    glob = cadence(
+        [(e.get("record_id") or str(i), e["at"]) for i, e in enumerate(events)]
+    )
 
     by_user: dict[str, list[dict]] = {}
     for e in events:
@@ -210,15 +232,21 @@ def cadence_report(events: list[dict]) -> dict:
     pooled_kept: list[float] = []
     for uid, evs in by_user.items():
         pts, kept, excluded = _split_gaps(
-            [(ev.get("record_id") or str(i), ev["at"]) for i, ev in enumerate(evs)], SESSION_GAP_S)
+            [(ev.get("record_id") or str(i), ev["at"]) for i, ev in enumerate(evs)],
+            SESSION_GAP_S,
+        )
         # Keyed by the Argilla user_id (UUID) — never a real username.
-        by_annotator[uid] = _summarize(len(pts), kept, excluded, SESSION_GAP_S, MIN_RECORDS,
-                                       with_excluded=False)
+        by_annotator[uid] = _summarize(
+            len(pts), kept, excluded, SESSION_GAP_S, MIN_RECORDS, with_excluded=False
+        )
         pooled_kept.extend(kept)
 
     per = {
-        "pooled_median_active_gap_s": (round(statistics.median(pooled_kept), 1)
-                                       if len(pooled_kept) >= MIN_RECORDS else None),
+        "pooled_median_active_gap_s": (
+            round(statistics.median(pooled_kept), 1)
+            if len(pooled_kept) >= MIN_RECORDS
+            else None
+        ),
         "n_annotators": len(by_user),
         "n_gaps_used": len(pooled_kept),
         "by_annotator": by_annotator,
@@ -236,6 +264,7 @@ def wmean(pairs: list[tuple[float, int]]) -> float | None:
 
 # --- label-value statistics -------------------------------------------------
 
+
 def label_summary(n_true: int, n: int) -> dict:
     """Class balance for one binary label: prevalence + degeneracy flags (descriptive).
 
@@ -244,13 +273,21 @@ def label_summary(n_true: int, n: int) -> dict:
     ``near_degenerate`` = minority class present but below NEAR_DEGENERATE_FRAC.
     """
     if n == 0:
-        return {"n": 0, "n_true": 0, "prevalence": None,
-                "degenerate": False, "near_degenerate": False}
+        return {
+            "n": 0,
+            "n_true": 0,
+            "prevalence": None,
+            "degenerate": False,
+            "near_degenerate": False,
+        }
     p = n_true / n
     minority = min(p, 1 - p)
     degenerate = n_true == 0 or n_true == n
     return {
-        "n": n, "n_true": n_true, "prevalence": round(p, 4), "degenerate": degenerate,
+        "n": n,
+        "n_true": n_true,
+        "prevalence": round(p, 4),
+        "degenerate": degenerate,
         "near_degenerate": (not degenerate) and minority < NEAR_DEGENERATE_FRAC,
     }
 
@@ -262,7 +299,9 @@ def _parse_bool(s: str | None) -> bool | None:
     return True if s == "true" else False if s == "false" else None
 
 
-def label_stats(path: Path, labels: list[str], name_to_uuid: dict[str, str]) -> tuple[dict, dict]:
+def label_stats(
+    path: Path, labels: list[str], name_to_uuid: dict[str, str]
+) -> tuple[dict, dict]:
     """One CSV pass over a task export → label distribution, discards, notes rate, bias.
 
     Returns ``(block, raw)``. ``block`` is the serialized stats; ``raw`` carries the
@@ -315,21 +354,29 @@ def label_stats(path: Path, labels: list[str], name_to_uuid: dict[str, str]) -> 
                 continue
             prev = nt / n
             delta = None if pool_prev[lab] is None else round(prev - pool_prev[lab], 4)
-            out[lab] = {"n": n, "n_true": nt, "prevalence": round(prev, 4), "delta_vs_pool": delta}
+            out[lab] = {
+                "n": n,
+                "n_true": nt,
+                "prevalence": round(prev, 4),
+                "delta_vs_pool": delta,
+            }
         by_annotator[uuid] = out
 
     total = n_submitted + n_discarded
     block = {
         "per_label": per_label,
         "discards": {
-            "n_discarded": n_discarded, "n_submitted": n_submitted,
+            "n_discarded": n_discarded,
+            "n_submitted": n_submitted,
             "discard_rate": round(n_discarded / total, 4) if total else None,
             "by_reason": by_reason,
         },
         "notes_rate": round(n_notes / n_submitted, 4) if n_submitted else None,
         "by_annotator": by_annotator,
     }
-    raw = {"per_label": {lab: tuple(counts[lab]) for lab in labels}}  # for pool-then-recompute rollup
+    raw = {
+        "per_label": {lab: tuple(counts[lab]) for lab in labels}
+    }  # for pool-then-recompute rollup
     return block, raw
 
 
@@ -355,6 +402,7 @@ def read_export_meta(export_id: str) -> dict:
 
 
 # --- label / discard / constraint / completeness rollup ---------------------
+
 
 def empty_label_rollup() -> dict:
     return {t: {lab: [0, 0] for lab in _LABELS[t]} for t in TASKS}
@@ -390,7 +438,10 @@ def add_discards(acc: dict, d: dict) -> None:
 
 def finalize_discards(acc: dict) -> dict:
     total = acc["n_discarded"] + acc["n_submitted"]
-    return {**acc, "discard_rate": round(acc["n_discarded"] / total, 4) if total else None}
+    return {
+        **acc,
+        "discard_rate": round(acc["n_discarded"] / total, 4) if total else None,
+    }
 
 
 def add_constraints(acc: dict, c: dict | None) -> None:
@@ -425,7 +476,8 @@ def build_completeness(acc: dict) -> dict | None:
     # by_k_bucket kept as raw {n_panels, n_complete} — matches the sidecar shape; the
     # renderer recomputes per-bucket fractions (_bucket_frac).
     return {
-        "n_panels": acc["n_panels"], "n_complete": acc["n_complete"],
+        "n_panels": acc["n_panels"],
+        "n_complete": acc["n_complete"],
         "fraction_complete": round(acc["n_complete"] / acc["n_panels"], 4),
         "by_k_bucket": acc["by_k_bucket"],
     }
@@ -438,7 +490,12 @@ def build_completeness(acc: dict) -> dict | None:
 # (pending_records = total - completed.) Record counts come from Argilla's
 # dataset.progress(); submitted_responses (and per-annotator timestamps) from the
 # REST records endpoint — the only source of true per-response submission times.
-_COUNT_FIELDS = ("submitted_responses", "total_records", "completed_records", "pending_records")
+_COUNT_FIELDS = (
+    "submitted_responses",
+    "total_records",
+    "completed_records",
+    "pending_records",
+)
 
 
 def _empty_purpose() -> dict:
@@ -446,7 +503,11 @@ def _empty_purpose() -> dict:
 
 
 def empty_counts() -> dict:
-    return {**_empty_purpose(), "production": _empty_purpose(), "calibration": _empty_purpose()}
+    return {
+        **_empty_purpose(),
+        "production": _empty_purpose(),
+        "calibration": _empty_purpose(),
+    }
 
 
 def add_counts(acc: dict, c: dict) -> None:
@@ -458,6 +519,7 @@ def add_counts(acc: dict, c: dict) -> None:
 
 
 # --- per-task extraction ----------------------------------------------------
+
 
 def _purpose_count(events: list[dict], prog: dict | None) -> dict:
     prog = prog or {}
@@ -475,8 +537,12 @@ def task_counts(events: list[dict], prog: dict) -> tuple[dict, set[str]]:
     ``events`` are submitted-response events ``[{user_id, at, purpose, record_id}]``;
     ``prog`` is ``{"production": {...}|None, "calibration": {...}|None}``.
     """
-    production = _purpose_count([e for e in events if e["purpose"] == "production"], prog.get("production"))
-    calibration = _purpose_count([e for e in events if e["purpose"] == "calibration"], prog.get("calibration"))
+    production = _purpose_count(
+        [e for e in events if e["purpose"] == "production"], prog.get("production")
+    )
+    calibration = _purpose_count(
+        [e for e in events if e["purpose"] == "calibration"], prog.get("calibration")
+    )
     count = {k: production[k] + calibration[k] for k in _COUNT_FIELDS}
     count["production"] = production
     count["calibration"] = calibration
@@ -495,7 +561,9 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     for ws_name, wss in settings.workspaces.items():
         for task in wss.tasks:
             for cal in (False, True):
-                name = dataset_name(task, calibration=cal, dataset_id=settings.dataset_id)
+                name = dataset_name(
+                    task, calibration=cal, dataset_id=settings.dataset_id
+                )
                 ds = client.datasets(name=name, workspace=ws_name)
                 if ds is None:
                     continue
@@ -504,22 +572,28 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
                 while True:
                     r = http.get(
                         f"/api/v1/datasets/{ds.id}/records",
-                        params={"include": "responses", "response_statuses": "submitted",
-                                "limit": limit, "offset": offset},
+                        params={
+                            "include": "responses",
+                            "response_statuses": "submitted",
+                            "limit": limit,
+                            "offset": offset,
+                        },
                     )
                     r.raise_for_status()
                     items = r.json().get("items", [])
                     for rec in items:
-                        for resp in (rec.get("responses") or []):
+                        for resp in rec.get("responses") or []:
                             ts = resp.get("inserted_at")
                             if resp.get("status") == "submitted" and ts:
-                                out[task].append({
-                                    "user_id": str(resp.get("user_id")),
-                                    "at": datetime.fromisoformat(ts),
-                                    "purpose": purpose,
-                                    "record_id": str(resp.get("record_id")),
-                                    "task": task.value,
-                                })
+                                out[task].append(
+                                    {
+                                        "user_id": str(resp.get("user_id")),
+                                        "at": datetime.fromisoformat(ts),
+                                        "purpose": purpose,
+                                        "record_id": str(resp.get("record_id")),
+                                        "task": task.value,
+                                    }
+                                )
                     offset += len(items)
                     if len(items) < limit:
                         break
@@ -541,10 +615,15 @@ def task_agreement(task_agr) -> tuple[dict, list[tuple[float, int]]]:
         }
         if lab.alpha is not None and lab.n_items > 0:
             weighted.append((lab.alpha, lab.n_items))
-    return {"per_label": per_label, "mean_alpha": wmean(weighted), "n_labels": len(weighted)}, weighted
+    return {
+        "per_label": per_label,
+        "mean_alpha": wmean(weighted),
+        "n_labels": len(weighted),
+    }, weighted
 
 
 # --- per-domain orchestration ----------------------------------------------
+
 
 def sanitized_config(domain: str) -> tuple[Path, dict]:
     """Write a temp copy of the domain config with non-schema keys dropped.
@@ -573,20 +652,26 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     for ws_name, wss in settings.workspaces.items():
         for task in wss.tasks:
             for cal in (False, True):
-                name = dataset_name(task, calibration=cal, dataset_id=settings.dataset_id)
+                name = dataset_name(
+                    task, calibration=cal, dataset_id=settings.dataset_id
+                )
                 try:
                     ds = client.datasets(name=name, workspace=ws_name)
                     if ds is None:
                         continue
                     prog = dict(ds.progress())
                 except Exception as e:
-                    log(f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}")
+                    log(
+                        f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}"
+                    )
                     continue
                 out[task]["calibration" if cal else "production"] = prog
     return out
 
 
-def process_domain(domain: str, client, http: "httpx.Client", *, use_export: bool = False) -> dict:
+def process_domain(
+    domain: str, client, http: "httpx.Client", *, use_export: bool = False
+) -> dict:
     """Assemble one domain's metrics: counts (progress + REST), agreement (IAA),
     cadence (REST per-response timestamps), label statistics (export CSV).
 
@@ -614,14 +699,23 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
         # With use_export: reuse export.sh's durable per-domain CSVs, no re-export.
         export_id = domain if use_export else EXPORT_ID
         if not use_export:
-            export_annotations(config_path=cfg, export_id=export_id, base_dir=base_dir,
-                               include_discarded=True)
+            export_annotations(
+                config_path=cfg,
+                export_id=export_id,
+                base_dir=base_dir,
+                include_discarded=True,
+            )
 
         agr_by_task: dict = {}
         iaa_error: str | None = None
         try:
-            report = compute_iaa(export_id, config_path=cfg, base_dir=base_dir,
-                                 tasks=TASKS, n_resamples=IAA_RESAMPLES)
+            report = compute_iaa(
+                export_id,
+                config_path=cfg,
+                base_dir=base_dir,
+                tasks=TASKS,
+                n_resamples=IAA_RESAMPLES,
+            )
             agr_by_task = {ta.task: ta for ta in report.tasks}
         except Exception as e:  # IAA-only failure shouldn't sink the counts
             iaa_error = f"{type(e).__name__}: {e}"
@@ -642,7 +736,8 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
             if not csv_path.exists():
                 continue
             label_by_task[task], label_raw_by_task[task] = label_stats(
-                csv_path, _LABELS[task], NAME_TO_UUID)
+                csv_path, _LABELS[task], NAME_TO_UUID
+            )
     except Exception as e:
         label_error = f"{type(e).__name__}: {e}"
         log(f"  ! {domain}: label stats failed ({label_error})")
@@ -687,10 +782,16 @@ def process_domain(domain: str, client, http: "httpx.Client", *, use_export: boo
     if label_error:
         block["label_error"] = label_error
     # Carried out-of-band for total rollup (not serialized at domain level).
-    block["_rollup"] = {"weighted": dom_weighted, "counts": dom_counts,
-                        "annotators": dom_annotators, "events": dom_events,
-                        "label_raw": label_raw_by_task, "discards": dom_discards,
-                        "constraints": meta["constraints"], "completeness": meta["completeness"]}
+    block["_rollup"] = {
+        "weighted": dom_weighted,
+        "counts": dom_counts,
+        "annotators": dom_annotators,
+        "events": dom_events,
+        "label_raw": label_raw_by_task,
+        "discards": dom_discards,
+        "constraints": meta["constraints"],
+        "completeness": meta["completeness"],
+    }
     return block
 
 
@@ -698,7 +799,9 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     url = os.environ.get("ARGILLA_API_URL")
     key = os.environ["ARGILLA_API_KEY"]
     client = resolve_argilla_client(url, key)
-    NAME_TO_UUID.update({name: str(uid) for uid, name in build_user_lookup(client).items()})
+    NAME_TO_UUID.update(
+        {name: str(uid) for uid, name in build_user_lookup(client).items()}
+    )
 
     domains_out: dict = {}
     tot_counts = empty_counts()
@@ -710,7 +813,9 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     tot_constraints: dict = {}
     tot_completeness = empty_completeness()
 
-    with httpx.Client(base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0) as http:
+    with httpx.Client(
+        base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
+    ) as http:
         for domain in domains:
             log(f"=== {domain} ===")
             try:
@@ -742,7 +847,10 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
         "session_gap_threshold_s": int(SESSION_GAP_S),
         "total": {
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
-            "agreement": {"mean_alpha": wmean(tot_weighted), "n_labels": len(tot_weighted)},
+            "agreement": {
+                "mean_alpha": wmean(tot_weighted),
+                "n_labels": len(tot_weighted),
+            },
             "timing": cadence_report(tot_events),
             "timing_by_task": timing_by_task,
             "labels": build_label_block(tot_label),
@@ -755,6 +863,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
 
 
 # --- output -----------------------------------------------------------------
+
 
 def _fmt_gap(seconds: float | None) -> str:
     if seconds is None:
@@ -776,8 +885,10 @@ def print_summary(result: dict) -> None:
     """
     print(f"Annotation log — {result['run_at']}")
     print(f"(session gap threshold: {result['session_gap_threshold_s'] // 60} min)\n")
-    hdr = (f"{'domain':<34} {'resp':>6} {'done':>7} {'total':>8} {'%':>5} "
-           f"{'ann':>4} {'mean_a':>7} {'a-gap':>7}")
+    hdr = (
+        f"{'domain':<34} {'resp':>6} {'done':>7} {'total':>8} {'%':>5} "
+        f"{'ann':>4} {'mean_a':>7} {'a-gap':>7}"
+    )
     print(hdr)
     print("-" * len(hdr))
 
@@ -789,15 +900,19 @@ def print_summary(result: dict) -> None:
         total, done = c["total_records"], c["completed_records"]
         pct = f"{100 * done / total:.0f}%" if total else "—"
         agap = t["per_annotator"]["pooled_median_active_gap_s"]
-        print(f"{name:<34} {c['submitted_responses']:>6} {done:>7} {total:>8} {pct:>5} "
-              f"{c['n_annotators']:>4} {_fmt_alpha(a['mean_alpha']):>7} {_fmt_gap(agap):>7}")
+        print(
+            f"{name:<34} {c['submitted_responses']:>6} {done:>7} {total:>8} {pct:>5} "
+            f"{c['n_annotators']:>4} {_fmt_alpha(a['mean_alpha']):>7} {_fmt_gap(agap):>7}"
+        )
 
     for name, block in result["domains"].items():
         row(name, block)
     print("-" * len(hdr))
     row("TOTAL", result["total"])
-    print("\na-gap = median active gap between an annotator's consecutive "
-          "submissions (session-guarded). Global cadence + breakdowns in the JSONL.")
+    print(
+        "\na-gap = median active gap between an annotator's consecutive "
+        "submissions (session-guarded). Global cadence + breakdowns in the JSONL."
+    )
 
 
 def append_jsonl(result: dict) -> None:
@@ -808,6 +923,7 @@ def append_jsonl(result: dict) -> None:
 
 # --- self-check -------------------------------------------------------------
 
+
 def self_check() -> int:
     """Assert the session guard splits sessions and excludes pause gaps."""
     base = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
@@ -815,16 +931,18 @@ def self_check() -> int:
         ("a", base),
         ("b", base + timedelta(minutes=5)),
         ("c", base + timedelta(minutes=10)),
-        ("d", base + timedelta(hours=16)),          # overnight pause > 30m
+        ("d", base + timedelta(hours=16)),  # overnight pause > 30m
         ("e", base + timedelta(hours=16, minutes=4)),
     ]
     r = cadence(recs, threshold_s=1800, min_records=5)
     assert r["n_gaps_total"] == 4, r
-    assert r["n_gaps_used"] == 3, r            # 5m, 5m, 4m kept
+    assert r["n_gaps_used"] == 3, r  # 5m, 5m, 4m kept
     assert r["n_pause_breaks"] == 1, r
     assert r["n_sessions"] == 2, r
     assert r["median_active_gap_s"] == 300.0, r  # median([300, 300, 240])
-    assert len(r["excluded_gaps"]) == 1 and r["excluded_gaps"][0]["after_record"] == "c", r
+    assert (
+        len(r["excluded_gaps"]) == 1 and r["excluded_gaps"][0]["after_record"] == "c"
+    ), r
     assert r["longest_pause_s"] == r["excluded_gaps"][0]["gap_s"], r
     # Below min_records → median suppressed, but breaks still reported.
     r2 = cadence(recs[:3], threshold_s=1800, min_records=5)
@@ -835,18 +953,31 @@ def self_check() -> int:
 
 # --- main -------------------------------------------------------------------
 
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--domain", help="Process only this domain (smoke test).")
-    ap.add_argument("--no-jsonl", action="store_true", help="Don't append to logs/annotation/log.jsonl.")
-    ap.add_argument("--use-export", action="store_true",
-                    help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
-                         "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
-                         "IAA degrades gracefully if the export is missing.")
-    ap.add_argument("--self-check", action="store_true", help="Run the cadence self-check and exit.")
-    ap.add_argument("--summary", action="store_true",
-                    help="Also print the human-readable table to stdout (off by default; "
-                         "the analysis tables live in reports/annotation/<date>.md via report_tables.py).")
+    ap.add_argument(
+        "--no-jsonl",
+        action="store_true",
+        help="Don't append to logs/annotation/log.jsonl.",
+    )
+    ap.add_argument(
+        "--use-export",
+        action="store_true",
+        help="Reuse an existing per-domain export (export_id=<domain>, e.g. from "
+        "scripts/annotation/export.sh) for IAA instead of running a throwaway export. "
+        "IAA degrades gracefully if the export is missing.",
+    )
+    ap.add_argument(
+        "--self-check", action="store_true", help="Run the cadence self-check and exit."
+    )
+    ap.add_argument(
+        "--summary",
+        action="store_true",
+        help="Also print the human-readable table to stdout (off by default; "
+        "the analysis tables live in reports/annotation/<date>.md via report_tables.py).",
+    )
     args = ap.parse_args()
 
     if args.self_check:
@@ -866,9 +997,11 @@ def main() -> int:
         print_summary(result)
     else:
         c = result["total"]["count"]
-        print(f"log: {result['run_at']} — {len(result['domains'])} domains, "
-              f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
-              f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}")
+        print(
+            f"log: {result['run_at']} — {len(result['domains'])} domains, "
+            f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
+            f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}"
+        )
     return 0
 
 

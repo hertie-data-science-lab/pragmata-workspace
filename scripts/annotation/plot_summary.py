@@ -11,6 +11,7 @@ Usage:
   scripts/annotation/plot_summary.py --line N        # 0-based index; negative from end
   scripts/annotation/plot_summary.py --out-dir DIR   # write PNGs here instead
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,8 +34,17 @@ TASK_ORDER = ["retrieval", "grounding", "generation"]
 
 # Default matplotlib cycle with the leading blue (#1f77b4) dropped, so the
 # per-domain lines never collide with the blue TOTAL line in the rows above.
-DOMAIN_COLORS = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-                 "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
+DOMAIN_COLORS = [
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+]
 
 
 def _save(fig, path: Path) -> None:
@@ -63,21 +73,25 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
                 down.setdefault(name, []).append((t, v["count"]["pending_records"]))
     if len(snaps) < 2:
         return False
+
     def line(ax, name, pts, lw, color=None):
         # Plot against real timestamps so points sit at their true time distance
         # apart (matplotlib date axis), not at fixed categorical intervals.
         xs = [ws.local_dt(p[0]) for p in pts]
         ax.plot(xs, [p[1] for p in pts], marker="o", lw=lw, label=name, color=color)
 
-    fig, ((ax_tu, ax_td), (ax_du, ax_dd)) = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
+    fig, ((ax_tu, ax_td), (ax_du, ax_dd)) = plt.subplots(
+        2, 2, figsize=(13, 9), sharex=True
+    )
 
     # Row 1: TOTAL alone (own scale). Row 2: per-domain lines, sharing one
     # colour per domain across both panels so the single legend reads true.
     line(ax_tu, "TOTAL", up["TOTAL"], 2)
     line(ax_td, "TOTAL", down["TOTAL"], 2)
     domains = sorted(k for k in up if k != "TOTAL")
-    domain_color = {name: DOMAIN_COLORS[i % len(DOMAIN_COLORS)]
-                    for i, name in enumerate(domains)}
+    domain_color = {
+        name: DOMAIN_COLORS[i % len(DOMAIN_COLORS)] for i, name in enumerate(domains)
+    }
     for name in domains:
         line(ax_du, name, up[name], 1, domain_color[name])
     for name in sorted(k for k in down if k != "TOTAL"):
@@ -133,13 +147,26 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
         # bracket the observed proportion) never go negative on a rounding mismatch.
         prev = [v["n_true"] / v["n"] for _, v in items]
         ci = [_wilson_ci(v["n_true"], v["n"]) for _, v in items]
-        xerr = [[max(0.0, p - lo) for p, (lo, _) in zip(prev, ci)],
-                [max(0.0, hi - p) for p, (_, hi) in zip(prev, ci)]]
-        colors = ["#d62728" if v["degenerate"] else "#ff7f0e" if v["near_degenerate"]
-                  else "#1f77b4" for _, v in items]
+        xerr = [
+            [max(0.0, p - lo) for p, (lo, _) in zip(prev, ci)],
+            [max(0.0, hi - p) for p, (_, hi) in zip(prev, ci)],
+        ]
+        colors = [
+            "#d62728"
+            if v["degenerate"]
+            else "#ff7f0e"
+            if v["near_degenerate"]
+            else "#1f77b4"
+            for _, v in items
+        ]
         y = range(len(names))
-        ax.barh(y, prev, color=colors, xerr=xerr,
-                error_kw=dict(ecolor="#333333", capsize=3, lw=1))
+        ax.barh(
+            y,
+            prev,
+            color=colors,
+            xerr=xerr,
+            error_kw=dict(ecolor="#333333", capsize=3, lw=1),
+        )
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)
         ax.set_xlim(0, 1)
@@ -151,11 +178,25 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
         mpatches.Patch(color="#ff7f0e", label="rare (near-degenerate)"),
         mpatches.Patch(color="#d62728", label="degenerate (one class only)"),
     ]
-    fig.legend(handles=key, loc="lower center", ncol=3, fontsize=8,
-               frameon=False, bbox_to_anchor=(0.5, -0.04))
+    fig.legend(
+        handles=key,
+        loc="lower center",
+        ncol=3,
+        fontsize=8,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.04),
+    )
     fig.suptitle("Label prevalence")
-    fig.text(0.995, 0.005, "bars: fraction true · whiskers: 95% Wilson CI",
-             ha="right", va="bottom", fontsize=7, style="italic", color="#555555")
+    fig.text(
+        0.995,
+        0.005,
+        "bars: fraction true · whiskers: 95% Wilson CI",
+        ha="right",
+        va="bottom",
+        fontsize=7,
+        style="italic",
+        color="#555555",
+    )
     _save(fig, out / "label_prevalence.png")
     return True
 
@@ -165,18 +206,25 @@ def plot_pace(snap: dict, out: Path) -> bool:
     domains = snap.get("domains", {})
     dom = []
     for name, v in domains.items():
-        g = (v.get("timing", {}).get("per_annotator") or {}).get("pooled_median_active_gap_s")
+        g = (v.get("timing", {}).get("per_annotator") or {}).get(
+            "pooled_median_active_gap_s"
+        )
         if g is not None:
             dom.append((name, g / 60))
     task_agg: dict[str, list[tuple[float, int]]] = {}
     for v in domains.values():
         for task, tv in v.get("tasks", {}).items():
-            for av in (tv["timing"]["per_annotator"].get("by_annotator") or {}).values():
+            for av in (
+                tv["timing"]["per_annotator"].get("by_annotator") or {}
+            ).values():
                 med, n = av.get("median_active_gap_s"), av.get("n_gaps_used", 0)
                 if med is not None and n > 0:
                     task_agg.setdefault(task, []).append((med, n))
-    tasks = [(t, sum(m * n for m, n in p) / sum(n for _, n in p) / 60)
-             for t in TASK_ORDER if (p := task_agg.get(t))]
+    tasks = [
+        (t, sum(m * n for m, n in p) / sum(n for _, n in p) / 60)
+        for t in TASK_ORDER
+        if (p := task_agg.get(t))
+    ]
     if not dom and not tasks:
         return False
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
@@ -223,8 +271,9 @@ def plot_discards(snap: dict, out: Path) -> bool:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--jsonl", default=ws.LOGS_DIR / "log.jsonl", type=Path)
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
@@ -242,12 +291,14 @@ def main() -> None:
         out = ws.report_dir(snap["run_at"])
         ws.link_latest(out)
 
-    made = sum([
-        plot_progress(snaps, out),
-        plot_label_prevalence(snap, out),
-        plot_pace(snap, out),
-        plot_discards(snap, out),
-    ])
+    made = sum(
+        [
+            plot_progress(snaps, out),
+            plot_label_prevalence(snap, out),
+            plot_pace(snap, out),
+            plot_discards(snap, out),
+        ]
+    )
     print(f"{made} plot(s) -> {out}", file=sys.stderr)
 
 
