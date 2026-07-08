@@ -32,7 +32,8 @@ a timed-out `nc 10.1.23.20:22`).
 
 ```
 sync.sh push <src> <prefix>    # CPU→Blob: upload a tree + a sha256 manifest
-sync.sh pull <prefix> [dest]   # Blob→box: download into data/transfer/<dest>, then verify
+sync.sh pull <prefix>          # Blob→box: download into data/transfer/<prefix>/, then verify
+sync.sh verify <prefix>        # re-check data/transfer/<prefix>/ against its manifest
 ```
 
 Every `push` writes a sorted per-file `sha256` manifest to `<prefix>/MANIFEST.sha256`
@@ -44,8 +45,8 @@ Driven from the `Makefile`:
 
 ```
 make eval-push                       # whole exports tree → blob exports/ (default)
-make eval-pull PREFIX=predictions    # blob predictions/ → data/transfer/predictions/
-make eval-verify PREFIX=exports      # download the manifest and check it, no unpack
+make eval-pull PREFIX=predictions    # blob predictions/ → data/transfer/predictions/ (+ verify)
+make eval-verify PREFIX=exports      # re-check a pulled tree against its manifest
 ```
 
 ## Ownership invariant (staging seam)

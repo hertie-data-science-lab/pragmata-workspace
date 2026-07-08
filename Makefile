@@ -87,13 +87,13 @@ backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" t
 eval-push: ## Push a tree to the eval Blob for the GPU box (DIR= default data/annotation/exports, PREFIX= default exports)
 	bash scripts/eval/sync.sh push $(if $(DIR),$(DIR),data/annotation/exports) $(if $(PREFIX),$(PREFIX),exports)
 
-eval-pull: ## Pull a Blob prefix into data/transfer/ + verify (PREFIX= required, DEST= default PREFIX)
-	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix> [DEST=<dir>]"; exit 2; }
-	bash scripts/eval/sync.sh pull $(PREFIX) $(DEST)
+eval-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
+	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix>"; exit 2; }
+	bash scripts/eval/sync.sh pull $(PREFIX)
 
 eval-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
 	@test -n "$(PREFIX)" || { echo "usage: make eval-verify PREFIX=<prefix>"; exit 2; }
-	cd data/transfer/$(PREFIX) && sha256sum -c MANIFEST.sha256
+	bash scripts/eval/sync.sh verify $(PREFIX)
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
 	@echo "== verifying artifact checksums =="; \

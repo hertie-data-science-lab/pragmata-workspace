@@ -10,9 +10,9 @@
 #   push <src> <prefix>   upload a local tree to blob <prefix>/ (+ <prefix>/MANIFEST.sha256)
 #                         reads pragmata tool trees in place; never writes into them.
 #                         e.g. sync.sh push data/annotation/exports exports
-#   pull <prefix> [dest]  download blob <prefix>/ into data/transfer/<dest> (default <prefix>),
-#                         then sha256sum -c the manifest. Refuses any dest outside data/transfer/.
+#   pull <prefix>         download blob <prefix>/ into data/transfer/<prefix>/, then verify.
 #                         e.g. sync.sh pull predictions
+#   verify <prefix>       re-check data/transfer/<prefix>/ against its manifest (sha256sum -c)
 #
 # Auth: EVAL_BLOB_ACCOUNT / EVAL_BLOB_CONTAINER / EVAL_BLOB_SAS in .env (SAS is
 # data-plane, no ARM rights needed). Requires the `az` CLI on both boxes.
@@ -63,38 +63,45 @@ cmd_push() {
   printf 'snapshot %s: sha256:%s  (%s files)\n' "$prefix" "$snap" "$nfiles"
 }
 
+# Ownership guard: resolve the intended path and assert it stays under
+# data/transfer/, so received data can never land in a tool's own tree (or
+# anywhere else) regardless of '..' segments or an absolute-looking prefix.
+transfer_target() {
+  local prefix="${1:?}" target
+  target="$(realpath -m "$TRANSFER_ROOT/$prefix")"
+  [[ "$target" == "$TRANSFER_ROOT"/* ]] || fatal "refusing path outside data/transfer/: $prefix"
+  printf '%s\n' "$target"
+}
+
 cmd_pull() {
-  local prefix="${1:-}" dest="${2:-${1:-}}"
-  [[ -n "$prefix" ]] || fatal "usage: $0 pull <prefix> [dest]"
-  # Ownership guard: received data only ever lands under data/transfer/. Reject
-  # anything that could escape it — '..' segments or an absolute path — so
-  # `$TRANSFER_ROOT/$dest` is lexically guaranteed to stay inside.
-  [[ "$prefix" == *..* || "$dest" == *..* ]] && fatal "prefix/dest must not contain '..'"
-  [[ "$dest" == /* ]] && fatal "dest must be relative to data/transfer/, got absolute: $dest"
-  local target="$TRANSFER_ROOT/$dest"
+  local prefix="${1:-}"
+  [[ -n "$prefix" ]] || fatal "usage: $0 pull <prefix>"
+  transfer_target "$prefix" >/dev/null   # guard before any I/O
 
   check_disk
-  mkdir -p "$target"
-  section "pull: $EVAL_BLOB_CONTAINER/$prefix/ -> data/transfer/$dest/"
-  # download-batch preserves blob paths, so <prefix>/foo lands at <target>/foo when
-  # we point --destination at the parent and strip the prefix via the pattern dir.
-  az_blob download-batch --source "$EVAL_BLOB_CONTAINER" --destination "$target" \
+  mkdir -p "$TRANSFER_ROOT"
+  section "pull: $EVAL_BLOB_CONTAINER/$prefix/ -> data/transfer/$prefix/"
+  # download-batch preserves the blob path, so <prefix>/foo lands directly at
+  # data/transfer/<prefix>/foo — no flattening needed.
+  az_blob download-batch --source "$EVAL_BLOB_CONTAINER" --destination "$TRANSFER_ROOT" \
     --pattern "$prefix/*" >/dev/null \
     || fatal "blob download-batch failed ($prefix)"
-  # Flatten the mirrored <target>/<prefix>/ back to <target>/.
-  if [[ -d "$target/$prefix" ]]; then
-    cp -a "$target/$prefix/." "$target/" && rm -rf "${target:?}/$prefix" \
-      || fatal "could not flatten $target/$prefix"
-  fi
+  cmd_verify "$prefix"
+}
 
-  [[ -f "$target/MANIFEST.sha256" ]] || fatal "no MANIFEST.sha256 under $prefix/ — nothing to verify against"
+cmd_verify() {
+  local prefix="${1:-}"
+  [[ -n "$prefix" ]] || fatal "usage: $0 verify <prefix>"
+  local target; target="$(transfer_target "$prefix")"
+  [[ -f "$target/MANIFEST.sha256" ]] || fatal "no MANIFEST.sha256 under data/transfer/$prefix — nothing to verify against"
   ( cd "$target" && sha256sum -c MANIFEST.sha256 ) >&2 \
-    || fatal "manifest verification FAILED for data/transfer/$dest — transfer is corrupt"
-  log "verified data/transfer/$dest against manifest"
+    || fatal "manifest verification FAILED for data/transfer/$prefix — data is corrupt"
+  log "verified data/transfer/$prefix against manifest"
 }
 
 case "${1:-}" in
-  push) shift; cmd_push "$@" ;;
-  pull) shift; cmd_pull "$@" ;;
-  *) fatal "usage: $0 {push <src> <prefix> | pull <prefix> [dest]}" ;;
+  push)   shift; cmd_push "$@" ;;
+  pull)   shift; cmd_pull "$@" ;;
+  verify) shift; cmd_verify "$@" ;;
+  *) fatal "usage: $0 {push <src> <prefix> | pull <prefix> | verify <prefix>}" ;;
 esac
