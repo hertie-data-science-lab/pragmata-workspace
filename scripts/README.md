@@ -1,7 +1,7 @@
 # scripts/
 
-Committed pipeline code. See the root README for the [pipeline overview](../README.md#pipeline)
-and [make targets](../README.md#make-targets).
+Committed pipeline code. See the [annotation pipeline](../docs/annotation.md) doc for the
+overview; run `make help` for the targets.
 
 - `pipeline.sh` — orchestrator: runs a contiguous slice of the stages (pre-flight, lock, parallelism).
 - `daily.sh` — nightly logging (export → `logs/annotation/log.jsonl`).
