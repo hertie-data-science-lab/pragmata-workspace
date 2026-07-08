@@ -12,7 +12,6 @@ data/
 └── annotation/
     ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
     └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
-         LLM querygen cache + run dirs (non-deterministic; regenerable)
 ```
 
 ## How to populate
