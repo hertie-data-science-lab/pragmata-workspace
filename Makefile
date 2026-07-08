@@ -31,7 +31,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup reproduce-curation
+.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup reproduce-curation eval-push eval-pull eval-verify
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -83,6 +83,17 @@ daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report
 
 backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
 	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
+
+eval-push: ## Push a tree to the eval Blob for the GPU box (DIR= default data/annotation/exports, PREFIX= default exports)
+	bash scripts/eval/sync.sh push $(if $(DIR),$(DIR),data/annotation/exports) $(if $(PREFIX),$(PREFIX),exports)
+
+eval-pull: ## Pull a Blob prefix into data/transfer/ + verify (PREFIX= required, DEST= default PREFIX)
+	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix> [DEST=<dir>]"; exit 2; }
+	bash scripts/eval/sync.sh pull $(PREFIX) $(DEST)
+
+eval-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
+	@test -n "$(PREFIX)" || { echo "usage: make eval-verify PREFIX=<prefix>"; exit 2; }
+	cd data/transfer/$(PREFIX) && sha256sum -c MANIFEST.sha256
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
 	@echo "== verifying artifact checksums =="; \
