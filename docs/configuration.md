@@ -5,6 +5,10 @@
   `OPENAI_BASE_URL` (querygen); `PUBLIKATIONSBOT_URL` (bot); `PRAGMATA_SRC` (path to the
   `pragmata` checkout). For Azure, set `OPENAI_API_KEY` to your Azure key and
   `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
+  The scripts under `scripts/` load `.env` themselves (via `scripts/lib/common.sh`), but for
+  ad-hoc `pragmata`/`make` commands typed directly, install [direnv](https://direnv.net) and
+  add its hook to your shell rc (e.g. `eval "$(direnv hook bash)"`), then run `direnv allow`
+  here — the committed `.envrc` auto-loads `.env` on `cd`.
 - **Operational tunables** live in `configs/settings.conf` (queries-per-spec, bot
   concurrency, throttle, disk thresholds) — committed.
 - **querygen runtime** (model, reasoning effort, batching) lives in
