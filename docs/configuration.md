@@ -3,7 +3,9 @@
 - **Secrets** live in `.env` (gitignored) — copy `.env.example` and fill in. Required keys:
   `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup); `OPENAI_API_KEY`,
   `OPENAI_BASE_URL` (querygen); `PUBLIKATIONSBOT_URL` (bot); `PRAGMATA_SRC` (path to the
-  `pragmata` checkout). For Azure, set `OPENAI_API_KEY` to your Azure key and
+  `pragmata` checkout); `EVAL_BLOB_ACCOUNT`, `EVAL_BLOB_CONTAINER`, `EVAL_BLOB_SAS` (eval data
+  transport only - see [Eval data transport](eval-data-transport.md)). For Azure, set
+  `OPENAI_API_KEY` to your Azure key and
   `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
   The scripts under `scripts/` load `.env` themselves (via `scripts/lib/common.sh`), but for
   ad-hoc `pragmata`/`make` commands typed directly, install [direnv](https://direnv.net) and
