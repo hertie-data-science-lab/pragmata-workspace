@@ -51,7 +51,10 @@ Each is a top-level prefix in the container, pinned by its own `MANIFEST.sha256`
 | `make eval-verify PREFIX=<p>` | `sync.sh verify <p>` | re-check `data/transfer/<p>/` against its manifest, no download |
 
 `push` takes `DIR=` / `PREFIX=` overrides; `pull`/`verify` require `PREFIX=`. A `pull` always
-lands at `data/transfer/<prefix>/` - there is no separate destination knob.
+lands at `data/transfer/<prefix>/` - there is no separate destination knob. The default
+`DIR` is the CPU-side `data/annotation/exports`, so pushing eval outputs back from the GPU
+box means overriding it, e.g. `make eval-push DIR=<eval-output-tree> PREFIX=predictions`
+(or `PREFIX=checkpoints`).
 
 ## Integrity
 
@@ -107,9 +110,16 @@ make eval-push                            # data/annotation/exports → blob exp
 make eval-pull PREFIX=exports             # → data/transfer/exports/  (+verify)
 pragmata eval train --labeled-data-path data/transfer/exports/<topic>/<task>.csv ...
 
-# 3. CPU box - collect the results and checkpoints
-make eval-pull PREFIX=predictions
-make eval-pull PREFIX=checkpoints         # before tearing the GPU box down
+# 3. GPU box - push the results + checkpoints back to the blob.
+#    Override DIR=: eval-push defaults it to the CPU-side exports path, so point
+#    it at the eval outputs (under data/eval/). Each push writes its own manifest
+#    + snapshot pin - record the checkpoint pin, it is not reproducible from inputs.
+make eval-push DIR=<eval-predictions-tree> PREFIX=predictions
+make eval-push DIR=<eval-checkpoints-tree> PREFIX=checkpoints   # before teardown
+
+# 4. CPU box - collect the results and checkpoints
+make eval-pull PREFIX=predictions          # → data/transfer/predictions/  (+verify)
+make eval-pull PREFIX=checkpoints          # → data/transfer/checkpoints/   (+verify)
 ```
 
 ## Data sensitivity
