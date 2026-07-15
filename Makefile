@@ -84,9 +84,9 @@ daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report
 backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
 	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
 
-eval-push: ## Push a tree to the eval Blob (DIR= source tree, PREFIX= dest prefix; both required)
-	@test -n "$(DIR)" && test -n "$(PREFIX)" || { echo "usage: make eval-push DIR=<tree> PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh push "$(DIR)" "$(PREFIX)"
+eval-push: ## Push a tree to the eval Blob (SRC= source tree, PREFIX= dest prefix; both required)
+	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make eval-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
+	bash scripts/eval/sync.sh push "$(SRC)" "$(PREFIX)"
 
 eval-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
 	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix>"; exit 2; }
