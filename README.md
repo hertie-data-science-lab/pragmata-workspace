@@ -30,11 +30,47 @@ Data, logs, reports and Argilla backups are **not** committed — see
 [Data & secrets](docs/configuration.md#data--secrets) and
 [Reproducibility](docs/reproducibility.md).
 
+## Make targets
+
+`make help` prints this list. Every target is a thin wrapper over `scripts/` (each stays
+runnable directly), taking `VAR=value` overrides.
+
+```
+# Pipeline  (querygen -> bot -> combine -> setup -> import)
+make pipeline       # run a slice: FROM= TO= ONLY= FILTER= JOBS=   (no args = full run)
+make querygen       # generate synthetic queries             (SPECS=a,b to filter)
+make bot            # run publikationsbot over the queries    (SPEC=x to filter)
+make combine        # pool runs + intersperse edgecases       (DOMAINS="a b")
+make setup          # provision Argilla workspaces + users    (DOMAIN= required)
+make import         # import one domain's combined JSONL       (DOMAIN= required)
+
+# Annotation ops
+make export         # export annotations to per-task CSVs      (DOMAIN= to filter)
+make log            # append an annotation snapshot to logs/annotation/log.jsonl
+make report         # render latest snapshot -> reports/annotation/<date>/ (+ plots)
+make report-tables  # render tables only -> report.md
+make report-pdf     # render tables -> report.pdf              (needs pandoc + xelatex)
+make plots          # render plots only, PNGs                  (needs matplotlib)
+make daily          # nightly logging: export -> log.jsonl
+make backup         # status-preserving Argilla backup         (ARGS="restore <dir>")
+make reproduce-curation  # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
+
+# Eval data transport  (see docs/eval-data-transport.md)
+make eval-push      # push a tree to the eval Blob             (DIR= PREFIX= have defaults)
+make eval-pull      # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
+make eval-verify    # re-verify a pulled tree against its manifest (PREFIX=)
+
+make help           # list every target
+```
+
 ## Documentation
 
 - [Annotation pipeline](docs/annotation.md) — build flow, orchestrator, logging/reporting,
   backup/restore.
-- [Eval pipeline](docs/eval.md) — planned sibling (stub today).
+- [Eval pipeline](docs/eval.md) - sibling pipeline; data transport has shipped, the
+  train/predict/score stages are still to build.
+- [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
+  checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) — dated lineage bundles + `reproduce-curation`.
 - [Configuration](docs/configuration.md) — secrets, tunables, annotator roster, data &
   secrets.
