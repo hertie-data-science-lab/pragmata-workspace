@@ -9,9 +9,11 @@ belongs where and how to obtain it.
 data/
 ├── querygen/            LLM querygen cache + run dirs (non-deterministic; regenerable)
 ├── publikationsbot/     source query corpora (<slug>_combined.jsonl) + querygen intermediates
-└── annotation/
-    ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
-    └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
+├── annotation/
+│   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
+│   └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
+├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
+└── transfer/            Blob staging for eval data (see transfer/README.md); moves via Blob, not git
 ```
 
 ## How to populate
