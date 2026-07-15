@@ -44,9 +44,9 @@ receiving end and fails loudly on any mismatch.
 Driven from the `Makefile`:
 
 ```
-make eval-push                       # whole exports tree → blob exports/ (default)
-make eval-pull PREFIX=predictions    # blob predictions/ → data/transfer/predictions/ (+ verify)
-make eval-verify PREFIX=exports      # re-check a pulled tree against its manifest
+make eval-push DIR=<tree> PREFIX=<p>  # upload <tree> to blob <prefix>/ (+ manifest, pin)
+make eval-pull PREFIX=predictions     # blob predictions/ → data/transfer/predictions/ (+ verify)
+make eval-verify PREFIX=exports       # re-check a pulled tree against its manifest
 ```
 
 ## Ownership invariant (staging seam)
