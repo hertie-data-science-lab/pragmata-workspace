@@ -3,8 +3,7 @@
 Dated records of the operations that produced the live Argilla annotation instance -
 **one bundle per operation**, in chronological order. Together they are the instance's
 **lineage**. Stage 1 is a replayable build step; the later curation/descope stages are
-**declarative end-states** (like `kubectl apply --prune` — you reduce the live instance to
-the declared keep-lists, not replay a diff). So "rebuild" means: import stage 1's corpus,
+**declarative end-states**. So "rebuild" means: import stage 1's corpus,
 then apply each later stage's keep-lists in order.
 
 | # | Bundle | Operation |
