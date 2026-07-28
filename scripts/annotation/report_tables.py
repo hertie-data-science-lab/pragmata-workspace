@@ -77,7 +77,11 @@ def _pctc(done, total) -> str:
 
 
 def _wmean(pairs) -> float:
-    """Weighted mean of (value, weight) pairs; 0.0 when the total weight is 0."""
+    """Weighted mean of (value, weight) pairs; 0.0 when the total weight is 0.
+
+    Used for annotator-bias deltas and pace, not for α — α is a ratio and is pooled at
+    the item level upstream (see log.py's `pooled_agreement`), never averaged here.
+    """
     tot = sum(w for _, w in pairs)
     return sum(v * w for v, w in pairs) / tot if tot else 0.0
 
@@ -287,84 +291,82 @@ def per_task_counts(domains: dict) -> str:
     )
 
 
-def iaa_by_domain(domains: dict, total: dict) -> str:
-    """Pooled α per domain (n_items-weighted mean across that domain's labels, as logged)."""
+def iaa_by_task(pooled: dict) -> str:
+    """Headline α per task: unweighted mean across that task's pooled per-label α.
+
+    Unweighted across labels is deliberate — it defines the quantity of interest as "we
+    care about each label equally". Labels with no variance are flagged below the table:
+    their α is undefined but still enters this mean, which can lift it materially.
+    """
+    per_task = pooled.get("per_task") or {}
     rows = []
-
-    def alpha_key(kv):  # highest mean α first; domains without α (None) sort last
-        a = kv[1]["agreement"].get("mean_alpha")
-        return (-(a if a is not None else -2), kv[0])
-
-    for name, v in sorted(domains.items(), key=alpha_key):
-        a = v["agreement"]
-        if not a.get("n_labels"):
+    for task in TASK_ORDER:
+        tv = per_task.get(task)
+        if not tv or not tv.get("n_labels"):
             continue
         rows.append(
-            [name, _alpha_cell(a.get("mean_alpha")), (str(a["n_labels"]), _RIGHT)]
-        )
-    ta = total.get("agreement") or {}
-    if ta.get("n_labels"):
-        tma = ta.get("mean_alpha")
-        rows.append(
-            [
-                ("<b>TOTAL</b>", ""),
-                (f"<b>{_alpha(tma)}</b>", _alpha_shade(tma)),
-                (f"<b>{ta['n_labels']}</b>", _RIGHT),
-            ]
+            [task, _alpha_cell(tv.get("mean_alpha")), (str(tv["n_labels"]), _RIGHT)]
         )
     if not rows:
         return ""
-    return _html_table(["Domain", "mean α", "Labels‡"], rows)
+    return _html_table(["Task", "α (pooled)", "Labels‡"], rows)
 
 
-def iaa_by_task(domains: dict) -> str:
-    """Pooled α per task across all domains (n_items-weighted mean of each task's per-label α)."""
-    agg: dict[str, list[tuple[float, int]]] = {}
-    for v in domains.values():
-        for task, tv in v.get("tasks", {}).items():
-            for lv in (tv["agreement"].get("per_label") or {}).values():
-                if lv.get("alpha") is not None and lv.get("n_items", 0) > 0:
-                    agg.setdefault(task, []).append((lv["alpha"], lv["n_items"]))
+def iaa_by_label(pooled: dict) -> str:
+    """Pooled α per (task, label), published with the marginals that produced it.
+
+    α = 1 − Do/De, and De is a function of prevalence alone, so a label whose minority
+    class is tiny has De ≈ 0 and an α that swings on a handful of ratings. At **minority
+    = 0** there is no variance at all: De = 0, α is undefined, and pragmata returns 1.000
+    by convention. n / minority / prevalence / De are shown so that is visible rather than
+    inferred.
+    """
+    per_task = pooled.get("per_task") or {}
     rows = []
     for task in TASK_ORDER:
-        pairs = agg.get(task)
-        if not pairs:
+        tv = per_task.get(task)
+        if not tv:
             continue
-        rows.append([task, _alpha_cell(_wmean(pairs)), (str(len(pairs)), _RIGHT)])
+        entries = sorted(
+            (tv.get("per_label") or {}).items(),
+            key=lambda kv: -(kv[1].get("alpha") if kv[1].get("alpha") is not None else -2),
+        )
+        for lbl, lv in entries:
+            de = lv.get("expected_disagreement")
+            n_min = lv.get("n_minority")
+            flag = " ⚠" if n_min == 0 else ""
+            rows.append(
+                [
+                    task,
+                    f"{lbl}{flag}",
+                    _alpha_cell(lv.get("alpha")),
+                    (_pct(lv.get("pct_agreement")), _RIGHT),
+                    (_int(lv.get("n_items")), _RIGHT),
+                    (_int(lv.get("n_ratings")), _RIGHT),
+                    (_int(n_min), _RIGHT),
+                    (_prev(lv), _RIGHT),
+                    (_f(de, 3) if de is not None else "—", _RIGHT),
+                ]
+            )
     if not rows:
         return ""
-    return _html_table(["Task", "mean α", "Labels‡"], rows)
-
-
-def iaa_by_label(domains: dict) -> str:
-    """Pooled α per label across all domains (n_items-weighted mean of each label's
-    per-domain α, within its task). One level finer than the by-task view, one coarser
-    than the detailed by-domain×task×label breakdown."""
-    agg: dict[tuple[str, str], list[tuple[float, int]]] = {}
-    for v in domains.values():
-        for task, tv in v.get("tasks", {}).items():
-            for lbl, lv in (tv["agreement"].get("per_label") or {}).items():
-                if lv.get("alpha") is not None and lv.get("n_items", 0) > 0:
-                    agg.setdefault((task, lbl), []).append((lv["alpha"], lv["n_items"]))
-    rows = []
-    for task in TASK_ORDER:
-        entries = [
-            (lbl, _wmean(pairs), len(pairs))
-            for (t, lbl), pairs in agg.items()
-            if t == task
-        ]
-        entries.sort(key=lambda e: -e[1])  # highest mean α first
-        for lbl, mean_a, n in entries:
-            rows.append([task, lbl, _alpha_cell(mean_a), (str(n), _RIGHT)])
-    if not rows:
-        return ""
-    return _html_table(["Task", "Label", "mean α", "Labels‡"], rows)
+    return _html_table(
+        ["Task", "Label", "α (pooled)", "% agree", "Items†", "Ratings", "Minority", "Prev.*", "De"],
+        rows,
+    )
 
 
 def iaa_per_label(domains: dict) -> str:
-    """One combined table of per-label agreement across all (domain, task) with calibration overlap.
+    """Per-domain α — a **diagnostic**, not a headline. One row per (domain, task, label).
+
+    Answers "which domain looks like it is struggling". Deliberately has no per-domain
+    aggregate: α is pooled across domains for the headline (see `iaa_by_task`), and
+    averaging these values is what that replaced. Read them knowing a domain whose label
+    never varies shows α = 1.000 off a De of 0.
 
     Items = calibration-overlap items, Ann = annotators in that overlap (both per domain/task).
+    Prev. here is over *all submitted* rows for the domain (class balance), unlike the pooled
+    by-label table where it is over the calibration rows α is computed on.
     """
     rows = []
     for name, v in sorted(domains.items()):
@@ -730,48 +732,57 @@ def render(snap: dict) -> str:
         "### By domain\n\n" + progress_by_domain(domains, total),
         _collapsible("By domain x task", per_task_counts(domains)),
     ]
-    # Inter-annotator agreement - own section, three granularities. α-shading legend up
-    # top; each per-column footnote sits below the first table that uses its marker.
-    bd, bt = iaa_by_domain(domains, total), iaa_by_task(domains)
-    bl = iaa_by_label(domains)
+    # Inter-annotator agreement. The headline is pooled: item-level data from every domain
+    # in one reliability matrix per (task, label). Per-domain α is a diagnostic only and
+    # lives in the collapsed breakdown - it is never averaged into a headline, because α is
+    # a ratio (1 - Do/De) and averaging ratios across strata estimates nothing.
+    pooled = snap.get("pooled_agreement") or {}
+    bt, bl = iaa_by_task(pooled), iaa_by_label(pooled)
     by_label = iaa_per_label(domains)  # long - collapsed by default
     iaa_parts = []
-    if bd or bt or bl or by_label:
+    if bt or bl or by_label:
         iaa_parts.append(
             _note(
                 f"Cell shading flags low agreement - **yellow**: α below {ALPHA_RELIABLE} "
                 "(Krippendorff's reliability cutoff); **red**: α below 0 (agreement worse than chance)."
             )
         )
+        iaa_parts.append(
+            _note(
+                "α is **pooled**: one reliability matrix per task x label over item-level "
+                "calibration data from every domain, not an average of per-domain α. "
+                "Per-task figures are the unweighted mean across that task's labels."
+            )
+        )
     labels_note = _note(
-        "**‡Labels**: the number of per-label α scores pooled into the mean (one per "
-        "label × task × domain in scope); the pooled mean is weighted by each score's **Items**."
+        "**‡Labels**: the number of pooled per-label α averaged into the task figure, "
+        "each counting equally."
     )
-    labels_done = False
-    if bd:
-        iaa_parts += [
-            f"### By domain\n\n{bd}",
-            labels_note,
-        ]  # ‡Labels first appears here
-        labels_done = True
     if bt:
-        iaa_parts.append(f"### By task\n\n{bt}")
-        if not labels_done:
-            iaa_parts.append(labels_note)
-            labels_done = True
+        iaa_parts += [f"### By task\n\n{bt}", labels_note]
     if bl:
-        iaa_parts.append(f"### By label\n\n{bl}")
-        if not labels_done:
-            iaa_parts.append(labels_note)
-            labels_done = True
+        iaa_parts += [
+            f"### By label\n\n{bl}",
+            _note(
+                "**Ratings / Minority / Prev. / De** describe the calibration data the α "
+                "beside them was computed on. **De** is expected disagreement, the "
+                "denominator of α = 1 - Do/De, and depends only on prevalence: when the "
+                "minority class is small De approaches 0 and α swings on a handful of "
+                "ratings. **⚠ marks Minority = 0** - the label never varies, so De = 0 and "
+                "α is undefined; 1.000 there is a convention, not a measurement, and it "
+                "still enters the task mean above."
+            ),
+        ]
     if (
         by_label
     ):  # Prev.* and Items† first appear in this table; their notes live with it
         label_notes = "\n\n".join(
             [
                 _note(
-                    "**\\*Prev. = prevalence**: the share of submitted annotations where the "
-                    "label is true. We track it to catch degenerate or near-degenerate labels (one class "
+                    "**\\*Prev. = prevalence**: the share of **all submitted** annotations for that "
+                    "domain where the label is true - class balance, so a different population from the "
+                    "Prev. in the pooled by-label table above, which covers only the calibration rows α "
+                    "is computed on. We track it to catch degenerate or near-degenerate labels (one class "
                     "almost never chosen), which flag an ambiguous guideline or a label too one-sided to "
                     "yield meaningful agreement."
                 ),
@@ -872,6 +883,23 @@ def main() -> None:
         snap = json.loads(lines[args.line])
     except IndexError:
         sys.exit(f"line {args.line} out of range ({len(lines)} snapshots)")
+
+    # Refuse older snapshots outright. log.jsonl is append-only and --line renders any of
+    # it, so this code is routinely handed pre-pooling snapshots. Those carry per-domain
+    # n_items-weighted means and no `pooled_agreement`; rendering them here would silently
+    # omit the entire agreement section (the old guards skipped on a missing key rather
+    # than raising), producing a report that looks complete but has lost its headline
+    # metric. Fail loudly instead.
+    got = snap.get("schema_version", 1)
+    if got < ws.SNAPSHOT_SCHEMA_VERSION:
+        sys.exit(
+            f"snapshot at line {args.line} ({snap.get('run_at', 'unknown date')}) is "
+            f"schema v{got}; this renderer needs v{ws.SNAPSHOT_SCHEMA_VERSION}.\n"
+            "Agreement moved from per-domain weighted means of α to a single pooled α "
+            "(one reliability matrix per task x label over all domains), so the two are "
+            "not interchangeable.\n"
+            "To render this snapshot, check out a revision from before that change."
+        )
 
     md = render(snap)
     if args.stdout:

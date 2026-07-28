@@ -54,6 +54,13 @@ EXPORTS_DIR = _A.data / "exports"  # pragmata annotation tool: exports/imports
 RUNS_DIR = DATA_DIR / "querygen" / "runs"  # querygen tool (pragmata sibling)
 OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 
+# Shape of one logs/annotation/log.jsonl snapshot. Lives here because log.py writes it and
+# report_tables.py reads it, and a duplicated constant would drift. Bump on an incompatible
+# change; report_tables.py refuses anything older rather than rendering a partial report.
+#   2: agreement is a single pooled α per (task, label) under `pooled_agreement`; the
+#      per-domain and total n_items-weighted `mean_alpha` blocks are gone.
+SNAPSHOT_SCHEMA_VERSION = 2
+
 
 def load_dotenv(path: Path) -> None:
     """Load KEY=VALUE lines into os.environ; existing env wins. No inline comments."""

@@ -16,8 +16,14 @@ and emits three progress metrics, rolled up task -> domain -> total:
        • total_records       (imported; the denominator).
      Record counts come from Argilla ``dataset.progress()``; response counts
      from the REST records endpoint.
-  2. Calibration agreement — per-label Krippendorff's alpha (+ an n_items-weighted
-     mean as a headline), straight off pragmata's IAA (calibration overlap only).
+  2. Calibration agreement — Krippendorff's alpha over the calibration overlap, from
+     pragmata's IAA. The headline is **pooled**: item-level data from every domain goes
+     into one reliability matrix per (task, label), then those are averaged unweighted
+     across labels per task. alpha = 1 - Do/De is a ratio, so per-domain alphas are never
+     averaged; they are kept as a diagnostic only. Each pooled alpha is published with the
+     marginals that produced it (n, minority count, prevalence, De) because a label that
+     barely varies has De ~ 0, which makes alpha unstable — and at zero variance undefined,
+     where pragmata returns 1.0 by convention.
   3. Annotation cadence — median time between consecutive submissions, both
      per-annotator (true individual pace) and global (team throughput), each
      session-guarded (see below).
@@ -253,12 +259,68 @@ def cadence_report(events: list[dict]) -> dict:
     return {"per_annotator": per, "global": glob}
 
 
-def wmean(pairs: list[tuple[float, int]]) -> float | None:
-    """n_items-weighted mean of (alpha, n_items); None if no weight."""
-    total = sum(n for _, n in pairs)
-    if not total:
+def umean(values: list[float]) -> float | None:
+    """Unweighted mean; None if empty.
+
+    The headline rule: α is a ratio (1 − Do/De), so α values must never be averaged
+    across *domains* — pool the item-level data and recompute instead (see
+    :func:`pooled_agreement`). Averaging across *labels* is a different thing and is
+    deliberate: it encodes "we care about each label equally".
+    """
+    if not values:
         return None
-    return round(sum(a * n for a, n in pairs) / total, 4)
+    return round(sum(values) / len(values), 4)
+
+
+# --- pooled agreement -------------------------------------------------------
+
+
+def expected_disagreement(n_true: int, n: int) -> float | None:
+    """Krippendorff's De for one binary nominal label: 2·n₀·n₁/(n(n−1)).
+
+    De is a function of the marginal alone. It is the denominator of α = 1 − Do/De, so
+    when a label barely varies De → 0 and α becomes an unstable ratio of near-zero
+    numbers; at zero variance De = 0 exactly and α is undefined (pragmata's
+    ``krippendorff_alpha_nominal`` returns 1.0 there by convention). pragmata's
+    ``LabelAgreement`` is frozen and doesn't expose De, so we derive it here to make that
+    degeneracy visible in the report rather than silently averaged into a headline.
+    """
+    if n < 2:
+        return None
+    return round(2 * (n - n_true) * n_true / (n * (n - 1)), 4)
+
+
+def calibration_marginals(path: Path, labels: list[str]) -> dict[str, dict]:
+    """Per-label (n, n_true, n_minority, prevalence, De) over calibration-submitted rows.
+
+    Deliberately the *same* row population pragmata's IAA uses — ``run_iaa`` filters to
+    ``calibration and response_status == "submitted"`` — so these diagnostics are joinable
+    with the α they explain. ``label_stats`` computes prevalence over *all* submitted rows,
+    which is the right population for class balance but not for reading α.
+    """
+    counts = {lab: [0, 0] for lab in labels}  # [n_true, n]
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            if _parse_bool(row.get("calibration")) is not True:
+                continue
+            if row.get("response_status") != "submitted":
+                continue
+            for lab in labels:
+                v = _parse_bool(row.get(lab))
+                if v is None:
+                    continue
+                counts[lab][1] += 1
+                counts[lab][0] += int(v)
+    out = {}
+    for lab, (n_true, n) in counts.items():
+        out[lab] = {
+            "n_ratings": n,
+            "n_true": n_true,
+            "n_minority": min(n_true, n - n_true),
+            "prevalence": round(n_true / n, 4) if n else None,
+            "expected_disagreement": expected_disagreement(n_true, n),
+        }
+    return out
 
 
 # --- label-value statistics -------------------------------------------------
@@ -599,12 +661,17 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     return out
 
 
-def task_agreement(task_agr) -> tuple[dict, list[tuple[float, int]]]:
-    """Per-label alpha + n_items-weighted mean, from a TaskAgreement (or None)."""
+def task_agreement(task_agr) -> dict:
+    """Per-domain, per-label α from a TaskAgreement (or None) — a **diagnostic**.
+
+    No aggregate here by design: α must not be averaged across domains (see
+    :func:`pooled_agreement` for the headline). These per-domain values answer "which
+    domain looks like it is struggling", and are read with the pooled marginals in mind —
+    a domain whose label never varies reports α = 1.0 from a De of 0.
+    """
     if task_agr is None:
-        return {"per_label": {}, "mean_alpha": None, "n_labels": 0}, []
+        return {"per_label": {}}
     per_label = {}
-    weighted: list[tuple[float, int]] = []
     for lab in task_agr.labels:
         per_label[lab.label] = {
             "alpha": lab.alpha,
@@ -612,13 +679,7 @@ def task_agreement(task_agr) -> tuple[dict, list[tuple[float, int]]]:
             "n_annotators": lab.n_annotators,
             "pct_agreement": lab.pct_agreement,
         }
-        if lab.alpha is not None and lab.n_items > 0:
-            weighted.append((lab.alpha, lab.n_items))
-    return {
-        "per_label": per_label,
-        "mean_alpha": wmean(weighted),
-        "n_labels": len(weighted),
-    }, weighted
+    return {"per_label": per_label}
 
 
 # --- per-domain orchestration ----------------------------------------------
@@ -753,31 +814,30 @@ def process_domain(
     tasks_out: dict = {}
     dom_counts = empty_counts()
     dom_annotators: set[str] = set()
-    dom_weighted: list[tuple[float, int]] = []
     dom_events: list[dict] = []
     dom_discards = empty_discards()
 
     for task in TASKS:
         events = responses.get(task, [])
         count, annotators = task_counts(events, progress.get(task, {}))
-        agr, weighted = task_agreement(agr_by_task.get(task))
 
         tasks_out[task.value] = {
             "count": {**count, "n_annotators": len(annotators)},
-            "agreement": agr,
+            "agreement": task_agreement(agr_by_task.get(task)),
             "timing": cadence_report(events),
             "labels": label_by_task.get(task),
         }
         add_counts(dom_counts, count)
         dom_annotators |= annotators
-        dom_weighted.extend(weighted)
         dom_events.extend(events)
         if task in label_by_task:
             add_discards(dom_discards, label_by_task[task]["discards"])
 
+    # No domain-level `agreement` aggregate: α is not averageable across labels-in-a-domain
+    # any more than across domains, and a per-domain headline is exactly what the pooled
+    # rule replaces. Per-label α stays under tasks.<task>.agreement.per_label.
     block = {
         "count": {**dom_counts, "n_annotators": len(dom_annotators)},
-        "agreement": {"mean_alpha": wmean(dom_weighted), "n_labels": len(dom_weighted)},
         "timing": cadence_report(dom_events),
         "discards": finalize_discards(dom_discards),
         "constraints": meta["constraints"],
@@ -790,7 +850,7 @@ def process_domain(
         block["label_error"] = label_error
     # Carried out-of-band for total rollup (not serialized at domain level).
     block["_rollup"] = {
-        "weighted": dom_weighted,
+        "export_dir": export_dir,  # source for the pooled-α pass in run()
         "counts": dom_counts,
         "annotators": dom_annotators,
         "events": dom_events,
@@ -800,6 +860,103 @@ def process_domain(
         "completeness": meta["completeness"],
     }
     return block
+
+
+# --- pooled agreement across domains ----------------------------------------
+
+POOLED_EXPORT_ID = "_pooled"
+
+
+def pooled_agreement(
+    export_dirs: list[tuple[str, Path]], scratch_base: Path, config_path: Path
+) -> dict:
+    """α computed once per (task, label) on item-level data pooled across all domains.
+
+    This is the headline statistic. α = 1 − Do/De is a ratio of two aggregates, so the
+    correct estimate is the ratio computed on the pooled data — not an average of
+    per-domain α, which estimates no defined quantity and (where a label doesn't vary
+    within a domain) averages values that are undefined. Per-domain α survives as a
+    diagnostic only.
+
+    Implemented by concatenating each task's per-domain export CSVs into one synthetic
+    export and handing that to pragmata's ``compute_iaa``, so the α implementation, the
+    calibration filter and the unit/coder pivot are exactly the per-domain ones. Units are
+    globally unique (``record_uuid``, content-addressed; ``record_uuid:chunk_id`` for
+    retrieval), so concatenation cannot merge units across domains.
+
+    The pooled export is written under ``scratch_base`` — never into
+    ``data/annotation/exports/``, which is published by eval-push and whose subdirectories
+    are read downstream as the domain list.
+    """
+    pooled_dir = scratch_base / "annotation" / "exports" / POOLED_EXPORT_ID
+    pooled_dir.mkdir(parents=True, exist_ok=True)
+
+    n_rows: dict[str, int] = {}
+    for task in TASKS:
+        name = f"{task.value}.csv"
+        header: list[str] | None = None
+        rows: list[list[str]] = []
+        for domain, d in export_dirs:
+            src = d / name
+            if not src.exists():
+                continue
+            with src.open(newline="") as f:
+                rdr = csv.reader(f)
+                h = next(rdr, None)
+                if h is None:
+                    continue
+                if header is None:
+                    header = h
+                elif h != header:
+                    log(f"  ! pooled: {name} header differs in {domain}; skipping it")
+                    continue
+                rows.extend(rdr)
+        if header is None:
+            continue
+        with (pooled_dir / name).open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            w.writerows(rows)
+        n_rows[task.value] = len(rows)
+    if not n_rows:
+        return {"per_task": {}, "pooled_error": "no export CSVs to pool"}
+    log(f"  pooled rows: {', '.join(f'{t}={n}' for t, n in n_rows.items())}")
+
+    try:
+        report = compute_iaa(
+            POOLED_EXPORT_ID,
+            config_path=str(config_path),
+            base_dir=str(scratch_base),
+            tasks=TASKS,
+            n_resamples=IAA_RESAMPLES,
+        )
+    except Exception as e:
+        log(f"  ! pooled IAA failed ({type(e).__name__}: {e})")
+        return {"per_task": {}, "pooled_error": f"{type(e).__name__}: {e}"}
+
+    per_task: dict = {}
+    for ta in report.tasks:
+        task = ta.task
+        marginals = calibration_marginals(pooled_dir / f"{task.value}.csv", _LABELS[task])
+        per_label = {}
+        for lab in ta.labels:
+            per_label[lab.label] = {
+                "alpha": lab.alpha,
+                "ci_lower": lab.ci_lower,
+                "ci_upper": lab.ci_upper,
+                "n_items": lab.n_items,
+                "n_annotators": lab.n_annotators,
+                "pct_agreement": lab.pct_agreement,
+                **marginals.get(lab.label, {}),
+            }
+        alphas = [v["alpha"] for v in per_label.values() if v["alpha"] is not None]
+        per_task[task.value] = {
+            "per_label": per_label,
+            # Unweighted across labels: each label counts equally, by choice.
+            "mean_alpha": umean(alphas),
+            "n_labels": len(alphas),
+        }
+    return {"per_task": per_task}
 
 
 def run(domains: list[str], *, use_export: bool = False) -> dict:
@@ -813,8 +970,8 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     domains_out: dict = {}
     tot_counts = empty_counts()
     tot_annotators: set[str] = set()
-    tot_weighted: list[tuple[float, int]] = []
     tot_events: list[dict] = []
+    export_dirs: list[tuple[str, Path]] = []
     tot_label = empty_label_rollup()
     tot_discards = empty_discards()
     tot_constraints: dict = {}
@@ -842,12 +999,24 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
             domains_out[domain] = block
             add_counts(tot_counts, roll["counts"])
             tot_annotators |= roll["annotators"]
-            tot_weighted.extend(roll["weighted"])
             tot_events.extend(roll["events"])
+            export_dirs.append((domain, roll["export_dir"]))
             add_label_raw(tot_label, roll["label_raw"])
             add_discards(tot_discards, roll["discards"])
             add_constraints(tot_constraints, roll["constraints"])
             add_completeness(tot_completeness, roll["completeness"])
+
+        # The headline α, computed on item-level data pooled across every domain. Must run
+        # inside the scratch context: it writes the pooled export there, and on the
+        # throwaway path the per-domain exports it reads live there too.
+        pooled: dict = {"per_task": {}}
+        if export_dirs:
+            log("=== pooled agreement ===")
+            cfg_path, _ = sanitized_config(export_dirs[0][0])
+            try:
+                pooled = pooled_agreement(export_dirs, Path(scratch), cfg_path)
+            finally:
+                cfg_path.unlink(missing_ok=True)
 
     # True pooled cadence per task across domains (so the task-level pace table is a real
     # median, not a weighted-mean approximation of per-domain medians).
@@ -858,13 +1027,11 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
 
     return {
         "run_at": datetime.now(timezone.utc).isoformat(),
+        "schema_version": ws.SNAPSHOT_SCHEMA_VERSION,
         "session_gap_threshold_s": int(SESSION_GAP_S),
+        "pooled_agreement": pooled,
         "total": {
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
-            "agreement": {
-                "mean_alpha": wmean(tot_weighted),
-                "n_labels": len(tot_weighted),
-            },
             "timing": cadence_report(tot_events),
             "timing_by_task": timing_by_task,
             "labels": build_label_block(tot_label),
@@ -894,14 +1061,17 @@ def print_summary(result: dict) -> None:
     """Human-readable table to stdout (cron-mailable).
 
     Columns: resp=submitted responses, done/total=completed/total records,
-    %=completion, ann=annotators, mean_a=mean calibration alpha, a-gap=per-annotator
-    active cadence (median gap within an annotator's own stream, session-guarded).
+    %=completion, ann=annotators, a-gap=per-annotator active cadence (median gap within an
+    annotator's own stream, session-guarded).
+
+    No per-domain alpha column: alpha is pooled across domains, so a per-domain headline
+    doesn't exist by design. The pooled figures print below the table.
     """
     print(f"Annotation log — {result['run_at']}")
     print(f"(session gap threshold: {result['session_gap_threshold_s'] // 60} min)\n")
     hdr = (
         f"{'domain':<34} {'resp':>6} {'done':>7} {'total':>8} {'%':>5} "
-        f"{'ann':>4} {'mean_a':>7} {'a-gap':>7}"
+        f"{'ann':>4} {'a-gap':>7}"
     )
     print(hdr)
     print("-" * len(hdr))
@@ -910,19 +1080,34 @@ def print_summary(result: dict) -> None:
         if "error" in block:
             print(f"{name:<34} {'ERROR: ' + block['error'][:60]}")
             return
-        c, a, t = block["count"], block["agreement"], block["timing"]
+        c, t = block["count"], block["timing"]
         total, done = c["total_records"], c["completed_records"]
         pct = f"{100 * done / total:.0f}%" if total else "—"
         agap = t["per_annotator"]["pooled_median_active_gap_s"]
         print(
             f"{name:<34} {c['submitted_responses']:>6} {done:>7} {total:>8} {pct:>5} "
-            f"{c['n_annotators']:>4} {_fmt_alpha(a['mean_alpha']):>7} {_fmt_gap(agap):>7}"
+            f"{c['n_annotators']:>4} {_fmt_gap(agap):>7}"
         )
 
     for name, block in result["domains"].items():
         row(name, block)
     print("-" * len(hdr))
     row("TOTAL", result["total"])
+
+    per_task = (result.get("pooled_agreement") or {}).get("per_task") or {}
+    if per_task:
+        print("\npooled α (unweighted mean across labels, item-level data from all domains):")
+        for task, tv in per_task.items():
+            degen = [
+                lab
+                for lab, lv in (tv.get("per_label") or {}).items()
+                if lv.get("n_minority") == 0
+            ]
+            note = f"  [{', '.join(degen)}: no variance, α undefined]" if degen else ""
+            print(
+                f"  {task:<12} {_fmt_alpha(tv.get('mean_alpha'))}"
+                f"  ({tv.get('n_labels', 0)} labels){note}"
+            )
     print(
         "\na-gap = median active gap between an annotator's consecutive "
         "submissions (session-guarded). Global cadence + breakdowns in the JSONL."
