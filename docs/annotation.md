@@ -62,8 +62,15 @@ Each snapshot carries three metrics (production vs calibration where it applies)
 
 1. **Counts** — submitted responses (work units), completed records (met `min_submitted`),
    and total records.
-2. **Calibration agreement** — per-label Krippendorff α + an n_items-weighted mean, over the
-   calibration overlap.
+2. **Calibration agreement** — Krippendorff α over the calibration overlap. The headline is
+   **pooled**: item-level data from every domain goes into one reliability matrix per
+   (task, label), and those α are averaged unweighted across labels to give a figure per
+   task. α = 1 − Do/De is a ratio, so per-domain α are never averaged into a headline —
+   they stay as a diagnostic in the report's collapsed breakdown. Each pooled α is published
+   with the marginals behind it (ratings, minority-class count, prevalence, De), because a
+   label whose minority class is small has De ≈ 0 and an unstable α; where the minority
+   count is 0 the label never varies, De = 0, and α is undefined (reported as 1.000 by
+   pragmata's convention, and flagged ⚠ in the table).
 3. **Cadence** — median seconds between consecutive submissions, per-annotator (individual
    pace) and global (team throughput). A session guard drops gaps over `LOG_SESSION_GAP_MIN`
    (default 30 min) as pauses.
