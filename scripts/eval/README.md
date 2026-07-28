@@ -1,8 +1,8 @@
 # Evaluation-stage scripts
 
-Pragmata's `eval` tool fine-tunes an evaluator (via `tlmtc`) and must run on a
-**GPU box on the Hertie network**, while the annotation exports it consumes live
-on this **CPU box in BSt's Azure tenant**. The two VMs are in different
+Pragmata's `eval` tool fine-tunes an evaluator (via `tlmtc`) which must run on a
+**GPU-enabled device** (for us, this is on the Hertie network), while the annotation exports it consumes live
+on this **CPU-backed VM** (for us, this is in BSt's Azure tenant). The two are in different
 organisations with no route to each other, so eval data moves over a shared
 **Azure Blob** container both sides reach over HTTPS.
 
@@ -25,10 +25,10 @@ of `data/annotation/` and `data/querygen/`. Configs live in `configs/eval/`.
 ```
 
 Neither VM reaches the other; both reach Blob. Direct box-to-box is blocked
-structurally (BSt Azure VNet ↔ Hertie-internal `10.x`, no peering — confirmed by
+structurally (BSt Azure VNet ↔ Hertie-internal `10.x`, no peering - confirmed by
 a timed-out `nc 10.1.23.20:22`).
 
-## `sync.sh` — the pipe
+## `sync.sh` - the pipe
 
 ```
 sync.sh push <src> <prefix>    # CPU→Blob: upload a tree + a sha256 manifest
@@ -49,15 +49,15 @@ make eval-pull PREFIX=predictions     # blob predictions/ → data/transfer/pred
 make eval-verify PREFIX=exports       # re-check a pulled tree against its manifest
 ```
 
-## Ownership invariant (staging seam)
+## Ownership invariant (staging)
 
 `sync.sh` **reads** pragmata tool trees (`data/annotation/`, `data/eval/`) in
-place and **writes only** to `data/transfer/` on the receiving box — never inside
+place and **writes only** to `data/transfer/` on the receiving box - never inside
 a tool's own output tree. `pull` refuses any destination outside `data/transfer/`.
-This keeps "did pragmata produce this, or did sync drop it here?" unambiguous, and
+This means pragamata's unambiguously produce all their own data, and that
 means a tool resetting its own dir can't clobber received data.
 
-Eval then consumes staged input by **explicit path** — its `labeled_data_path` /
+Eval then consumes staged input by **explicit path** - its `labeled_data_path` /
 `unlabeled_data_path` are explicit by design ("not inferred from prior tool
 outputs"), e.g.
 `pragmata eval train --labeled-data-path data/transfer/exports/<topic>/<task>.csv`.
@@ -65,21 +65,14 @@ See `data/transfer/README.md`.
 
 ## Data sensitivity
 
-Exports carry `annotator_id` — a **pseudonymous, name-derived handle**, not a
+Exports carry `annotator_id` - a **pseudonymous, name-derived handle**, not a
 name or email (`data/README.md` labels the exports PII, "never commit"). They ship
 as-is into a **private, IP-allowlisted** container; the roster
-(`configs/annotation/users.json`) is gitignored and the GPU box never needs it —
+(`configs/annotation/users.json`) is gitignored and the GPU box never needs it -
 eval consumes label columns, not identities.
 
-## GPU box = cattle, except checkpoints
+## GPU work is disposable, except checkpoints
 
-Any eval run is replayable from pinned inputs + pinned code, so the GPU box is
-disposable — **except trained checkpoints**, which are expensive to reproduce and
+Any eval run is replayable from pinned inputs + pinned code, so the GPU-based work is
+disposable - **except trained checkpoints**, which are expensive to reproduce and
 must be `pull`ed off and pinned to a durable home before the box is torn down.
-
-## Not here yet
-
-The **eval pipeline itself** (`pragmata eval train|predict|score`) is unbuilt — a
-separate effort in the pragmata repo. The **eval-run provenance bundle** and a
-`pragmata eval` wrapper (this dir) land once that CLI exists and emits artifacts
-with a stable schema to pin. This dir currently ships only the transport.
