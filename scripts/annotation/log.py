@@ -102,7 +102,6 @@ from pragmata.core.settings.annotation_settings import AnnotationSettings  # noq
 # We never edit the shared config — the import path may need keys export/IAA don't.
 _VALID_CONFIG_KEYS = set(AnnotationSettings.model_fields)
 
-EXPORT_ID = "monitor"  # fixed → overwritten each run (no unbounded disk growth)
 TASKS = [Task.RETRIEVAL, Task.GROUNDING, Task.GENERATION]
 
 # Per-task label fields, discovered generically: a label is any export-schema field typed
@@ -380,7 +379,7 @@ def label_stats(
     return block, raw
 
 
-def read_export_meta(export_id: str) -> dict:
+def read_export_meta(export_dir: Path) -> dict:
     """Constraint + completeness aggregates from the export's meta sidecar.
 
     The sidecar (``annotation_export.meta.json``) is written next to the CSVs by every
@@ -389,7 +388,7 @@ def read_export_meta(export_id: str) -> dict:
     domain-level: ``constraint_summary`` is per-constraint_id across tasks; completeness
     is the retrieval panel-completeness summary.
     """
-    path = ws.EXPORTS_DIR / export_id / "annotation_export.meta.json"
+    path = export_dir / "annotation_export.meta.json"
     try:
         meta = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
@@ -636,7 +635,7 @@ def sanitized_config(domain: str) -> tuple[Path, dict]:
     clean = {k: v for k, v in raw.items() if k in _VALID_CONFIG_KEYS}
     if dropped:
         log(f"  (dropped non-schema config keys: {', '.join(dropped)})")
-    fd, path = tempfile.mkstemp(prefix=f"monitor_{domain}_", suffix=".yaml")
+    fd, path = tempfile.mkstemp(prefix=f"annotation-log-cfg-{domain}-", suffix=".yaml")
     with os.fdopen(fd, "w") as f:
         yaml.safe_dump(clean, f, sort_keys=False)
     return Path(path), clean
@@ -670,7 +669,12 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
 
 
 def process_domain(
-    domain: str, client, http: "httpx.Client", *, use_export: bool = False
+    domain: str,
+    client,
+    http: "httpx.Client",
+    *,
+    use_export: bool = False,
+    scratch_base: Path | None = None,
 ) -> dict:
     """Assemble one domain's metrics: counts (progress + REST), agreement (IAA),
     cadence (REST per-response timestamps), label statistics (export CSV).
@@ -680,11 +684,20 @@ def process_domain(
 
     The export (read by both IAA and label-stats) is written with ``include_discarded=True``
     so discard rows are present for the discard breakdown; IAA filters them out, so this is
-    safe. By default we run a throwaway export (``export_id="monitor"``). With ``use_export``
-    we reuse the durable per-domain export (``export_id=<domain>``, e.g. scripts/export.sh,
-    also include_discarded=True) and skip re-exporting; a missing export degrades gracefully.
+    safe. By default we run a throwaway export under ``scratch_base`` — a real temp tree
+    owned by :func:`run`, so nothing lands in ``data/annotation/exports/`` (which is a
+    published tree: eval-push ships it, and a stray dir there reads as a domain to any
+    consumer that globs ``exports/*/``). With ``use_export`` we instead reuse the durable
+    per-domain export (e.g. scripts/export.sh, also include_discarded=True) and skip
+    re-exporting; a missing export degrades gracefully.
     """
-    base_dir = str(ws.DATA_DIR)
+    if not use_export and scratch_base is None:
+        raise ValueError("throwaway export needs a scratch_base")
+    # pragmata lays exports out at <base_dir>/annotation/exports/<export_id>.
+    base_dir = str(ws.DATA_DIR if use_export else scratch_base)
+    exports_root = (
+        ws.EXPORTS_DIR if use_export else scratch_base / "annotation" / "exports"
+    )
     cfg_path, clean_cfg = sanitized_config(domain)
     try:
         cfg = str(cfg_path)
@@ -695,13 +708,12 @@ def process_domain(
         progress = fetch_progress(client, settings)
         responses = fetch_responses(client, http, settings)
 
-        # The export feeds both IAA and label-stats. Default: write our own throwaway export.
-        # With use_export: reuse export.sh's durable per-domain CSVs, no re-export.
-        export_id = domain if use_export else EXPORT_ID
+        # The export feeds both IAA and label-stats. Default: write our own throwaway export
+        # into the scratch tree. With use_export: reuse export.sh's durable per-domain CSVs.
         if not use_export:
             export_annotations(
                 config_path=cfg,
-                export_id=export_id,
+                export_id=domain,
                 base_dir=base_dir,
                 include_discarded=True,
             )
@@ -710,7 +722,7 @@ def process_domain(
         iaa_error: str | None = None
         try:
             report = compute_iaa(
-                export_id,
+                domain,
                 config_path=cfg,
                 base_dir=base_dir,
                 tasks=TASKS,
@@ -726,7 +738,7 @@ def process_domain(
     # Label-value statistics from the export CSVs (class balance, discards, per-annotator
     # bias). Degrades independently of IAA. Constraint + completeness aggregates come from
     # the export's meta sidecar (domain-level, reused not recomputed).
-    export_dir = ws.EXPORTS_DIR / export_id
+    export_dir = exports_root / domain
     label_by_task: dict[Task, dict] = {}
     label_raw_by_task: dict[Task, dict] = {}
     label_error: str | None = None
@@ -741,7 +753,7 @@ def process_domain(
     except Exception as e:
         label_error = f"{type(e).__name__}: {e}"
         log(f"  ! {domain}: label stats failed ({label_error})")
-    meta = read_export_meta(export_id)
+    meta = read_export_meta(export_dir)
 
     tasks_out: dict = {}
     dom_counts = empty_counts()
@@ -813,13 +825,22 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     tot_constraints: dict = {}
     tot_completeness = empty_completeness()
 
+    # Throwaway exports go in a temp tree we own and delete, never in
+    # data/annotation/exports/ — that tree is published (eval-push) and anything
+    # sitting in it reads as a domain to consumers that glob exports/*/.
     with httpx.Client(
         base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
-    ) as http:
+    ) as http, tempfile.TemporaryDirectory(prefix="annotation-log-export-") as scratch:
         for domain in domains:
             log(f"=== {domain} ===")
             try:
-                block = process_domain(domain, client, http, use_export=use_export)
+                block = process_domain(
+                    domain,
+                    client,
+                    http,
+                    use_export=use_export,
+                    scratch_base=Path(scratch),
+                )
             except Exception as e:
                 domains_out[domain] = {"error": f"{type(e).__name__}: {e}"}
                 log(f"  ! {domain}: {type(e).__name__}: {e}")

@@ -7,11 +7,13 @@
 #
 # Artifacts land under data/annotation/exports/ (gitignored), keyed by export-id = domain, so
 # each run overwrites that domain's "latest" snapshot. This is the durable
-# counterpart to scripts/annotation/monitor.py, which runs its own throwaway export
-# (export-id=monitor) purely to feed IAA + label-stats — the two don't interfere.
+# counterpart to scripts/annotation/log.py, which runs its own throwaway export into a
+# private temp tree purely to feed IAA + label-stats — the two don't interfere. Nothing
+# but a real domain export may live under data/annotation/exports/: eval-push publishes
+# that tree and consumers glob exports/*/ as the domain list.
 #
 # Exported WITH --include-discarded so discard rows (response_status=discarded,
-# discard_reason) are available to monitor's discard stats. CONTRACT: any
+# discard_reason) are available to log.py's discard stats. CONTRACT: any
 # submitted-only consumer must filter response_status == "submitted" (IAA already
 # does); label/constraint columns are null on discarded rows.
 #
