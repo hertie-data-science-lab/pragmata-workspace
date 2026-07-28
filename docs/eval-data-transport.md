@@ -71,6 +71,24 @@ pragmata produce this, or did sync drop it?" unambiguous, and means a tool reset
 dir can't clobber received data. Eval then consumes staged input by **explicit path**, e.g.
 `pragmata eval train --labeled-data-path data/transfer/exports/<topic>/<task>.csv`.
 
+## What may live in a pushed tree
+
+`data/annotation/exports/` holds **exactly one directory per domain config**
+(`configs/annotation/domains/*.yaml`) and no other directories. It is a published tree, and
+the receiving end has no way to tell a real domain from anything else that happens to be
+sitting in it - consumers glob `exports/*/` and treat the result as the domain list. A
+stray directory therefore arrives as an extra domain and is silently aggregated as one.
+(Loose files such as `.gitkeep` are harmless: the glob only matches directories.)
+
+So scratch and throwaway exports go in `$TMPDIR`, never here. `scripts/annotation/log.py`
+writes its per-domain throwaway export (the one feeding IAA and label stats) into a
+temp tree it deletes on exit, for exactly this reason.
+
+Note also that a `push` is **additive**: `az storage blob upload-batch --overwrite` adds and
+replaces, but never deletes. Removing a file locally does not remove it from the container,
+and manifest verification will not flag the leftover, because `sha256sum -c` only checks the
+files the manifest lists. Deleting a stale blob prefix is a separate, deliberate act.
+
 ## One-time setup on each box
 
 The transport needs three things on **both** boxes - none of them require the box to be an
