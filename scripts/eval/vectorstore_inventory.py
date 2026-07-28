@@ -36,6 +36,11 @@ RESOURCE_GROUP = os.environ.get("PB_RESOURCE_GROUP", "rg-chatbot-dev-sweden-001"
 APP_NAME = os.environ.get("PB_APP_NAME", "publikationsbot-backend-dev")
 SECRET_NAME = os.environ.get("PB_SECRET_NAME", "publikationsbot-vectorstore-uri")
 
+# The collection holding the publications corpus. The gender pass is restricted
+# to it (author fields don't exist in the other collections); the counts/fields
+# reports still enumerate every collection.
+MAIN_COLLECTION = os.environ.get("PB_MAIN_COLLECTION", "azureopenaiembeddings")
+
 # German library/ILS metadata keys -> English meaning. Keys not listed here fall
 # back to "(unknown)" so a schema change surfaces loudly rather than silently.
 FIELD_GLOSSARY = {
@@ -105,10 +110,16 @@ def connect(dsn: str):
     return conn
 
 
+def banner(title: str, gap: bool = False) -> None:
+    if gap:
+        print()
+    print("=" * 60)
+    print(title)
+    print("=" * 60)
+
+
 def report_counts(cur) -> None:
-    print("=" * 60)
-    print("PUBLICATION COUNTS")
-    print("=" * 60)
+    banner("PUBLICATION COUNTS")
 
     cur.execute("SELECT count(*), count(DISTINCT id) FROM public.publications;")
     total, distinct = cur.fetchone()
@@ -136,13 +147,14 @@ def report_counts(cur) -> None:
 
 
 def report_fields(cur) -> None:
-    print("\n" + "=" * 60)
-    print("METADATA FIELDS (union of jsonb keys, per collection)")
-    print("=" * 60)
+    banner("METADATA FIELDS (union of jsonb keys, per collection)", gap=True)
 
+    # DISTINCT in the DB: without it, jsonb_object_keys() explodes every one of
+    # ~545k rows into one row per key (~8M rows) shipped over the wire only to
+    # be deduped here. The answer is ~30 (collection, key) pairs.
     cur.execute(
         """
-        SELECT c.name, jsonb_object_keys(e.cmetadata) AS key
+        SELECT DISTINCT c.name, jsonb_object_keys(e.cmetadata) AS key
         FROM public.langchain_pg_collection c
         JOIN public.langchain_pg_embedding e ON e.collection_id = c.uuid;
         """
@@ -169,11 +181,14 @@ def report_gender(cur) -> None:
                e.cmetadata->>'verf2', e.cmetadata->>'verf3'
         FROM public.langchain_pg_embedding e
         JOIN public.langchain_pg_collection c ON c.uuid = e.collection_id
-        WHERE c.name = 'azureopenaiembeddings'
+        WHERE c.name = %s
         ORDER BY e.cmetadata->>'doc_id';
-        """
+        """,
+        (MAIN_COLLECTION,),
     )
     rows = cur.fetchall()
+    if not rows:
+        sys.exit(f"FATAL: no rows in collection {MAIN_COLLECTION!r} — is the name current?")
 
     def first_name(raw: str | None) -> str | None:
         if not raw:
@@ -202,9 +217,7 @@ def report_gender(cur) -> None:
             unknown_only += 1
 
     total = len(rows)
-    print("\n" + "=" * 60)
-    print("AUTHOR GENDER (rough estimate — see caveats)")
-    print("=" * 60)
+    banner("AUTHOR GENDER (rough estimate — see caveats)", gap=True)
     print(f"\nTotal publications:                       {total}")
     print(f"At least one author classified female:    {has_female} ({has_female/total:.1%})")
     print(f"All authors classified male:              {male_only} ({male_only/total:.1%})")
