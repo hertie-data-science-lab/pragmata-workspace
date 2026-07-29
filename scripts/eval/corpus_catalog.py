@@ -303,9 +303,13 @@ def main() -> int:
     )
 
     print(f"wrote {target} ({len(rows)} documents, {n_chunks_total} chunks)", file=sys.stderr)
+    # Guarded: an empty result is possible (a stale MAIN_COLLECTION name) and the CSV
+    # and sidecar are already written by this point, so the run should end with a usable
+    # message rather than a ZeroDivisionError traceback over a valid artifact.
+    share = f" ({resolved / len(rows):.1%})" if rows else ""
     print(
-        f"gender resolved for {resolved}/{len(rows)} documents "
-        f"({resolved / len(rows):.1%}); {institutional} institutional-only",
+        f"gender resolved for {resolved}/{len(rows)} documents{share}; "
+        f"{institutional} institutional-only",
         file=sys.stderr,
     )
     return 0

@@ -111,7 +111,11 @@ def main() -> int:
         totals["empty"] += n_empty
         print(f"  {programme}: {n_queries} queries, {len(file_rows)} rows", file=sys.stderr)
 
-    target = ec.out_dir(args.out_dir) / "retrieval_manifest.csv"
+    # As with score_human: the date-only directory means a second run with a different
+    # --source would overwrite the first at one path, so only the default keeps the
+    # plain deliverable filename.
+    suffix = "" if args.source == "curated" else f".{args.source}"
+    target = ec.out_dir(args.out_dir) / f"retrieval_manifest{suffix}.csv"
     ws.write_csv(
         target,
         rows,
