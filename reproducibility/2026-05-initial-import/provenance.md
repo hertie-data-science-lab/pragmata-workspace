@@ -1,4 +1,4 @@
-# Initial import — provenance
+# Initial import - provenance
 
 ## What this stage is
 
@@ -24,7 +24,7 @@ assignments) and the live records in Argilla. This is the state the
   `near_duplicate_tolerance: 0.95` (see `_runtime.yaml`).
 - **Non-deterministic**: querygen is LLM output and the bot runs against a live service, so
   the corpus **cannot be regenerated to identical bytes**. The exact corpus is therefore
-  pinned by SHA256 in `checksums.sha256` and treated as the versioned input — not re-derived.
+  pinned by SHA256 in `checksums.sha256` and treated as the versioned input - not re-derived.
 
 ## Tooling
 
