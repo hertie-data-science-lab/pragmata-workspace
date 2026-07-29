@@ -1,4 +1,4 @@
-# Annotation corpus curation — record (2026-07-01)
+# Annotation corpus curation - record (2026-07-01)
 
 Honest, complete record of the one-off curation that reduced the live Argilla
 annotation instance from the full imported corpus to the final "essential" set.
@@ -17,7 +17,7 @@ pool can realistically complete, optimised for complete cross-task training
 **triples** plus a full inter-annotator-agreement (IAA) calibration set.
 
 The unit that matters is the **query** ("record"): one publikationsbot query fans
-out into three tasks — a **retrieval** panel of *k* chunks, one **grounding** record,
+out into three tasks - a **retrieval** panel of *k* chunks, one **grounding** record,
 one **generation** record. A usable training example is a query complete in all
 three (a "triple").
 
@@ -31,7 +31,7 @@ Zentrum-fuer-Nachhaltige-Kommunen).
 
 ## Criteria (per programme, per task)
 
-- **Calibration: untouched.** All 30 items/task kept exactly as-is — the IAA anchor,
+- **Calibration: untouched.** All 30 items/task kept exactly as-is - the IAA anchor,
   already heavily worked (150–360 submissions per 30-record set). ZfD's calibration
   was restored from backup. Calibration status = which Argilla dataset a record sits
   in (`<task>_calibration` vs `<task>_production`); there is no metadata flag.
@@ -87,15 +87,15 @@ generation, juniors → retrieval+grounding).
 | Demokratie | 3 | 2 | 3→2 | 3→2 | ret+gnd+gen cal → 2 |
 | Digitalisierung | 2 | 2 | 3→2 | 3→2 | ret+gnd+gen cal → 2 |
 | Europas | 2 | 1 | 3→2 | 3 (⚠) | ret+gnd → 2; gen unfixable |
-| NSM | 3 | 0 | 3 | — (⚠) | no seniors → no generation |
-| ZfD | 0 | 0 | — | — (⚠) | no annotators at all |
+| NSM | 3 | 0 | 3 | - (⚠) | no seniors → no generation |
+| ZfD | 0 | 0 | - | - (⚠) | no annotators at all |
 
 ## Staffing-blocked (cannot be fixed by settings)
 
-- **Europas-Zukunft generation**: 1 senior — IAA needs ≥2, so generation calibration
+- **Europas-Zukunft generation**: 1 senior - IAA needs ≥2, so generation calibration
   can never complete. Needs a 2nd senior.
-- **NSM generation**: 0 seniors — no generation annotation possible.
-- **ZfD**: 0 annotators — seeded but nothing progresses until staffed.
+- **NSM generation**: 0 seniors - no generation annotation possible.
+- **ZfD**: 0 annotators - seeded but nothing progresses until staffed.
 - Note: ZfNK generation's 3rd senior is the `test.senior` fixture; if that is not a
   real annotator, ZfNK generation calibration (min_submitted 3) may also be
   unachievable.
@@ -104,9 +104,9 @@ generation, juniors → retrieval+grounding).
 
 - **Retrieval selection bias**: keeping cheapest-to-finish panels skews the kept set
   to small-*k* / already-progressed queries and drops the high-fan-out tail. Any
-  retrieval metric computed on this data under-represents large panels — caveat when
+  retrieval metric computed on this data under-represents large panels - caveat when
   using it.
-- **Low agreement**: retrieval α≈0.08, generation α≈−0.02 at last measurement — at or
+- **Low agreement**: retrieval α≈0.08, generation α≈−0.02 at last measurement - at or
   below chance. The complete triples may need a guideline/label review before serving
   training. Out of scope for this curation.
 
@@ -120,7 +120,7 @@ responses (permitted); live ⊆ complete backup (0 records live-not-in-backup �
 removals recoverable).
 
 One caveat for future operators: `apply_log.jsonl` records only the final prune's
-deletions, not every backup→live removal — **use the pre-prune backup, not the log,
+deletions, not every backup→live removal - **use the pre-prune backup, not the log,
 as the recovery source**.
 
 ## Provenance
