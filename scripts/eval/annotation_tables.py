@@ -44,9 +44,15 @@ LABEL_COLUMNS = [
     "programme",
     "task",
     "label",
+    # Unit grain: annotated units after pragmata-style majority consolidation - the
+    # numbers eval scoring ingests.
     "n_items",
-    "n_annotators",
     "n_true",
+    # Response grain: individual annotator submissions, the daily report's counting. A
+    # record annotated by three people contributes three here and one above.
+    "n_responses",
+    "n_true_responses",
+    "n_annotators",
     "pct_agree",
     "alpha",
     "alpha_ci_low",
@@ -65,6 +71,9 @@ OPS_COLUMNS = [
     "n_completed",
     "n_pending",
     "n_submitted_responses",
+    # Distinct annotation units with >=1 submitted response (chunks for retrieval,
+    # queries otherwise) - the consolidated-unit counterpart of n_submitted_responses.
+    "n_units_annotated",
     "n_annotators",
     "n_discarded",
     "discard_rate",
@@ -126,10 +135,20 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
             else:
                 row["status"] = "no_agreement_no_overlap" if not frame.empty else "no_data"
 
+            if not frame.empty and label in frame.columns:
+                row["n_responses"] = int(frame[label].notna().sum())
+                row["n_true_responses"] = int(frame[label].astype(float).fillna(0).sum())
+
+            # Degenerate iff the label has no variance in the PAIRABLE overlap - items
+            # with >=2 annotators, the population alpha is actually computed on. Testing
+            # all calibration rows is subtly wrong: single-annotated calibration rows
+            # can carry variance the overlap does not have, hiding a conventional 1.0
+            # (found by review: gesundheit/grounding/contradicted_claim_present).
             if not calibration.empty and label in calibration.columns:
-                n_cal_true = int(calibration[label].astype(float).fillna(0).sum())
-                n_cal = int(calibration[label].notna().sum())
-                row["degenerate_calibration"] = n_cal > 0 and n_cal_true in (0, n_cal)
+                keys = list(ec.UNIT_KEYS[task])
+                multi = calibration.groupby(keys)["annotator_id"].transform("nunique") >= 2
+                overlap = calibration.loc[multi, label].dropna()
+                row["degenerate_calibration"] = len(overlap) > 0 and overlap.nunique() == 1
             rows.append(row)
     return rows
 
@@ -141,6 +160,15 @@ def curated_counts() -> dict[str, int]:
         programme = path.name.removesuffix(ec.CURATED_SUFFIX)
         counts[programme] = sum(1 for line in path.open() if line.strip())
     return counts
+
+
+def units_annotated(exports: Path, programme: str, task: str) -> int:
+    """Distinct annotation units with at least one submitted response."""
+    frame = ec.submitted(ec.read_task(exports, programme, task))
+    if frame.empty:
+        return 0
+    keys = [k for k in ec.UNIT_KEYS[task] if k in frame.columns]
+    return int(frame.groupby(keys).ngroups)
 
 
 def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: Path) -> list[dict]:
@@ -170,6 +198,7 @@ def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: P
             "n_completed": counts.get("completed_records", ""),
             "n_pending": counts.get("pending_records", ""),
             "n_submitted_responses": counts.get("submitted_responses", ""),
+            "n_units_annotated": units_annotated(exports, programme, task),
             "n_annotators": counts.get("n_annotators", ""),
             "n_discarded": discards.get("n_discarded", ""),
             "discard_rate": discards.get("discard_rate", ""),
@@ -214,15 +243,20 @@ def main() -> int:
             grain="programme x task x label",
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             caveats=[
-                "n_items and n_true count annotated UNITS after pragmata-style majority "
-                "consolidation (ties fall back to the first row in file order), so they "
-                "match what eval scoring ingests.",
+                "Two grains, named apart: n_items/n_true count annotated UNITS after "
+                "pragmata-style majority consolidation (ties fall back to the first row "
+                "in file order) - what eval scoring ingests; n_responses/"
+                "n_true_responses count individual annotator submissions - the daily "
+                "report's grain. Prevalence rates agree between the two; absolute "
+                "numbers differ wherever items were multi-annotated.",
                 "alpha/pct_agree are computed on the CALIBRATION overlap only "
                 "(n_items_calibration), not on n_items - pragmata's IAA drops "
                 "production rows.",
-                "degenerate_calibration=True marks a label with no variance in that "
-                "overlap; alpha is undefined there and pragmata returns 1.0 by "
-                "convention, so those 1.0s are not evidence of reliability.",
+                "degenerate_calibration=True marks a label with no variance in the "
+                "PAIRABLE overlap (calibration items with >=2 annotators - the "
+                "population alpha is computed on); alpha is undefined there and "
+                "pragmata returns 1.0 by convention, so those 1.0s are not evidence "
+                "of reliability.",
             ],
         ),
     )

@@ -130,9 +130,12 @@ def parse_pages(raw: str | None) -> str:
 
     "231 Seiten", "ca. 100 S.", "XII, 340 Seiten" — takes the largest number found,
     since roman-numeral front matter and volume numbers otherwise win over the page
-    count. The raw string is kept in `extent` so this is auditable.
+    count. An extent with no letters at all ("2013", "04/2010") is a year or an
+    issue/year, not a page count, and returns blank - the only two such rows in the
+    corpus were exactly that (found by review). The raw string is kept in `extent` so
+    this is auditable.
     """
-    if not raw:
+    if not raw or not re.search(r"[A-Za-z]", str(raw)):
         return ""
     numbers = [int(n) for n in re.findall(r"\d+", str(raw))]
     return str(max(numbers)) if numbers else ""
@@ -295,7 +298,11 @@ def main() -> int:
                 "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
                 "(name absent from the dictionary).",
                 "Institutional authors have no personal name and are flagged "
-                "is_institutional rather than counted as unknown people.",
+            "is_institutional rather than counted as unknown people.",
+            "author_gender='unknown' merges two populations: documents with no "
+            "recorded author at all and documents whose author names the dictionary "
+            "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
+            "cut on author_gender alone.",
                 "pub_year and extent_pages are parsed from free-text library fields; "
                 "the raw extent string is kept in `extent` so the parse is auditable.",
             ],

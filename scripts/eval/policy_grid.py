@@ -45,6 +45,9 @@ COLUMNS = [
     "n_rows_submitted",
     "n_rows_production",
     "n_rows_calibration",
+    # Distinct annotation units with >=1 submitted response - the consolidated-unit
+    # counterpart of n_rows_submitted (chunks for retrieval, queries otherwise).
+    "n_units_annotated",
     "n_annotators",
     # The 2x2: queries surviving each combination of the two filters.
     "n_queries_all_incl_calib",
@@ -111,6 +114,7 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
         "n_rows_submitted": len(sub),
         "n_rows_production": len(prod),
         "n_rows_calibration": len(calib),
+        "n_units_annotated": int(sub.groupby([k for k in ec.UNIT_KEYS[task] if k in sub.columns]).ngroups) if not sub.empty else 0,
         "n_annotators": int(sub["annotator_id"].nunique()) if not sub.empty else 0,
         "n_queries_all_incl_calib": n_queries_all,
         "n_queries_all_prod_only": ec.n_queries(prod),
