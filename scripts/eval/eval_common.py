@@ -112,6 +112,19 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "generation": ("record_uuid", "annotator_id", "response_status", "calibration"),
 }
 
+# Columns the filters read as booleans, which must also be non-null. A blank cell makes
+# pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to TRUE,
+# because bool(nan) is truthy - silently, with no error. The consequences invert the
+# filters: a blank `calibration` marks a production query as calibration and drops it
+# from the corpus, and a blank `panel_complete` lets an incomplete panel through the
+# STRICT filter. Labels are deliberately NOT here: a discarded response legitimately
+# has none.
+NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
+    "retrieval": ("response_status", "calibration", "panel_complete", "n_retrieved_chunks"),
+    "grounding": ("response_status", "calibration"),
+    "generation": ("response_status", "calibration"),
+}
+
 
 def read_task(exports: Path, programme: str, task: str) -> pd.DataFrame:
     """Read one programme's task CSV, asserting the schema the filters rely on.
@@ -132,6 +145,13 @@ def read_task(exports: Path, programme: str, task: str) -> pd.DataFrame:
             f"{path} is missing column(s) the report filters require: {', '.join(missing)}.\n"
             f"The export schema has changed; fix the scripts rather than letting a filter "
             f"silently pass every row through."
+        )
+    nulls = {c: int(frame[c].isna().sum()) for c in NON_NULL_COLUMNS[task] if frame[c].isna().any()}
+    if nulls:
+        detail = ", ".join(f"{c} ({n} row(s))" for c, n in nulls.items())
+        raise SystemExit(
+            f"{path} has null values in column(s) the filters read as booleans: {detail}.\n"
+            f"A blank would coerce to True and invert the filter - see NON_NULL_COLUMNS."
         )
     return frame
 
@@ -157,6 +177,26 @@ def export_inputs(exports: Path, *, include_iaa: bool = True) -> list[Path]:
     if include_iaa:
         inputs += sorted(exports.rglob("iaa/report.json"))
     return inputs
+
+
+def export_meta(exports: Path, programme: str) -> dict:
+    """A programme's ``annotation_export.meta.json`` sidecar, or {} if absent."""
+    path = exports / programme / "annotation_export.meta.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def panel_totals(exports: Path, programme: str) -> tuple[int, int]:
+    """(n_panels, n_panels_complete) for a programme, from the export's own sidecar.
+
+    Taken from ``completeness_summary`` rather than counted off the CSV rows, because
+    the rows only cover panels that received at least one submitted response. Counting
+    them undercounts the DENOMINATOR: zentrum-fuer-datenmanagement has 70 imported
+    panels and zero annotations, so a row-derived count reports 0 panels and hides the
+    programme's coverage gap entirely, and four other programmes undercount by 2-6.
+    Use n_queries() for "panels that have responses"; use this for "panels that exist".
+    """
+    summary = export_meta(exports, programme).get("completeness_summary") or {}
+    return int(summary.get("n_panels", 0)), int(summary.get("n_complete", 0))
 
 
 def load_iaa(exports: Path, programme: str) -> dict[tuple[str, str], dict]:
