@@ -221,7 +221,17 @@ def build_rows(documents: list[dict]) -> list[dict]:
             """
             return "institutional" if n_recorded else empty
 
-        first_raw, first_collapsed = (raw[0], collapsed[0]) if raw else ("", unresolved(""))
+        # Classify the FIRST recorded author on its own rather than taking raw[0].
+        # classify() skips authors whose names don't parse, so `raw` is compacted and no
+        # longer aligned with verf1..verf3 - raw[0] is "the first author that parsed",
+        # which for an institutional verf1 beside a named verf2 would attribute the
+        # co-author's gender to the first-author column.
+        first_pair = classify(detector, recorded[:1])
+        if first_pair[0]:
+            first_raw, first_collapsed = first_pair[0][0], first_pair[1][0]
+        else:
+            # verf1 present but unparseable means institutional; absent means no author.
+            first_raw, first_collapsed = "", "institutional" if recorded and recorded[0] else unresolved("")
 
         rows.append(
             {
