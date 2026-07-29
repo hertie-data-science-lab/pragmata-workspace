@@ -90,6 +90,7 @@ OPS_COLUMNS = [
     "session_gap_threshold_s",
     # Retrieval panel completeness: also programme-level, `all` row only.
     "n_panels",
+    "n_panels_with_responses",
     "n_panels_complete",
     "gap_grain",
 ]
@@ -116,6 +117,9 @@ def latest_snapshot(nth: int) -> dict:
     if not path.exists():
         raise SystemExit(f"no snapshot log at {path} - run `make log` first.")
     lines = [line for line in path.read_text().splitlines() if line.strip()]
+    if nth < 1:
+        # lines[-0] is lines[0], i.e. the oldest snapshot - the opposite of "latest".
+        raise SystemExit(f"--snapshot counts back from the last and must be >= 1, got {nth}.")
     if nth > len(lines):
         raise SystemExit(f"only {len(lines)} snapshots available, asked for {nth} from last.")
     snapshot = json.loads(lines[-nth])
@@ -183,19 +187,23 @@ def curated_counts() -> dict[str, int]:
     return counts
 
 
-def panel_counts(exports: Path, programme: str) -> tuple[int | str, int | str]:
-    """(n_panels, n_panels_complete) for a programme, from the FROZEN export.
+def panel_counts(exports: Path, programme: str) -> tuple[int, int, int]:
+    """(n_panels, n_panels_with_responses, n_panels_complete) for a programme.
 
-    Deliberately not from the log snapshot's `completeness` block, even though it
-    carries the same two numbers: that block describes whatever live Argilla state
-    `make log` last captured, which is not guaranteed to be the moment the export was
-    frozen. Reading the export keeps these equal to policy_grid.csv's columns of the
-    same name, so two CSVs in one bundle cannot disagree with nothing to explain why.
+    The totals come from the export's own ``completeness_summary``, not from counting
+    record_uuids in the rows: rows only cover panels that received a submitted response,
+    so a row-derived total undercounts the denominator and reports 0 panels for
+    zentrum-fuer-datenmanagement, which has 70 imported and none annotated. The
+    row-derived figure is still useful, so it ships beside the total under its own name.
+
+    Deliberately not the log snapshot's completeness block either, even though it carries
+    the same two numbers: that describes whatever live Argilla state `make log` last
+    captured, which is not guaranteed to be the moment the export was frozen. Reading the
+    export keeps these equal to policy_grid.csv's columns of the same name.
     """
+    n_panels, n_complete = ec.panel_totals(exports, programme)
     frame = ec.submitted(ec.read_task(exports, programme, "retrieval"))
-    if frame.empty:
-        return 0, 0
-    return ec.n_queries(frame), ec.n_queries(ec.complete_panels(frame))
+    return n_panels, (0 if frame.empty else ec.n_queries(frame)), n_complete
 
 
 def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: Path) -> list[dict]:
@@ -208,7 +216,7 @@ def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: P
             for dataset in ("production", "calibration", "all")
         ]
 
-    n_panels, n_panels_complete = panel_counts(exports, programme)
+    n_panels, n_panels_with_responses, n_panels_complete = panel_counts(exports, programme)
     rows = []
     for task in ec.TASKS:
         block = (domain.get("tasks") or {}).get(task) or {}
@@ -246,6 +254,7 @@ def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: P
                 row["session_gap_threshold_s"] = snapshot.get("session_gap_threshold_s", "")
                 if ec.has_subrows(task):
                     row["n_panels"] = n_panels
+                    row["n_panels_with_responses"] = n_panels_with_responses
                     row["n_panels_complete"] = n_panels_complete
             rows.append(row)
     return rows
