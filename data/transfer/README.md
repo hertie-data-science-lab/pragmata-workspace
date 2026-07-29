@@ -2,7 +2,7 @@
 
 Staging landing zone for eval data moved over Azure Blob by
 [`scripts/eval/sync.sh`](../../scripts/eval/sync.sh). Everything here except this
-README and `.gitkeep` is gitignored — it moves via **Blob, not git** (git carries
+README and `.gitkeep` is gitignored - it moves via **Blob, not git** (git carries
 code; this carries data).
 
 ```
@@ -16,7 +16,7 @@ Each subtree arrives with a `MANIFEST.sha256` and is verified (`sha256sum -c`) o
 download; `make eval-verify PREFIX=<sub>` re-checks it locally any time.
 
 **Ownership seam.** `sync.sh` **reads** pragmata's own tool trees
-(`data/annotation/`, `data/eval/`) in place and **writes only here** — never into
+(`data/annotation/`, `data/eval/`) in place and **writes only here** - never into
 a tool's output tree. Received data is always under `data/transfer/`, so it's
 unambiguous which files a tool produced versus which sync dropped, and a tool
 resetting its own dir can't nuke received data. Eval consumes what lands here by
