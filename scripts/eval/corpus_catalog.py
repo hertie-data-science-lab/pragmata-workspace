@@ -132,7 +132,7 @@ def parse_pages(raw: str | None) -> str:
     since roman-numeral front matter and volume numbers otherwise win over the page
     count. An extent with no letters at all ("2013", "04/2010") is a year or an
     issue/year, not a page count, and returns blank - the only two such rows in the
-    corpus were exactly that (found by review). The raw string is kept in `extent` so
+    corpus were exactly that. The raw string is kept in `extent` so
     this is auditable.
     """
     if not raw or not re.search(r"[A-Za-z]", str(raw)):
