@@ -102,6 +102,7 @@ COLUMNS = [
     "alpha_min_ci_low",
     "alpha_min_ci_high",
     "alpha_n_items",
+    "alpha_min_degenerate",
     "status",
 ]
 
@@ -176,6 +177,10 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
         if stats.get(key) is not None:
             row[target] = f"{stats[key]:.4f}"
     row["alpha_n_items"] = stats.get("n_items", "")
+    # alpha = 1 - Do/De is undefined at De = 0 (the label never varies in the pooled
+    # calibration items) and pragmata returns 1.0 by convention. Without this flag,
+    # grounding_presence_rate's alpha_min of 1.0 reads as perfect measured reliability.
+    row["alpha_min_degenerate"] = stats.get("expected_disagreement") == 0
 
 
 def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
@@ -350,6 +355,13 @@ def main() -> int:
                 "disagreement or label error.",
                 "alpha_* columns are the POOLED alpha over every domain's calibration "
                 "items (pragmata computes IAA over overlapped rows only).",
+                "alpha_min_degenerate=True means the label never varies in that pooled "
+                "population: alpha is undefined there and pragmata returns 1.0 by "
+                "convention, so such an alpha is NOT evidence of reliability.",
+                "The pooled retrieval n=181 is dominated by three programmes "
+                "(demokratie 70, europas-zukunft 68, kommunen 33 = 171 of 181); "
+                "nachhaltige contributes 0 complete panels. policy_grid.csv carries "
+                "the full composition.",
                 "top_k is max(chunk_rank) and K varies per query; do not label these '@5'.",
             ],
         ),
