@@ -100,6 +100,10 @@ COLUMNS = [
 ]
 
 
+# The reportable policy: production rows only, complete retrieval panels only.
+DEFAULT_POLICY = "prod-complete"
+
+
 def policy_name(args) -> str:
     """Short slug naming the filter combination, used in paths and in every row."""
     return "-".join(
@@ -301,7 +305,12 @@ def main() -> int:
             rows.extend(rows_from_report(report, programme, task, policy, alphas))
             print(f"  {label}: scored n={report.get('n_examples')}", file=sys.stderr)
 
-    target = ec.out_dir(args.out_dir) / "eval_metric_estimates.csv"
+    # The default policy keeps the plain filename, because that is the deliverable.
+    # Any other policy gets it in the name: the output directory is date-only, so two
+    # runs with different flags would otherwise overwrite each other at one path, and
+    # the difference would only be visible inside the file.
+    suffix = "" if policy == DEFAULT_POLICY else f".{policy}"
+    target = ec.out_dir(args.out_dir) / f"eval_metric_estimates{suffix}.csv"
     ws.write_csv(
         target,
         rows,
