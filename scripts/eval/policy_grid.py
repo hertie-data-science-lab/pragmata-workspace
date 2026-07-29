@@ -53,6 +53,7 @@ COLUMNS = [
     "n_queries_complete_prod_only",
     # Diagnostics.
     "n_panels",
+    "n_panels_with_responses",
     "n_panels_complete",
     "mean_chunks_per_query_all",
     "mean_chunks_per_query_complete",
@@ -98,6 +99,10 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
     # also the panels, so the same two counts serve both column pairs.
     n_queries_all = ec.n_queries(sub)
     n_queries_complete = ec.n_queries(complete_all)
+    # Panel totals come from the export sidecar, not from the rows: rows only cover
+    # panels that got a response, so counting them undercounts the denominator and
+    # reports 0 for a programme nobody annotated.
+    n_panels_total, n_panels_done = ec.panel_totals(exports, programme)
 
     return {
         "programme": programme,
@@ -113,8 +118,9 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
         "n_queries_complete_prod_only": ec.n_queries(complete_prod),
         # Blank on the other two tasks: they have no panel notion, and a number here
         # would invite reading one in.
-        "n_panels": n_queries_all if ec.has_subrows(task) else "",
-        "n_panels_complete": n_queries_complete if ec.has_subrows(task) else "",
+        "n_panels": n_panels_total if ec.has_subrows(task) else "",
+        "n_panels_with_responses": n_queries_all if ec.has_subrows(task) else "",
+        "n_panels_complete": n_panels_done if ec.has_subrows(task) else "",
         "mean_chunks_per_query_all": mean_chunks(sub, task),
         "mean_chunks_per_query_complete": mean_chunks(complete_all, task),
         "n_units_multi_annotator": n_multi,
