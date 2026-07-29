@@ -25,5 +25,8 @@ SHA256 in stage 1's `checksums.sha256` and stored externally. See the
 The bundles above are **instance-lineage**: an ordered record that rebuilds a *stateful*
 system (the live Argilla instance). The eval stage introduces the other kind -
 **run-provenance**: independent, self-contained dated snapshots that pin one eval run's
-inputs → code → outputs by SHA256, *not* replayed in sequence. Those aren't here yet; they
-land with the eval pipeline (transport groundwork in [`scripts/eval/`](../scripts/eval/)).
+inputs → code → outputs by SHA256, *not* replayed in sequence.
+
+| Bundle | Operation |
+|---|---|
+| `2026-07-29-eval-report-freeze/` | The canonical annotation export for the BSt report. Pins all 41 export files by SHA256 (local read-only copy + Azure Blob), so every human-annotation and fairness-audit number stays reproducible while the live instance keeps moving. The nightly cron stays enabled. |
