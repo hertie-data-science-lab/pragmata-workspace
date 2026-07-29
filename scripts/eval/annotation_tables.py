@@ -143,7 +143,7 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
             # with >=2 annotators, the population alpha is actually computed on. Testing
             # all calibration rows is subtly wrong: single-annotated calibration rows
             # can carry variance the overlap does not have, hiding a conventional 1.0
-            # (found by review: gesundheit/grounding/contradicted_claim_present).
+            # (e.g. gesundheit/grounding/contradicted_claim_present).
             if not calibration.empty and label in calibration.columns:
                 keys = list(ec.UNIT_KEYS[task])
                 multi = calibration.groupby(keys)["annotator_id"].transform("nunique") >= 2
