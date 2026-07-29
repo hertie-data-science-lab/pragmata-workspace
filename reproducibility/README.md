@@ -16,14 +16,14 @@ Rebuild end-to-end: `make reproduce-curation MODE=structure APPLY=1` (imports st
 corpus, then prunes to stage 2's keep-lists). The reusable tooling lives in `scripts/`
 (`prune_to_keeplist.py`, `import.sh`, `argilla_backup.py`), not in the bundles.
 
-Large artifacts (the full corpus, Argilla backups) are **not** in git — they're pinned by
+Large artifacts (the full corpus, Argilla backups) are **not** in git - they're pinned by
 SHA256 in stage 1's `checksums.sha256` and stored externally. See the
 [Reproducibility](../docs/reproducibility.md) doc.
 
 ## Two kinds of reproducibility artifact
 
 The bundles above are **instance-lineage**: an ordered record that rebuilds a *stateful*
-system (the live Argilla instance). The eval stage introduces the other kind —
+system (the live Argilla instance). The eval stage introduces the other kind -
 **run-provenance**: independent, self-contained dated snapshots that pin one eval run's
 inputs → code → outputs by SHA256, *not* replayed in sequence. Those aren't here yet; they
 land with the eval pipeline (transport groundwork in [`scripts/eval/`](../scripts/eval/)).

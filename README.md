@@ -26,7 +26,7 @@ Clone, then:
    `.venv/` it expects.
 4. `make help` lists the targets; preview a run with `bash scripts/pipeline.sh --dry-run`.
 
-Data, logs, reports and Argilla backups are **not** committed — see
+Data, logs, reports and Argilla backups are **not** committed - see
 [Data & secrets](docs/configuration.md#data--secrets) and
 [Reproducibility](docs/reproducibility.md).
 
@@ -65,14 +65,14 @@ make help           # list every target
 
 ## Documentation
 
-- [Annotation pipeline](docs/annotation.md) — build flow, orchestrator, logging/reporting,
+- [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
 - [Eval pipeline](docs/eval.md) - sibling pipeline; data transport has shipped, the
   train/predict/score stages are still to build.
 - [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
-- [Reproducibility](docs/reproducibility.md) — dated lineage bundles + `reproduce-curation`.
-- [Configuration](docs/configuration.md) — secrets, tunables, annotator roster, data &
+- [Reproducibility](docs/reproducibility.md) - dated lineage bundles + `reproduce-curation`.
+- [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data &
   secrets.
 
 ## Layout
@@ -89,5 +89,5 @@ tmp/                   one-off local scratch (gitignored)
 
 Each top-level directory has its own README with the detail. All scripts share conventions
 via `scripts/lib/` (workspace-root resolution, `.env` + `configs/settings.conf` loading,
-stderr logging, disk/env guards) — see `scripts/lib/common.sh` (shell) and
+stderr logging, disk/env guards) - see `scripts/lib/common.sh` (shell) and
 `scripts/lib/workspace.py` (python).
