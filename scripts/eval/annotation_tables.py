@@ -139,11 +139,10 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
                 row["n_responses"] = int(frame[label].notna().sum())
                 row["n_true_responses"] = int(frame[label].astype(float).fillna(0).sum())
 
-            # Degenerate iff the label has no variance in the PAIRABLE overlap - items
-            # with >=2 annotators, the population alpha is actually computed on. Testing
-            # all calibration rows is subtly wrong: single-annotated calibration rows
-            # can carry variance the overlap does not have, hiding a conventional 1.0
-            # (e.g. gesundheit/grounding/contradicted_claim_present).
+            # Degenerate iff the label has no variance in the PAIRABLE overlap (items
+            # with >=2 annotators) - the population alpha is computed on. Single-annotated
+            # calibration rows can carry variance the overlap does not have, so they are
+            # excluded from the test.
             if not calibration.empty and label in calibration.columns:
                 keys = list(ec.UNIT_KEYS[task])
                 multi = calibration.groupby(keys)["annotator_id"].transform("nunique") >= 2

@@ -60,9 +60,9 @@ FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / "2026-07-29"
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
 
-# Excluded from every report output by decision (2026-07-29): the programme was seeded
-# in Argilla (70 panels imported) but never staffed, so it has zero annotations and
-# nothing to say. Recorded in each provenance sidecar via the `excluded` note.
+# Excluded from every report output: the programme was seeded in Argilla (70 panels
+# imported) but never staffed, so it has zero annotations. Recorded in each provenance
+# sidecar.
 EXCLUDED_PROGRAMMES = frozenset({"zentrum-fuer-datenmanagement"})
 
 

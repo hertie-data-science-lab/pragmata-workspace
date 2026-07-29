@@ -92,11 +92,9 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
         complete_all, complete_prod = sub, prod
 
     n_tied, n_multi = ec.tied_label_units(sub, task)
-    # Same count after the query-grain calibration filter, i.e. over the frame that
-    # actually gets scored. Overlap is a calibration mechanism, so this removes much of
-    # the tie ambiguity — but not all of it: a mixed retrieval panel keeps its
-    # double-annotated calibration chunks, which is the whole point of filtering at
-    # query grain. Reported rather than assumed.
+    # Same count after the query-grain calibration filter - the frame that gets scored.
+    # Overlap is a calibration mechanism, so this removes most tie ambiguity; a mixed
+    # retrieval panel still keeps its double-annotated calibration chunks.
     n_tied_prod, n_multi_prod = ec.tied_label_units(prod, task)
     # Queries are the unit every corpus metric averages over; for retrieval they are
     # also the panels, so the same two counts serve both column pairs.

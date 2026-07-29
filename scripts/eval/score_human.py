@@ -17,7 +17,7 @@ control, and the pooled filtered CSV is handed over by path. Two filters:
   1. submitted responses only — a discarded response is an abstention with no labels
   2. retrieval: complete panels only (unless --all-panels) — STRICT panel_complete
 
-Calibration items stay IN by decision (2026-07-29): pragmata's majority consolidation
+Calibration items stay in: pragmata's majority consolidation
 coalesces their multi-annotator rows into one value per unit, exactly as it does when
 training. --exclude-calibration drops wholly-calibration queries for comparison runs
 (query grain, because a retrieval record is one chunk and panels are routinely mixed —
@@ -140,9 +140,9 @@ def filtered_frame(exports: Path, programme: str, task: str, args):
 def guard_scoring_units(frame, task: str, label: str) -> None:
     """Assert the post-filter frame is one row per scoring unit and panels are whole.
 
-    pragmata consolidates repeated annotator rows by majority and then hard-errors on
-    a residual duplicate, so this is belt-and-braces — but it is asserted at the
-    post-consolidation grain deliberately. panel_complete is pooled ACROSS annotators
+    pragmata consolidates repeated annotator rows by majority and hard-errors on a
+    residual duplicate; this asserts the same invariants before handing over, at the
+    post-consolidation grain. panel_complete is pooled ACROSS annotators
     (completeness.py: n_submitted == k over distinct chunk_ids from any annotator), so
     a per-annotator coverage check would fail on genuinely complete panels.
     """
