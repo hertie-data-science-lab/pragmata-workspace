@@ -166,6 +166,43 @@ def _split_gaps(points: list[tuple[str, datetime]], threshold_s: float):
     return pts, kept, excluded
 
 
+def _quantile(ordered: list[float], q: float) -> float:
+    """Linear-interpolated quantile of an ALREADY-SORTED list (numpy/R type 7).
+
+    Not ``statistics.quantiles``, which needs at least two data points and cuts into
+    n intervals rather than answering for one q — this must survive a single kept gap
+    (where every quantile is that gap). Takes the list pre-sorted so a caller wanting
+    several quantiles sorts once.
+    """
+    if len(ordered) == 1:
+        return ordered[0]
+    pos = (len(ordered) - 1) * q
+    low = int(pos)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
+
+
+# The gap statistics, named once. Reported per-annotator under these names and pooled
+# under a "pooled_" prefix; all four go null together below the noise threshold.
+_GAP_STAT_KEYS = ("median_active_gap_s", "mean_gap_s", "gap_p25_s", "gap_p75_s")
+
+
+def _gap_stats(values: list[float]) -> dict:
+    """Centre and spread of a set of within-session gaps.
+
+    Shared by the per-annotator and pooled views so the two cannot drift. The guard on
+    whether there is enough data to publish stays at each call site, since they test
+    different things.
+    """
+    ordered = sorted(values)
+    return {
+        "median_active_gap_s": round(statistics.median(ordered), 1),
+        "mean_gap_s": round(statistics.fmean(ordered), 1),
+        "gap_p25_s": round(_quantile(ordered, 0.25), 1),
+        "gap_p75_s": round(_quantile(ordered, 0.75), 1),
+    }
+
+
 def _summarize(
     n: int,
     kept: list[float],
@@ -176,7 +213,10 @@ def _summarize(
     with_excluded: bool = True,
 ) -> dict:
     out = {
-        "median_active_gap_s": None,
+        # Centre and spread of the within-session gaps. The distribution is right-skewed
+        # (a few slow items dominate), so the mean sits above the median and the
+        # quartiles are what show the actual spread. Filled in below, or left null.
+        **dict.fromkeys(_GAP_STAT_KEYS),
         "session_gap_threshold_s": int(threshold_s),
         "n_events": n,
         "n_gaps_total": max(n - 1, 0),
@@ -189,8 +229,10 @@ def _summarize(
     }
     if with_excluded:
         out["excluded_gaps"] = excluded
+    # One guard for all four: below min_records the whole distribution is too noisy to
+    # publish, so they go null together rather than leaving a median with no spread.
     if n >= min_records and kept:
-        out["median_active_gap_s"] = round(statistics.median(kept), 1)
+        out.update(_gap_stats(kept))
     return out
 
 
@@ -246,12 +288,13 @@ def cadence_report(events: list[dict]) -> dict:
         )
         pooled_kept.extend(kept)
 
+    # Pooled spread mirrors the per-annotator block: the same four statistics over the
+    # pooled within-session gaps, so a report can quote a distribution at task/domain
+    # level without reaching into by_annotator.
+    enough = len(pooled_kept) >= MIN_RECORDS
+    pooled_stats = _gap_stats(pooled_kept) if enough else dict.fromkeys(_GAP_STAT_KEYS)
     per = {
-        "pooled_median_active_gap_s": (
-            round(statistics.median(pooled_kept), 1)
-            if len(pooled_kept) >= MIN_RECORDS
-            else None
-        ),
+        **{f"pooled_{key}": value for key, value in pooled_stats.items()},
         "n_annotators": len(by_user),
         "n_gaps_used": len(pooled_kept),
         "by_annotator": by_annotator,
@@ -1143,9 +1186,31 @@ def self_check() -> int:
         len(r["excluded_gaps"]) == 1 and r["excluded_gaps"][0]["after_record"] == "c"
     ), r
     assert r["longest_pause_s"] == r["excluded_gaps"][0]["gap_s"], r
-    # Below min_records → median suppressed, but breaks still reported.
+    # Spread over the SAME kept gaps as the median — sorted([240, 300, 300]).
+    assert r["mean_gap_s"] == 280.0, r  # (300 + 300 + 240) / 3
+    assert r["gap_p25_s"] == 270.0, r  # 240 + (300-240) * 0.5
+    assert r["gap_p75_s"] == 300.0, r
+    # Below min_records → the whole distribution is suppressed together, but the
+    # session breaks are still reported.
     r2 = cadence(recs[:3], threshold_s=1800, min_records=5)
     assert r2["median_active_gap_s"] is None and r2["n_gaps_used"] == 2, r2
+    assert r2["mean_gap_s"] is None and r2["gap_p25_s"] is None and r2["gap_p75_s"] is None, r2
+    # A single kept gap must not blow up: every quantile is that gap.
+    r3 = cadence(recs[:2], threshold_s=1800, min_records=1)
+    assert r3["gap_p25_s"] == r3["gap_p75_s"] == r3["median_active_gap_s"] == 300.0, r3
+    # The pooled view carries the same four statistics, so a report can quote a
+    # distribution per task/domain without reaching into by_annotator. It applies the
+    # module-level MIN_RECORDS, so 3 pooled gaps are suppressed...
+    thin = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in recs])
+    assert thin["per_annotator"]["pooled_median_active_gap_s"] is None, thin
+    assert thin["per_annotator"]["n_gaps_used"] == 3, thin
+    # ...while 6 gaps (five of 300s, one of 360s) report the whole distribution.
+    stream = [("r%d" % i, base + timedelta(minutes=m)) for i, m in enumerate([0, 5, 10, 15, 20, 25, 31])]
+    pooled = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in stream])["per_annotator"]
+    assert pooled["n_gaps_used"] == 6, pooled
+    assert pooled["pooled_median_active_gap_s"] == 300.0, pooled
+    assert pooled["pooled_mean_gap_s"] == 310.0, pooled  # (300*5 + 360) / 6
+    assert pooled["pooled_gap_p25_s"] == 300.0 and pooled["pooled_gap_p75_s"] == 300.0, pooled
     print("self-check OK")
     return 0
 
