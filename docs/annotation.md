@@ -11,7 +11,7 @@ flowchart TD
   comb -->|"setup.sh + import.sh"| arg[("Argilla: 3 tasks × prod/calibration")]
 ```
 
-Everything under `data/` is gitignored — see [Data & secrets](configuration.md#data--secrets).
+Everything under `data/` is gitignored - see [Data & secrets](configuration.md#data--secrets).
 
 ## Orchestrator
 
@@ -37,7 +37,7 @@ projection. For anything non-standard, call the pragmata CLI directly.
 
 ## Running it
 
-`make help` lists every target — the single stages, the orchestrated `pipeline`, and the
+`make help` lists every target - the single stages, the orchestrated `pipeline`, and the
 ops below. Each stage is a thin wrapper; read `scripts/annotation/` to see the exact native
 command it runs.
 
@@ -51,31 +51,31 @@ tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect
 
 Two halves, deliberately split:
 
-- **Logging** is automatic and daily. The nightly job — `scripts/daily.sh` (`make daily`) —
+- **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make daily`) -
   chains `export.sh` (submitted annotations → per-domain CSVs) then `log.py --use-export`
   (live counts + IAA + cadence → append one snapshot to `logs/annotation/log.jsonl`).
 - **Reporting** is manual (`make report`): render the latest snapshot into
-  `reports/annotation/<date>/` — `report_tables.py` writes `report.md` (pure data tables),
+  `reports/annotation/<date>/` - `report_tables.py` writes `report.md` (pure data tables),
   `plot_summary.py` writes the PNGs, and `_latest` is repointed to the newest.
 
 Each snapshot carries three metrics (production vs calibration where it applies):
 
-1. **Counts** — submitted responses (work units), completed records (met `min_submitted`),
+1. **Counts** - submitted responses (work units), completed records (met `min_submitted`),
    and total records.
-2. **Calibration agreement** — Krippendorff α over the calibration overlap. The headline is
+2. **Calibration agreement** - Krippendorff α over the calibration overlap. The headline is
    **pooled**: item-level data from every domain goes into one reliability matrix per
    (task, label), and those α are averaged unweighted across labels to give a figure per
-   task. α = 1 − Do/De is a ratio, so per-domain α are never averaged into a headline —
+   task. α = 1 − Do/De is a ratio, so per-domain α are never averaged into a headline -
    they stay as a diagnostic in the report's collapsed breakdown. Each pooled α is published
    with the marginals behind it (ratings, minority-class count, prevalence, De), because a
    label whose minority class is small has De ≈ 0 and an unstable α; where the minority
    count is 0 the label never varies, De = 0, and α is undefined (reported as 1.000 by
    pragmata's convention, and flagged ⚠ in the table).
-3. **Cadence** — median seconds between consecutive submissions, per-annotator (individual
+3. **Cadence** - median seconds between consecutive submissions, per-annotator (individual
    pace) and global (team throughput). A session guard drops gaps over `LOG_SESSION_GAP_MIN`
    (default 30 min) as pauses.
 
-Timestamps come from the REST endpoint — the SDK and export CSVs drop per-response
+Timestamps come from the REST endpoint - the SDK and export CSVs drop per-response
 submission times. `log.py` emits a one-line status, not tables; pass `--summary` for an
 ad-hoc table. Nightly cron:
 
@@ -86,7 +86,7 @@ ad-hoc table. Nightly cron:
 ## Backup & restore
 
 `scripts/annotation/argilla_backup.py` (`make backup`) takes a status-preserving snapshot of
-**every** Argilla dataset — records, metadata, suggestions, and responses *with* their
+**every** Argilla dataset - records, metadata, suggestions, and responses *with* their
 `submitted`/`draft`/`discarded` status (the SDK's own `to_disk` drops response status).
 Read-only; writes a timestamped tree under `argilla_backup/<UTC-ts>/` plus a `manifest.json`.
 
@@ -96,10 +96,10 @@ make backup ARGS="restore argilla_backup/<ts>"          # preview restore (dry-r
 make backup ARGS="restore argilla_backup/<ts> --apply"  # write it
 ```
 
-`restore` reinstates the full snapshot — creating any dataset that no longer exists, and
+`restore` reinstates the full snapshot - creating any dataset that no longer exists, and
 writing onto ones that still exist. It **always previews first** (record counts, plus any
 response/metadata that would change) and only writes with `--apply`. Narrow the scope with
 `--workspace` / `--dataset` / `--record-id` (repeatable, AND'd), or restrict attributes with
 `--only {metadata,suggestions,responses}`. Take a fresh backup before restoring onto a live
-dataset — restoring reverts to that point in time, including any activity recorded after the
+dataset - restoring reverts to that point in time, including any activity recorded after the
 snapshot.

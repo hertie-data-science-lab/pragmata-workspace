@@ -3,10 +3,10 @@
 `reproducibility/` holds one **dated bundle per operation** that produced the live instance
 (chronological, migration-style):
 
-1. `2026-05-initial-import/` — the original build + import: the partition manifests,
+1. `2026-05-initial-import/` - the original build + import: the partition manifests,
    `checksums.sha256` pinning the full source corpus + pre-prune backup (external), and
    `provenance.md` (querygen model/dates, the non-determinism caveat).
-2. `2026-07-01-annotation-curation/` — the curation (21,346 → 4,244 records): the
+2. `2026-07-01-annotation-curation/` - the curation (21,346 → 4,244 records): the
    `curation_record.md`, the per-dataset keep-lists (the declared end state), and
    `apply_log.jsonl` (audit of what was deleted).
 
@@ -22,5 +22,5 @@ make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1 # restore the backup
 ```
 
 Both build a superset (import the full corpus, or restore the backup) then prune down to the
-keep-lists — a plain re-import cannot reproduce the curated set on its own. Full detail in
+keep-lists - a plain re-import cannot reproduce the curated set on its own. Full detail in
 the bundle's `README.md`.

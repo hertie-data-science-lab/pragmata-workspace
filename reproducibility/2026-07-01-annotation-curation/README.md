@@ -1,4 +1,4 @@
-# Annotation curation — 2026-07-01
+# Annotation curation - 2026-07-01
 
 Stage 2 of the live annotation instance's lineage: the one-off curation that reduced the
 imported corpus (**21,346 records**) to the final "essential" set (**4,244 records**).
@@ -32,15 +32,15 @@ make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1 # restore the backup
 
 - **MODE=structure** rebuilds record structure from the corpus (no responses).
 - **MODE=responses** restores the exact state incl. annotations from the backup.
-- **No args** runs `prune_to_keeplist.py` in preview against the current instance — if it
+- **No args** runs `prune_to_keeplist.py` in preview against the current instance - if it
   reports `delete 0` and no missing keep-ids, live already equals the declared state. That
   preview *is* the verification.
 
 ## Why a prune step (not a plain re-import)
 
 Import fans every query into all three tasks and can only flag records
-calibration-vs-production — it can't express "this query has no record in task X", and its
+calibration-vs-production - it can't express "this query has no record in task X", and its
 manifest is append-only. So the curated set (heterogeneous per query × task) is only
-reachable by building the superset then deleting down to the keep-lists — the same
+reachable by building the superset then deleting down to the keep-lists - the same
 declarative "reduce to declared state" model as `kubectl apply --prune` / `terraform apply`
 / `rsync --delete`.
