@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,22 +38,11 @@ from uuid import UUID
 import argilla as rg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import workspace as ws  # noqa: E402
+import workspace as ws
 
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 
-from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
-
 BACKUP_ROOT = ws.ROOT / "argilla_backup"
-
-
-def _client() -> rg.Argilla:
-    url = os.environ.get("ARGILLA_API_URL")
-    key = os.environ.get("ARGILLA_API_KEY")
-    if not (url and key):
-        sys.exit("missing ARGILLA_API_URL / ARGILLA_API_KEY (set in .env)")
-    print(f"connecting to {url}")
-    return resolve_argilla_client(url, key)
 
 
 # --- status-preserving (de)serialization --------------------------------------
@@ -234,7 +222,7 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 
 
 def cmd_dump() -> None:
-    client = _client()
+    client = ws.argilla_client()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     # The timestamp is second-resolution, so two dumps in the same second would collide;
     # take the next free suffix rather than aborting a read-only operation.
@@ -330,7 +318,7 @@ def cmd_restore(
     root = Path(backup_dir)
     manifest = json.loads((root / "manifest.json").read_text())
     snapshot_ts = _parse_snapshot_ts(manifest["created_utc"])
-    client = _client()
+    client = ws.argilla_client()
 
     entries = manifest["datasets"]
     if workspaces:

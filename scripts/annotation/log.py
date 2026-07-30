@@ -1003,8 +1003,7 @@ def pooled_agreement(
 
 
 def run(domains: list[str], *, use_export: bool = False) -> dict:
-    url = os.environ.get("ARGILLA_API_URL")
-    key = os.environ["ARGILLA_API_KEY"]
+    url, key = ws.require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
     client = resolve_argilla_client(url, key)
     NAME_TO_UUID.update(
         {name: str(uid) for uid, name in build_user_lookup(client).items()}

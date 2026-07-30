@@ -21,24 +21,13 @@ Env: ARGILLA_API_URL, ARGILLA_API_KEY (point at the target instance).
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import workspace as ws  # noqa: E402
+import workspace as ws
 
 ws.load_env()  # configs/settings.conf + .env; existing env wins
-
-from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
-
-
-def _client():
-    url = os.environ.get("ARGILLA_API_URL")
-    key = os.environ.get("ARGILLA_API_KEY")
-    if not (url and key):
-        sys.exit("missing ARGILLA_API_URL / ARGILLA_API_KEY (set in .env)")
-    return resolve_argilla_client(url, key)
 
 
 def main() -> None:
@@ -50,7 +39,7 @@ def main() -> None:
     ap.add_argument("--apply", action="store_true", help="delete; default preview only")
     args = ap.parse_args()
 
-    client = _client()
+    client = ws.argilla_client()
     grand_del = grand_keep = 0
     for f in sorted(args.keep_lists.glob("*.ids")):
         ws_name, ds_name = f.stem.split("__", 1)

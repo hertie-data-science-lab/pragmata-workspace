@@ -128,6 +128,31 @@ def check_snapshot(snapshot: dict) -> None:
         )
 
 
+def require_env(*names: str) -> list[str]:
+    """Values of the named env vars, or exit naming the missing ones.
+
+    Empty counts as unset, matching common.sh's require_env.
+    """
+    values = [os.environ.get(n, "") for n in names]
+    missing = [n for n, v in zip(names, values) if not v]
+    if missing:
+        raise SystemExit(f"missing required env: {', '.join(missing)} (set in .env)")
+    return values
+
+
+def argilla_client():
+    """Argilla client for the configured instance, built by pragmata.
+
+    The pragmata import is function-local: this module is imported by standalone
+    ``uv run --script`` consumers that have no pragmata, and importing it at module scope
+    also cost every ``--help`` several seconds.
+    """
+    from pragmata.core.annotation.client import resolve_argilla_client
+
+    url, key = require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
+    return resolve_argilla_client(url, key)
+
+
 def eval_pragmata() -> SimpleNamespace:
     """Resolve the eval-side pragmata pin: source tree, venv python, and CLI binary.
 
