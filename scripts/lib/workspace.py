@@ -203,11 +203,11 @@ def report_dir(run_at: str) -> Path:
 def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     """Dated output dir for a stage's generated reports, ``reports/<stage>/<today>/``.
 
-    Lives here rather than in a stage helper so every script in one bundle resolves the
-    same date from the same clock. corpus_catalog.py runs as a standalone uv script and
-    cannot import the pandas-dependent eval helpers, and when it computed its own date
-    it drifted: a UTC date against the others' local date puts the CSVs in two different
-    directories for the last hours of each local day.
+    Lives here, not in a stage helper, so every script in one bundle resolves the same
+    date from the same clock — including corpus_catalog.py, which cannot import the
+    pandas-dependent eval helpers. A script computing its own date drifts: a UTC date
+    against the others' local date splits one bundle across two directories for the last
+    hours of each local day.
     """
     from datetime import date
 

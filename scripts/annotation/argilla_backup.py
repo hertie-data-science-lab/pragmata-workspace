@@ -104,17 +104,12 @@ def deserialize_record(
     shape), if it exists - used to safely no-op an excluded attribute.
 
     Excluded attributes are NOT handled uniformly, because Argilla does not
-    treat "omitted" the same way for every attribute - verified empirically
-    against the live server: omitting ``responses`` (None) genuinely leaves
-    existing responses untouched, but omitting ``metadata`` (None) silently
-    WIPES it to {} rather than preserving it (and suggestions were not ruled
-    out either, given no real suggestion data exists to test against). So:
-    - responses: omitted (None) when excluded - proven safe.
-    - metadata/suggestions: resend the live record's *current* value when
-      excluded (an identity resend - proven to be a safe no-op) rather than
-      omit, since omission cannot be trusted to preserve them. If there's no
-      live record (a brand-new record), there is nothing to preserve, so an
-      excluded attribute is simply empty.
+    treat "omitted" the same way for each one:
+    - responses: omitted (None). Omission leaves existing responses untouched.
+    - metadata/suggestions: resend the live record's current value, an identity
+      no-op. Omitting metadata wipes it to {} rather than preserving it, and
+      suggestions cannot be assumed safe either. With no live record there is
+      nothing to preserve, so an excluded attribute is simply empty.
     """
     include = _RESTORABLE_ATTRS if only is None else only
 

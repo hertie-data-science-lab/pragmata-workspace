@@ -3,9 +3,9 @@
 
 Pools the frozen canonical export across programmes, runs `pragmata eval score` once
 per task, and collects every per-metric estimate into one tidy CSV — task x metric,
-16 rows. Drew's ask has no per-programme grain for the metric taxonomy, and pooling is
-also what makes retrieval usable: complete panels are 181 queries pooled, against
-n<=5 in four of seven programmes taken singly.
+16 rows. The metric taxonomy has no per-programme grain, and pooling is also what makes
+retrieval usable: complete panels are 181 queries pooled, against n<=5 in four of seven
+programmes taken singly.
 
 **Why it filters first and passes --path.** `eval score` accepts `--export-id`, which
 would read the export directly — but it applies no completeness policy of its own

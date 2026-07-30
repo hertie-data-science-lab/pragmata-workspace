@@ -25,8 +25,7 @@ of `data/annotation/` and `data/querygen/`. Configs live in `configs/eval/`.
 ```
 
 Neither VM reaches the other; both reach Blob. Direct box-to-box is blocked
-structurally (BSt Azure VNet ↔ Hertie-internal `10.x`, no peering - confirmed by
-a timed-out `nc 10.1.23.20:22`).
+structurally: the two VNets are not peered, so there is no route between them.
 
 ## `sync.sh` - the pipe
 
@@ -54,8 +53,8 @@ make eval-verify PREFIX=exports       # re-check a pulled tree against its manif
 `sync.sh` **reads** pragmata tool trees (`data/annotation/`, `data/eval/`) in
 place and **writes only** to `data/transfer/` on the receiving box - never inside
 a tool's own output tree. `pull` refuses any destination outside `data/transfer/`.
-This means pragamata's unambiguously produce all their own data, and that
-means a tool resetting its own dir can't clobber received data.
+So every pragmata tool tree holds only data that tool produced, and a tool
+resetting its own dir cannot clobber received data.
 
 Eval then consumes staged input by **explicit path** - its `labeled_data_path` /
 `unlabeled_data_path` are explicit by design ("not inferred from prior tool
