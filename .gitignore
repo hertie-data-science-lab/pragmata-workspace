@@ -16,7 +16,7 @@ configs/annotation/users.json
 argilla_backup/
 tmp/
 *.log
-.pipeline.lock
+.pipeline.lock*
 
 # --- python caches ---
 __pycache__/

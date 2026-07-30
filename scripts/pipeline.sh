@@ -183,14 +183,36 @@ fi
 # check-then-write on a plain file lets them. The PID goes inside the dir, and is
 # only consulted to decide whether an existing lock is stale.
 LOCK=".pipeline.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
-  existing="$(cat "$LOCK/pid" 2>/dev/null)"
-  if [[ -n "$existing" ]] && kill -0 "$existing" 2>/dev/null; then
-    fatal "another pipeline run is in flight (PID $existing)" 3
+LOCK_GRACE_S=60
+
+# Is an existing lock reclaimable? Default is NO: the winner of mkdir writes its pid a
+# moment later, so a missing or empty pid file means "held, mid-acquisition" — reading it
+# as stale is how a second process steals a live lock. Only two things justify reclaiming:
+# a recorded pid that is not alive, or no pid at all after LOCK_GRACE_S, which means the
+# winner died between mkdir and the write.
+lock_reclaimable() {
+  local pid age
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [[ -n "$pid" ]]; then
+    kill -0 "$pid" 2>/dev/null && return 1
+    log "stale lock: recorded PID $pid is not alive"
+    return 0
   fi
-  log "removing stale lock (PID ${existing:-unknown} not alive)"
-  rm -rf "$LOCK"
-  mkdir "$LOCK" || fatal "cannot take the lock at $LOCK" 3
+  age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
+  (( age >= LOCK_GRACE_S )) || return 1
+  log "stale lock: no pid recorded after ${age}s"
+  return 0
+}
+
+if ! mkdir "$LOCK" 2>/dev/null; then
+  lock_reclaimable \
+    || fatal "another pipeline run is in flight (PID $(cat "$LOCK/pid" 2>/dev/null || echo 'not yet recorded'))" 3
+  # Rename-then-delete, so two processes that both judge the lock stale cannot have one
+  # delete the other's freshly created lock: only the process whose mv succeeds owns the
+  # removal, and mkdir below remains the single point of arbitration.
+  stale="$LOCK.stale.$$"
+  mv "$LOCK" "$stale" 2>/dev/null && rm -rf "$stale"
+  mkdir "$LOCK" || fatal "cannot take the lock at $LOCK (another run took it first)" 3
 fi
 echo $$ > "$LOCK/pid"
 trap 'rm -rf "$LOCK"' EXIT
