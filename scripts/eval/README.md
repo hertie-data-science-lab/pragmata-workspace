@@ -43,9 +43,9 @@ receiving end and fails loudly on any mismatch.
 Driven from the `Makefile`:
 
 ```
-make eval-push SRC=<tree> PREFIX=<p>  # upload <tree> to blob <prefix>/ (+ manifest, pin)
-make eval-pull PREFIX=predictions     # blob predictions/ → data/transfer/predictions/ (+ verify)
-make eval-verify PREFIX=exports       # re-check a pulled tree against its manifest
+make transfer-push SRC=<tree> PREFIX=<p>  # upload <tree> to blob <prefix>/ (+ manifest, pin)
+make transfer-pull PREFIX=predictions     # blob predictions/ → data/transfer/predictions/ (+ verify)
+make transfer-verify PREFIX=exports       # re-check a pulled tree against its manifest
 ```
 
 ## Ownership invariant (staging)

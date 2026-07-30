@@ -36,7 +36,7 @@ never-commit. Two durable copies exist instead:
 
 The blob prefix is a **sibling** of `exports/`, not nested inside it. `sync.sh pull`
 fetches with `--pattern "<prefix>/*"`, so a dated snapshot under `exports/2026-07-29/`
-would be dragged down by every routine `make eval-pull PREFIX=exports`. Keeping the
+would be dragged down by every routine `make transfer-pull PREFIX=exports`. Keeping the
 frozen snapshot beside the rolling tree keeps the two independent.
 
 Verify locally from the repo root:
@@ -48,7 +48,7 @@ sha256sum -c reproducibility/2026-07-29-eval-report-freeze/checksums.sha256
 Or re-fetch and verify the blob copy (round-trip confirmed 2026-07-29):
 
 ```
-make eval-pull PREFIX=exports-frozen/2026-07-29
+make transfer-pull PREFIX=exports-frozen/2026-07-29
 ```
 
 ## Pins

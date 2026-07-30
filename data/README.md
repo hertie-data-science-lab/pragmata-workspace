@@ -13,7 +13,7 @@ data/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
 │   └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
 │                        one dir per domain config and nothing else: this tree is published
-│                        by eval-push and consumers read exports/*/ as the domain list
+│                        by transfer-push and consumers read exports/*/ as the domain list
 ├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
 └── transfer/            Blob staging for eval data (see transfer/README.md); moves via Blob, not git
 ```

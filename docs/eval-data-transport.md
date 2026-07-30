@@ -46,11 +46,11 @@ Each is a top-level prefix in the container, pinned by its own `MANIFEST.sha256`
 
 | `make` target | `sync.sh` equivalent | Effect |
 | --- | --- | --- |
-| `make eval-push SRC=<d> PREFIX=<p>` | `sync.sh push <d> <p>` | upload tree `<d>` to `<p>/` + write its manifest, print a snapshot pin |
-| `make eval-pull PREFIX=<p>` | `sync.sh pull <p>` | download `<p>/` into `data/transfer/<p>/`, then verify |
-| `make eval-verify PREFIX=<p>` | `sync.sh verify <p>` | re-check `data/transfer/<p>/` against its manifest, no download |
+| `make transfer-push SRC=<d> PREFIX=<p>` | `sync.sh push <d> <p>` | upload tree `<d>` to `<p>/` + write its manifest, print a snapshot pin |
+| `make transfer-pull PREFIX=<p>` | `sync.sh pull <p>` | download `<p>/` into `data/transfer/<p>/`, then verify |
+| `make transfer-verify PREFIX=<p>` | `sync.sh verify <p>` | re-check `data/transfer/<p>/` against its manifest, no download |
 
-All three require explicit arguments: `eval-push` needs `SRC=` (source tree) and `PREFIX=`
+All three require explicit arguments: `transfer-push` needs `SRC=` (source tree) and `PREFIX=`
 (destination); `pull`/`verify` need `PREFIX=`. There are no defaults to override, so every
 transfer names its source and destination the same way, in both directions. A `pull` always
 lands at `data/transfer/<prefix>/` - there is no separate destination knob.
@@ -121,21 +121,21 @@ az storage blob list --account-name "$EVAL_BLOB_ACCOUNT" \
 
 ```bash
 # 1. CPU box - ship the exports to the GPU box
-make eval-push SRC=data/annotation/exports PREFIX=exports    # → blob exports/
+make transfer-push SRC=data/annotation/exports PREFIX=exports    # → blob exports/
 
 # 2. GPU box - receive + verify, then run eval by explicit path
-make eval-pull PREFIX=exports             # → data/transfer/exports/  (+verify)
+make transfer-pull PREFIX=exports             # → data/transfer/exports/  (+verify)
 pragmata eval train --labeled-data-path data/transfer/exports/<topic>/<task>.csv ...
 
 # 3. GPU box - push the eval outputs (under data/eval/) back to the blob. Each push
 #    writes its own manifest + snapshot pin - record the checkpoint pin, it is not
 #    reproducible from inputs.
-make eval-push SRC=<eval-predictions-tree> PREFIX=predictions
-make eval-push SRC=<eval-checkpoints-tree> PREFIX=checkpoints   # before teardown
+make transfer-push SRC=<eval-predictions-tree> PREFIX=predictions
+make transfer-push SRC=<eval-checkpoints-tree> PREFIX=checkpoints   # before teardown
 
 # 4. CPU box - collect the results and checkpoints
-make eval-pull PREFIX=predictions          # → data/transfer/predictions/  (+verify)
-make eval-pull PREFIX=checkpoints          # → data/transfer/checkpoints/   (+verify)
+make transfer-pull PREFIX=predictions          # → data/transfer/predictions/  (+verify)
+make transfer-pull PREFIX=checkpoints          # → data/transfer/checkpoints/   (+verify)
 ```
 
 ## Data sensitivity

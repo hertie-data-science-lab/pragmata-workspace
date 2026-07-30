@@ -18,8 +18,11 @@
 #   make setup DOMAIN=gesundheit
 #   make import DOMAIN=gesundheit
 #
-# Naming: pipeline stages are bare (the five above, plus pipeline); everything else
-# is namespaced by what it operates on — annotation-*, report-*, eval-*.
+# Naming: pipeline stages are bare (the five above, plus pipeline) because they are also
+# pipeline.sh's --from/--to stage tokens. Everything else is namespaced by what it
+# operates on — annotation-*, report-*, transfer-*. The transport targets are transfer-*,
+# not eval-*: they move any tree through data/transfer/ and are not evaluation, so the
+# eval-* namespace stays free for the eval compute stages.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
@@ -37,7 +40,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
 .PHONY: help pipeline querygen bot combine setup import \
         annotation-log annotation-export annotation-backup annotation-daily \
         report report-tables report-pdf report-plots \
-        reproduce-curation eval-push eval-pull eval-verify
+        reproduce-curation transfer-push transfer-pull transfer-verify
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -88,16 +91,16 @@ annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: 
 annotation-backup: ## Status-preserving Argilla backup (dump; ARGS="restore <dir>" to restore)
 	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
 
-eval-push: ## Push a tree to the eval Blob (SRC= source tree, PREFIX= dest prefix; both required)
-	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make eval-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
+transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= dest prefix; both required)
+	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make transfer-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
 	bash scripts/eval/sync.sh push "$(SRC)" "$(PREFIX)"
 
-eval-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
-	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix>"; exit 2; }
+transfer-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
+	@test -n "$(PREFIX)" || { echo "usage: make transfer-pull PREFIX=<prefix>"; exit 2; }
 	bash scripts/eval/sync.sh pull $(PREFIX)
 
-eval-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
-	@test -n "$(PREFIX)" || { echo "usage: make eval-verify PREFIX=<prefix>"; exit 2; }
+transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
+	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
 	bash scripts/eval/sync.sh verify $(PREFIX)
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.

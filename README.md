@@ -58,9 +58,9 @@ make report-plots   # render plots only, PNGs                  (needs matplotlib
 make reproduce-curation  # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
 
 # Eval data transport  (see docs/eval-data-transport.md)
-make eval-push      # push a tree to the eval Blob             (SRC= source, PREFIX= dest; both required)
-make eval-pull      # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
-make eval-verify    # re-verify a pulled tree against its manifest (PREFIX=)
+make transfer-push      # push a tree to the eval Blob             (SRC= source, PREFIX= dest; both required)
+make transfer-pull      # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
+make transfer-verify    # re-verify a pulled tree against its manifest (PREFIX=)
 
 make help           # list every target
 ```

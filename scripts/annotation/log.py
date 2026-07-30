@@ -928,7 +928,7 @@ def pooled_agreement(
     retrieval), so concatenation cannot merge units across domains.
 
     The pooled export is written under ``scratch_base`` — never into
-    ``data/annotation/exports/``, which is published by eval-push and whose subdirectories
+    ``data/annotation/exports/``, which is published by transfer-push and whose subdirectories
     are read downstream as the domain list.
     """
     pooled_dir = scratch_base / "annotation" / "exports" / POOLED_EXPORT_ID
