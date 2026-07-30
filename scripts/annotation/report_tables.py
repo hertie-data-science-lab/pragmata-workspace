@@ -897,7 +897,9 @@ def main() -> None:
         out = ws.report_dir(snap["run_at"]) / "report.md"
         ws.link_latest(out.parent)
     out.write_text(md)
-    print(f"wrote {out}", file=sys.stderr)
+    # The written path is the script's only stdout output (diagnostics, if any, go to
+    # stderr), so a caller can capture it directly instead of parsing prose.
+    print(out)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ report-tables: ## Render tables only -> reports/annotation/<date>/report.md
 	$(PY) scripts/annotation/report_tables.py
 
 report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
-	@md=$$($(PY) scripts/annotation/report_tables.py 2>&1 | sed -n 's/^wrote //p'); \
+	@md=$$($(PY) scripts/annotation/report_tables.py); \
 	pandoc "$$md" -o "$${md%.md}.pdf" --pdf-engine=xelatex -V fontsize=9pt \
 	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
 	  && echo "wrote $${md%.md}.pdf"
