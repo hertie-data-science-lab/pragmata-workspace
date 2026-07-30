@@ -3,8 +3,8 @@
 Moving eval data between the **CPU annotation box** (BSt Azure tenant) and the **GPU eval
 box** (Hertie network). The two VMs sit in different organisations with no route to each
 other, so data travels through a shared **Azure Blob** container that both reach over HTTPS.
-This is the operator how-to; for the script internals see
-[`scripts/eval/README.md`](../scripts/eval/README.md) and the staging layout in
+This is the operator how-to; for the eval stage that consumes the data see
+[Eval pipeline](eval.md), and for the staging layout
 [`data/transfer/README.md`](../data/transfer/README.md).
 
 ```mermaid
@@ -140,14 +140,21 @@ make transfer-pull PREFIX=checkpoints          # → data/transfer/checkpoints/ 
 
 ## Data sensitivity
 
-Exports carry `annotator_id` - a pseudonymous, name-derived handle, not a name or email, but
-treated as PII (`data/README.md` labels the exports "never commit"). They ship as-is into the
-private, IP-allowlisted container; the annotator roster (`configs/annotation/users.json`)
-never leaves the CPU box, and the GPU box never needs it - eval consumes label columns, not
-identities.
+Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, pseudonymised on
+every export since 2026-07-30 (see [Annotator identities](eval.md#annotator-identities)).
+As a second line of defence, `push` itself refuses any tree whose `annotator_id` values or
+`iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot
+leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
+
+Exports are still treated as PII (`data/README.md` labels them "never commit"): the
+free-text `notes` and `discard_notes` columns are annotator-authored and unreviewed. They
+ship into the private, IP-allowlisted container; the annotator roster
+(`configs/annotation/users.json`) never leaves the CPU box, and the GPU box never needs
+it - eval consumes label columns, not identities.
 
 ## Not here yet
 
-The **eval pipeline itself** (`pragmata eval train|predict|score`) is a separate effort in the
-pragmata repo and is not built yet - this workspace currently ships only the transport. See
+**Training and prediction** (`pragmata eval train|predict`) are a separate effort in the
+pragmata repo and are not built yet - the walkthrough's step 2 onward describes that future
+flow. Scoring human labels has shipped and runs entirely on the CPU box; see
 [Eval pipeline](eval.md).

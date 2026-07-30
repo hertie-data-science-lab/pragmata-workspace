@@ -10,7 +10,8 @@
 | `2026-05-initial-import/` | lineage | Original build + import: the partition manifests, `provenance.md` (querygen model/dates, the non-determinism caveat), and pins for the external corpus + pre-prune backup. |
 | `2026-07-01-annotation-curation/` | lineage | The curation, 21,346 → 4,244 records: `curation_record.md`, the per-dataset keep-lists, `apply_log.jsonl`. |
 | `2026-07-02-generation-descope/` | lineage, **retired** | Would have taken one dataset to 80 records. Declared 2026-07-02, never applied, retired 2026-07-30 once its premise expired (the annotators completed all 20 records it would have dropped). Excluded from replay. |
-| `2026-07-29-eval-report-freeze/` | freeze | The canonical annotation export behind the BSt report's human-annotation and fairness numbers. Never replayed. |
+| `2026-07-29-eval-report-freeze/` | freeze, **superseded** | The first canonical annotation export for the BSt report. Superseded by `2026-07-30-eval-report/`; retained as an archived record and still verifies. Its export tree predates pseudonymisation, so it holds real annotator names and stays local. |
+| `2026-07-30-eval-report/` | freeze | The canonical data behind every human-annotation and fairness number in the BSt report: the pseudonymised export and the report CSVs with their sidecars and data dictionary. Never replayed. |
 
 `kind: lineage` bundles are replayed in date order to rebuild the live Argilla instance;
 `kind: freeze` bundles are self-contained records of a single run. A `status: retired` header
@@ -33,12 +34,12 @@ get them. `MISMATCH` always means something is wrong.
 Reproduction is **declarative**: the keep-lists are the desired end state, and
 `scripts/annotation/prune_to_keeplist.py` reduces any superset to them (the
 `kubectl apply --prune` / `terraform` model). A plain re-import cannot reach the curated set
-on its own — import fans every query into all three tasks, so the superset has to be built
+on its own - import fans every query into all three tasks, so the superset has to be built
 and then pruned down.
 
 `repro-reproduce` composes **every** active lineage bundle's keep-lists in date order before
 pruning, later dates overriding earlier ones per dataset, and reports what it skipped. The
-lineage currently ends at **4,244 records** across 48 datasets — the 2026-07-01 keep-lists,
+lineage currently ends at **4,244 records** across 48 datasets - the 2026-07-01 keep-lists,
 the 2026-07-02 descope being retired. Whether live still matches that is what the preview
 reports; do not assume it.
 
