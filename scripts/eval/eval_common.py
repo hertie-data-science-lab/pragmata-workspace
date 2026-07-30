@@ -307,28 +307,18 @@ def consolidated_prevalence(frame: pd.DataFrame, task: str, label: str) -> tuple
 def latest_snapshot(nth: int = 1) -> dict:
     """The Nth-from-last snapshot in logs/annotation/log.jsonl (1 = last).
 
-    Asserts the snapshot carries the pooled gap statistics, which were added to log.py
-    additively without a SNAPSHOT_SCHEMA_VERSION bump (the version guard is for
-    incompatible changes, and bumping would strand every existing entry for
-    report_tables.py). An older snapshot would otherwise sail through and emit blank
-    cadence columns, reading as "no cadence data" rather than "wrong snapshot".
+    Reading and the compatibility guards live in ws.read_snapshots / ws.check_snapshot,
+    so these reports, the annotation report tables and the plots all accept and refuse
+    exactly the same snapshots.
     """
-    path = ws.LOGS_DIR / "log.jsonl"
-    if not path.exists():
-        raise SystemExit(f"no snapshot log at {path} - run `make log` first.")
-    lines = [line for line in path.read_text().splitlines() if line.strip()]
+    snapshots = ws.read_snapshots()
     if nth < 1:
-        # lines[-0] is lines[0], the oldest snapshot - the opposite of "latest".
+        # snapshots[-0] is snapshots[0], the oldest - the opposite of "latest".
         raise SystemExit(f"--snapshot counts back from the last and must be >= 1, got {nth}.")
-    if nth > len(lines):
-        raise SystemExit(f"only {len(lines)} snapshots available, asked for {nth} from last.")
-    snapshot = json.loads(lines[-nth])
-    timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
-    if "pooled_mean_gap_s" not in timing:
-        raise SystemExit(
-            f"snapshot {snapshot.get('run_at')} predates the pooled gap statistics, so the "
-            f"cadence columns would come out blank. Re-run `make log` and try again."
-        )
+    if nth > len(snapshots):
+        raise SystemExit(f"only {len(snapshots)} snapshots available, asked for {nth} from last.")
+    snapshot = snapshots[-nth]
+    ws.check_snapshot(snapshot, where=f"{nth} from last")
     return snapshot
 
 

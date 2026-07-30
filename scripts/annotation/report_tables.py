@@ -27,7 +27,6 @@ Sort rules (all deterministic):
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -876,30 +875,15 @@ def main() -> None:
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-time display)
 
-    lines = [ln for ln in args.jsonl.read_text().splitlines() if ln.strip()]
-    if not lines:
-        sys.exit(f"no snapshots in {args.jsonl}")
+    snapshots = ws.read_snapshots(args.jsonl)
     try:
-        snap = json.loads(lines[args.line])
+        snap = snapshots[args.line]
     except IndexError:
-        sys.exit(f"line {args.line} out of range ({len(lines)} snapshots)")
-
-    # Refuse older snapshots outright. log.jsonl is append-only and --line renders any of
-    # it, so this code is routinely handed pre-pooling snapshots. Those carry per-domain
-    # n_items-weighted means and no `pooled_agreement`; rendering them here would silently
-    # omit the entire agreement section (the old guards skipped on a missing key rather
-    # than raising), producing a report that looks complete but has lost its headline
-    # metric. Fail loudly instead.
-    got = snap.get("schema_version", 1)
-    if got < ws.SNAPSHOT_SCHEMA_VERSION:
-        sys.exit(
-            f"snapshot at line {args.line} ({snap.get('run_at', 'unknown date')}) is "
-            f"schema v{got}; this renderer needs v{ws.SNAPSHOT_SCHEMA_VERSION}.\n"
-            "Agreement moved from per-domain weighted means of α to a single pooled α "
-            "(one reliability matrix per task x label over all domains), so the two are "
-            "not interchangeable.\n"
-            "To render this snapshot, check out a revision from before that change."
-        )
+        sys.exit(f"line {args.line} out of range ({len(snapshots)} snapshots)")
+    # log.jsonl is append-only and --line renders any of it, so this code is routinely
+    # handed pre-pooling snapshots. ws.check_snapshot refuses them rather than emitting a
+    # report that looks complete but has lost its headline metric.
+    ws.check_snapshot(snap, where=f"line {args.line}")
 
     md = render(snap)
     if args.stdout:

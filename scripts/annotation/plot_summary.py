@@ -15,7 +15,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import sys
 from pathlib import Path
@@ -202,7 +201,13 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
 
 
 def plot_pace(snap: dict, out: Path) -> bool:
-    """Pooled median active gap by domain and by task (minutes)."""
+    """Pooled median active gap by domain and by task (minutes).
+
+    Both panels read a pooled median straight from the snapshot. The task panel used to
+    compute a gap-count-weighted mean of per-annotator medians instead, which is a
+    different statistic (a mean of medians, not the median of the pooled gaps) and read
+    high; report_tables.py already published the pooled value from `total.timing_by_task`.
+    """
     domains = snap.get("domains", {})
     dom = []
     for name, v in domains.items():
@@ -211,20 +216,14 @@ def plot_pace(snap: dict, out: Path) -> bool:
         )
         if g is not None:
             dom.append((name, g / 60))
-    task_agg: dict[str, list[tuple[float, int]]] = {}
-    for v in domains.values():
-        for task, tv in v.get("tasks", {}).items():
-            for av in (
-                tv["timing"]["per_annotator"].get("by_annotator") or {}
-            ).values():
-                med, n = av.get("median_active_gap_s"), av.get("n_gaps_used", 0)
-                if med is not None and n > 0:
-                    task_agg.setdefault(task, []).append((med, n))
-    tasks = [
-        (t, sum(m * n for m, n in p) / sum(n for _, n in p) / 60)
-        for t in TASK_ORDER
-        if (p := task_agg.get(t))
-    ]
+    by_task = snap.get("total", {}).get("timing_by_task") or {}
+    tasks = []
+    for t in TASK_ORDER:
+        pooled = ((by_task.get(t) or {}).get("per_annotator") or {}).get(
+            "pooled_median_active_gap_s"
+        )
+        if pooled is not None:
+            tasks.append((t, pooled / 60))
     if not dom and not tasks:
         return False
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
@@ -280,10 +279,15 @@ def main() -> None:
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-date out-dir, matches report_tables)
 
-    snaps = [json.loads(ln) for ln in args.jsonl.read_text().splitlines() if ln.strip()]
-    if not snaps:
-        sys.exit(f"no snapshots in {args.jsonl}")
-    snap = snaps[args.line]
+    snaps = ws.read_snapshots(args.jsonl)
+    try:
+        snap = snaps[args.line]
+    except IndexError:
+        sys.exit(f"line {args.line} out of range ({len(snaps)} snapshots)")
+    # Same guard as report_tables: refuse a snapshot these panels cannot describe rather
+    # than rendering one silently. The burn-up/burn-down series only reads counts, which
+    # every schema version carries, so the whole history stays plottable.
+    ws.check_snapshot(snap, where=f"line {args.line}")
     if args.out_dir:
         out = args.out_dir
         out.mkdir(parents=True, exist_ok=True)

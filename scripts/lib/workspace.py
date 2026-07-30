@@ -65,6 +65,52 @@ OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 SNAPSHOT_SCHEMA_VERSION = 2
 
 
+def read_snapshots(path: Path | None = None) -> list[dict]:
+    """Every snapshot in logs/annotation/log.jsonl, oldest first.
+
+    One reader for all three consumers (report tables, plots, the eval report scripts),
+    so the file's location and its one-object-per-line shape are stated once.
+    """
+    path = path or LOGS_DIR / "log.jsonl"
+    if not path.exists():
+        raise SystemExit(f"no snapshot log at {path} - run `make log` first.")
+    snapshots = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not snapshots:
+        raise SystemExit(f"no snapshots in {path}")
+    return snapshots
+
+
+def check_snapshot(snapshot: dict, *, where: str = "") -> None:
+    """Refuse a snapshot the current reporting code cannot render faithfully.
+
+    Two guards, because both failure modes are silent rather than loud:
+      - schema_version: agreement moved from per-domain n_items-weighted means of alpha
+        to a single pooled alpha per (task, label). Rendering a v1 snapshot would drop
+        the entire agreement section and still look like a complete report.
+      - pooled gap statistics: added to log.py additively, without a version bump (one
+        would strand every existing entry). An older snapshot renders blank cadence
+        columns, which reads as "no cadence data" rather than "wrong snapshot".
+    """
+    at = snapshot.get("run_at", "unknown date")
+    label = f" ({where})" if where else ""
+    got = snapshot.get("schema_version", 1)
+    if got < SNAPSHOT_SCHEMA_VERSION:
+        raise SystemExit(
+            f"snapshot {at}{label} is schema v{got}; this code needs "
+            f"v{SNAPSHOT_SCHEMA_VERSION}.\n"
+            "Agreement moved from per-domain weighted means of alpha to a single pooled "
+            "alpha (one reliability matrix per task x label over all domains), so the two "
+            "are not interchangeable.\n"
+            "To render this snapshot, check out a revision from before that change."
+        )
+    timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
+    if "pooled_mean_gap_s" not in timing:
+        raise SystemExit(
+            f"snapshot {at}{label} predates the pooled gap statistics, so the cadence "
+            f"columns would come out blank. Re-run `make log` and try again."
+        )
+
+
 def eval_pragmata() -> SimpleNamespace:
     """Resolve the eval-side pragmata pin: source tree, venv python, and CLI binary.
 
