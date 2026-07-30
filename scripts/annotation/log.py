@@ -68,6 +68,7 @@ import os
 import statistics
 import sys
 import tempfile
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -654,6 +655,24 @@ def task_counts(events: list[dict], prog: dict) -> tuple[dict, set[str]]:
     return count, annotators
 
 
+def task_datasets(settings) -> Iterator[tuple[str, Task, str, str]]:
+    """Every (workspace, task, purpose, dataset name) the configured workspaces define.
+
+    Production and calibration are a dataset each. Yields coordinates rather than
+    resolved datasets so each caller keeps its own failure policy: counts must raise on
+    a hard fetch failure, progress logs it and continues.
+    """
+    for ws_name, wss in settings.workspaces.items():
+        for task in wss.tasks:
+            for cal in (False, True):
+                yield (
+                    ws_name,
+                    task,
+                    "calibration" if cal else "production",
+                    dataset_name(task, calibration=cal, dataset_id=settings.dataset_id),
+                )
+
+
 def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
     """Submitted-response events per task, via the Argilla REST records endpoint.
 
@@ -662,45 +681,39 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     responses only.
     """
     out: dict[Task, list[dict]] = {t: [] for t in TASKS}
-    for ws_name, wss in settings.workspaces.items():
-        for task in wss.tasks:
-            for cal in (False, True):
-                name = dataset_name(
-                    task, calibration=cal, dataset_id=settings.dataset_id
-                )
-                ds = client.datasets(name=name, workspace=ws_name)
-                if ds is None:
-                    continue
-                purpose = "calibration" if cal else "production"
-                offset, limit = 0, 1000
-                while True:
-                    r = http.get(
-                        f"/api/v1/datasets/{ds.id}/records",
-                        params={
-                            "include": "responses",
-                            "response_statuses": "submitted",
-                            "limit": limit,
-                            "offset": offset,
-                        },
-                    )
-                    r.raise_for_status()
-                    items = r.json().get("items", [])
-                    for rec in items:
-                        for resp in rec.get("responses") or []:
-                            ts = resp.get("inserted_at")
-                            if resp.get("status") == "submitted" and ts:
-                                out[task].append(
-                                    {
-                                        "user_id": str(resp.get("user_id")),
-                                        "at": datetime.fromisoformat(ts),
-                                        "purpose": purpose,
-                                        "record_id": str(resp.get("record_id")),
-                                        "task": task.value,
-                                    }
-                                )
-                    offset += len(items)
-                    if len(items) < limit:
-                        break
+    for ws_name, task, purpose, name in task_datasets(settings):
+        ds = client.datasets(name=name, workspace=ws_name)
+        if ds is None:
+            continue
+        offset, limit = 0, 1000
+        while True:
+            r = http.get(
+                f"/api/v1/datasets/{ds.id}/records",
+                params={
+                    "include": "responses",
+                    "response_statuses": "submitted",
+                    "limit": limit,
+                    "offset": offset,
+                },
+            )
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            for rec in items:
+                for resp in rec.get("responses") or []:
+                    ts = resp.get("inserted_at")
+                    if resp.get("status") == "submitted" and ts:
+                        out[task].append(
+                            {
+                                "user_id": str(resp.get("user_id")),
+                                "at": datetime.fromisoformat(ts),
+                                "purpose": purpose,
+                                "record_id": str(resp.get("record_id")),
+                                "task": task.value,
+                            }
+                        )
+            offset += len(items)
+            if len(items) < limit:
+                break
     return out
 
 
@@ -752,23 +765,16 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     "calibration": ...}}``. Datasets that don't exist are simply absent.
     """
     out: dict[Task, dict] = {t: {} for t in TASKS}
-    for ws_name, wss in settings.workspaces.items():
-        for task in wss.tasks:
-            for cal in (False, True):
-                name = dataset_name(
-                    task, calibration=cal, dataset_id=settings.dataset_id
-                )
-                try:
-                    ds = client.datasets(name=name, workspace=ws_name)
-                    if ds is None:
-                        continue
-                    prog = dict(ds.progress())
-                except Exception as e:
-                    log(
-                        f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}"
-                    )
-                    continue
-                out[task]["calibration" if cal else "production"] = prog
+    for ws_name, task, purpose, name in task_datasets(settings):
+        try:
+            ds = client.datasets(name=name, workspace=ws_name)
+            if ds is None:
+                continue
+            prog = dict(ds.progress())
+        except Exception as e:
+            log(f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}")
+            continue
+        out[task][purpose] = prog
     return out
 
 
