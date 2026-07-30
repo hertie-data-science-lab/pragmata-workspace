@@ -3,7 +3,7 @@
 
 For each `keep_lists/<workspace>__<dataset>.ids`, delete every live record in that
 dataset whose id is NOT in the keep-list. This is the deterministic "reduce to the
-exact curated set" step used by `make reproduce-curation`, after either:
+exact curated set" step used by `make repro-reproduce`, after either:
   - importing the curated corpus (structure only), or
   - restoring the pre-prune backup (exact, incl. responses).
 

@@ -64,7 +64,11 @@ make transfer-push             # push a tree to the Blob             (SRC= sourc
 make transfer-pull             # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
 make transfer-verify           # re-verify a pulled tree against its manifest (PREFIX=)
 
-make reproduce-curation        # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
+# Reproducibility  (dated bundles under reproducibility/)
+make repro-verify              # check every bundle's pins            (PIN= for one)
+make repro-pin                 # start a new dated bundle            (NAME= PATHS= required)
+make repro-reproduce           # replay a lineage bundle              (PIN= required, MODE= APPLY=)
+
 make help                      # list every target
 ```
 
@@ -76,7 +80,7 @@ make help                      # list every target
   train/predict/score stages are still to build.
 - [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
-- [Reproducibility](docs/reproducibility.md) - dated lineage bundles + `reproduce-curation`.
+- [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
 - [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data &
   secrets.
 

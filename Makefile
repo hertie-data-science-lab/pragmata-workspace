@@ -25,17 +25,20 @@
 #   make annotation-setup DOMAIN=gesundheit
 #   make annotation-import DOMAIN=gesundheit
 #
+# Reproducibility (dated bundles under reproducibility/, one per operation or run):
+#   make repro-verify                      # check every bundle's pins
+#   make repro-verify PIN=2026-07-01-annotation-curation
+#   make repro-pin NAME=x PATHS="a b"      # start a new dated bundle
+#   make repro-reproduce PIN=2026-07-01-annotation-curation
+# See reproducibility/README.md for the bundle contract.
+#
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
-# it operates on — querygen-*, bot-*, combine-*, annotation-*, transfer-*. Only the
-# orchestrator (pipeline, plan) is bare. The stage targets share their names with
+# it operates on — querygen-*, bot-*, combine-*, annotation-*, transfer-*, repro-*. Only
+# the orchestrator (pipeline, plan) is bare. The stage targets share their names with
 # pipeline.sh's slice tokens; see its usage block.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
-
-# Reproducibility bundles (dated, one per operation).
-IMPORT := reproducibility/2026-05-initial-import
-CURATION := reproducibility/2026-07-01-annotation-curation
 
 # Pass-through flags for pipeline.sh / plan, built from make vars.
 PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
@@ -51,7 +54,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
         transfer-push transfer-pull transfer-verify \
-        reproduce-curation help
+        repro-pin repro-verify repro-reproduce help
 
 # --- orchestrator ---
 
@@ -133,23 +136,24 @@ transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFI
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
 	bash scripts/transfer/sync.sh verify $(PREFIX)
 
-# --- reproducibility ---
+# --- reproducibility (dated bundles; see reproducibility/README.md for the contract) ---
 
-reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
-	@source scripts/lib/common.sh; \
-	echo "== verifying artifact checksums =="; \
-	sha256sum -c $(IMPORT)/checksums.sha256 2>/dev/null \
-	  || echo "(corpus/backup not present locally — fetch the external artifacts first)"; \
-	if [ "$(MODE)" = "structure" ] && [ -n "$(APPLY)" ]; then \
-	  while IFS= read -r d; do \
-	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; \
-	  done < <(config_stems configs/annotation/domains); \
-	elif [ "$(MODE)" = "responses" ] && [ -n "$(APPLY)" ]; then \
-	  test -n "$(BACKUP)" || { echo "usage: make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1"; exit 2; }; \
-	  $(PY) scripts/annotation/argilla_backup.py restore "$(BACKUP)" --apply; \
-	fi; \
-	echo "== prune live -> curated keep-lists (no APPLY = preview, doubles as verification) =="; \
-	$(PY) scripts/annotation/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)
+repro-pin: ## Pin paths into a new bundle reproducibility/<today>-<NAME>/ (NAME= PATHS= required, KIND=lineage|freeze)
+	@test -n "$(NAME)" && test -n "$(PATHS)" || { echo 'usage: make repro-pin NAME=<name> PATHS="<path ...>" [KIND=freeze]'; exit 2; }
+	$(PY) scripts/repro/bundle.py pin "$(NAME)" $(PATHS) $(if $(KIND),--kind $(KIND),)
+
+# bundle.py exits 0 all-OK / 2 mismatch / 3 absent-only. make collapses any recipe failure
+# to its own exit 2, but prints the script's code as `Error <n>`; call the script directly
+# when a caller needs to branch on absent-vs-mismatch.
+repro-verify: ## Verify bundle pins per file - OK/MISMATCH/ABSENT (PIN=<bundle-dir>, default all)
+	$(PY) scripts/repro/bundle.py verify $(PIN)
+
+# PIN names the bundle you are replaying toward and is what the kind: check applies to; it
+# does not select how much of the chain is composed. Lineage replay always composes every
+# lineage bundle's keep-lists in date order, because a prefix of the chain was never live.
+repro-reproduce: ## Replay the lineage onto its composed end state (PIN= required; MODE=structure|responses, BACKUP=, APPLY=1). No APPLY = preview
+	@test -n "$(PIN)" || { echo "usage: make repro-reproduce PIN=<bundle-dir> [MODE=structure|responses] [BACKUP=<dir>] [APPLY=1]"; exit 2; }
+	$(PY) scripts/repro/bundle.py reproduce "$(PIN)" $(if $(MODE),--mode $(MODE),) $(if $(BACKUP),--backup $(BACKUP),) $(if $(APPLY),--apply,)
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-24s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)

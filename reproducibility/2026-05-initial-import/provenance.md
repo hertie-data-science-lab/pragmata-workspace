@@ -24,7 +24,7 @@ assignments) and the live records in Argilla. This is the state the
   `near_duplicate_tolerance: 0.95` (see `_runtime.yaml`).
 - **Non-deterministic**: querygen is LLM output and the bot runs against a live service, so
   the corpus **cannot be regenerated to identical bytes**. The exact corpus is therefore
-  pinned by SHA256 in `checksums.sha256` and treated as the versioned input - not re-derived.
+  pinned by SHA256 in `pins.sha256` and treated as the versioned input - not re-derived.
 
 ## Tooling
 
@@ -34,6 +34,6 @@ assignments) and the live records in Argilla. This is the state the
 
 ## What "reproduce" means here
 
-Fetch the pinned corpus (verify against `checksums.sha256`) and re-import it with the
+Fetch the pinned corpus (verify against `pins.sha256`) and re-import it with the
 committed configs; a fresh import with `partition_seed: 0` reproduces the same
 calibration/production placement recorded in `original_manifests/`.

@@ -22,12 +22,14 @@ data/
 
 - **Reproduce the curated annotation experiment** (recommended): see
   [`reproducibility/2026-07-01-annotation-curation/`](../reproducibility/2026-07-01-annotation-curation/).
-  Fetch the pinned corpus/backup artifacts (checksums in that bundle), then
-  `make reproduce-curation`.
+  Fetch the pinned corpus/backup artifacts (`pins.sha256` in that bundle), then
+  `make repro-reproduce PIN=2026-07-01-annotation-curation`.
 - **Regenerate from scratch**: run the pipeline (`make pipeline`) - querygen-run →
   bot-run → combine-run → annotation-setup → annotation-import. Note querygen is
   non-deterministic LLM output.
 
 The curated corpus (`*_combined.curated.jsonl`, ~52M) and the Argilla backups
-(~2.1G) are too large for git; they live as external release/archive artifacts
-pinned by SHA256 in the reproducibility bundle.
+(a few hundred MB under the retention policy in
+[`reproducibility/README.md`](../reproducibility/README.md)) are too large for git;
+they live as external release/archive artifacts pinned by SHA256 in the
+reproducibility bundles.

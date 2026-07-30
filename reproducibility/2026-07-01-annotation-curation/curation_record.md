@@ -130,9 +130,9 @@ as the recovery source**.
 - **Tooling:** Python 3.12.13, `argilla` client 2.8.0; `pragmata` CLI from the
   `PRAGMATA_SRC` checkout (branch `demo-2026-05-26`).
 - **Pre-prune backup** (full original, exact incl. responses): `20260701T185359Z_backup_pre_prune`
-  (48 datasets, 21,346 records; `manifest.json` sha256 in `checksums.sha256`).
+  (48 datasets, 21,346 records; `manifest.json` sha256 in `pins.sha256`).
 - **Source corpus / query generation:** `data/publikationsbot/<slug>_combined.jsonl`
-  (pinned in `checksums.sha256`), generated via `configs/annotation/querygen_specs/` +
+  (pinned in `pins.sha256`), generated via `configs/annotation/querygen_specs/` +
   `_runtime.yaml` (model `gpt-5.4`, `reasoning_effort: high`). Querygen is
   non-deterministic LLM output, so the corpus is the versioned input, not re-derived.
 - **Authoritative record:** this file. `data/annotation/imports/curation_changelog.md`
