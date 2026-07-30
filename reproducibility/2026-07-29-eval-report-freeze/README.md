@@ -32,7 +32,7 @@ never-commit. Two durable copies exist instead:
 
 - **Local, read-only:** `data/annotation/exports-frozen/2026-07-29/` (`chmod a-w`).
 - **Azure Blob:** `fileshare01/exports-frozen/2026-07-29/` via
-  `scripts/eval/sync.sh push`, with its own `MANIFEST.sha256`.
+  `scripts/transfer/sync.sh push`, with its own `MANIFEST.sha256`.
 
 The blob prefix is a **sibling** of `exports/`, not nested inside it. `sync.sh pull`
 fetches with `--pattern "<prefix>/*"`, so a dated snapshot under `exports/2026-07-29/`

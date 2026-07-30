@@ -42,7 +42,7 @@ Each is a top-level prefix in the container, pinned by its own `MANIFEST.sha256`
 
 ## Commands
 
-`scripts/eval/sync.sh` is the pipe; the `make` targets wrap it with sensible defaults:
+`scripts/transfer/sync.sh` is the pipe; the `make` targets wrap it with sensible defaults:
 
 | `make` target | `sync.sh` equivalent | Effect |
 | --- | --- | --- |

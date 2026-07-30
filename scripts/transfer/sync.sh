@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/eval/sync.sh {push|pull} ...
+# scripts/transfer/sync.sh {push|pull} ...
 #
 # Moves eval data between the CPU annotation box (BSt Azure) and the GPU eval box
 # (Hertie) over a shared Azure Blob container — the two VMs have no route to each

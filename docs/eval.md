@@ -1,7 +1,7 @@
 # Eval pipeline
 
 The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Its **data
-transport** has shipped: `scripts/eval/sync.sh` plus the `make transfer-push` / `transfer-pull` /
+transport** has shipped: `scripts/transfer/sync.sh` plus the `make transfer-push` / `transfer-pull` /
 `transfer-verify` targets move eval data between the CPU annotation box and the GPU eval box over
 Azure Blob - see [Eval data transport](eval-data-transport.md). The **stages themselves**
 (`pragmata eval train|predict|score`) are not built yet.

@@ -273,7 +273,7 @@ def domains() -> list[str]:
 #
 # Report numbers get lifted into figures and then into a published document, so a
 # bare CSV is not enough — each one needs to name the code and inputs it came from.
-# This mirrors the manifest convention in scripts/eval/sync.sh (sorted per-file
+# This mirrors the manifest convention in scripts/transfer/sync.sh (sorted per-file
 # sha256) and the dated bundles under reproducibility/.
 
 

@@ -123,15 +123,15 @@ annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date
 
 transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= dest prefix; both required)
 	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make transfer-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh push "$(SRC)" "$(PREFIX)"
+	bash scripts/transfer/sync.sh push "$(SRC)" "$(PREFIX)"
 
 transfer-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-pull PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh pull $(PREFIX)
+	bash scripts/transfer/sync.sh pull $(PREFIX)
 
 transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh verify $(PREFIX)
+	bash scripts/transfer/sync.sh verify $(PREFIX)
 
 # --- reproducibility ---
 
