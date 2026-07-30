@@ -220,6 +220,11 @@ def main() -> int:
             exports_tree=str(args.exports),
             grain="programme x task x label",
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
+            # alpha and its interval come from the export's own iaa/report.json, which
+            # records the resample count but not the seed. Both are carried here so the
+            # intervals in this table can be reproduced; the snapshot is not an input to
+            # it, only these parameters are.
+            iaa=snapshot.get("iaa"),
         ),
     )
     print(f"wrote annotation_label_summary.csv ({len(labels)} rows)", file=sys.stderr)

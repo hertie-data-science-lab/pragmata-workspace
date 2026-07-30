@@ -357,7 +357,7 @@ def iaa_by_label(pooled: dict) -> str:
             "Label",
             "α (pooled)",
             "% agree",
-            "Items†",
+            "Units†",
             "Ratings",
             "Minority",
             "Prev.*",
@@ -375,7 +375,7 @@ def iaa_per_label(domains: dict) -> str:
     averaging these values is what that replaced. Read them knowing a domain whose label
     never varies shows α = 1.000 off a De of 0.
 
-    Items = calibration-overlap items, Ann = annotators in that overlap (both per domain/task).
+    Units = calibration-overlap units, Ann = annotators in that overlap (both per domain/task).
     Prev. here is over *all submitted* rows for the domain (class balance), unlike the pooled
     by-label table where it is over the calibration rows α is computed on.
     """
@@ -409,7 +409,7 @@ def iaa_per_label(domains: dict) -> str:
     if not rows:
         return ""
     return _html_table(
-        ["Domain", "Task", "Label", "α", "% agree", "Prev.*", "Items†", "Ann."], rows
+        ["Domain", "Task", "Label", "α", "% agree", "Prev.*", "Units†", "Ann."], rows
     )
 
 
@@ -790,7 +790,7 @@ def render(snap: dict) -> str:
         ]
     if (
         by_label
-    ):  # Prev.* and Items† first appear in this table; their notes live with it
+    ):  # Prev.* and Units† first appear in this table; their notes live with it
         label_notes = "\n\n".join(
             [
                 _note(
@@ -802,7 +802,7 @@ def render(snap: dict) -> str:
                     "yield meaningful agreement."
                 ),
                 _note(
-                    "**†Items**: the number of calibration-overlap items Krippendorff's α is "
+                    "**†Units**: the number of calibration-overlap units Krippendorff's α is "
                     "computed on (records annotated by ≥2 people in the calibration split), with **Ann.** "
                     "the annotators in that overlap. α is **not** computed over the submitted/completed "
                     "production counts in the progress tables - those measure coverage, not agreement."

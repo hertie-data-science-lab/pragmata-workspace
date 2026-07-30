@@ -25,20 +25,24 @@ which means **units**.
 | **panel** | Retrieval only: the *k* chunk-records of one query. *Complete* means every chunk in it has a submitted response. |
 | **query group** | One query + answer across all three tasks: its panel, plus its grounding record and its generation record. |
 
-A **query group owns four artefacts** — the query, the bot's answer, the retrieved context
-(a chunk set), and the labels — and each task's records are a *projection* of it, which is
-why "record" holds different content per task:
+A **query group owns four content artefacts** — the `query`, the bot's `answer`, the
+retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks
+rendered as one block) — and each task's records are a *projection* of them, which is why
+"record" holds different content per task:
 
 ```
-query group  ── query ── answer ── context set (k chunks)
-     ├── retrieval:  k records, each = query + ONE chunk        (answer shown collapsed)
-     ├── grounding:  1 record  = answer + the FULL context set  (query shown collapsed)
-     └── generation: 1 record  = query + answer                 (context shown collapsed)
+query group ── query ── answer ── chunks (k, each with text + rank) ── context_set
+    ├── retrieval:  k records, each = query + ONE chunk's text   (answer collapsed)
+    ├── grounding:  1 record  = answer + the whole context_set   (query collapsed)
+    └── generation: 1 record  = query + answer                   (context_set collapsed)
 ```
 
+`chunks` and `context_set` are distinct artefacts, not two names for one: retrieval slices
+the context per chunk, grounding shows it whole. That is the reason the projections differ.
 Verified against the pinned task definitions in pragmata's
 `core/annotation/argilla_task_definitions.py`. The consequence for counting: one query
-group with k=5 is 7 records and, fully annotated by 3 people, 21 responses.
+group with k=5 is 7 records and, fully annotated by 3 people, 21 responses. Labels are not
+part of the query group — they belong to responses.
 
 **Calibration** records are deliberately overlapped so several annotators see the same
 thing; they are the only population inter-annotator agreement is computed on. They are
@@ -105,6 +109,10 @@ x label.
   on a row is evidence about the labelling scheme, not about those particular units.
 - **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient
   to compute one — too few annotators saw the same records.
+- `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only
+  `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with a fixed seed
+  (both recorded in the sidecar). So the point estimate moves only when the underlying
+  calibration data does, while the bounds also move if those parameters change.
 - **`alpha = 1.0` with `degenerate_calibration = True` is not evidence of reliability.**
   Alpha is `1 - Do/De` and is undefined when expected disagreement is zero (the label never
   varies in the overlap); pragmata returns 1.0 there by convention.
@@ -165,7 +173,7 @@ denominators stay right.
 | `chunk_id` | The retrieved chunk. |
 | `rank` | Retrieval rank within this query, 1-based. |
 | `n_retrieved_chunks` | Chunks this query retrieved (query grain, repeated across its rows). |
-| `annotated` | Query grain: this query's retrieval panel received at least one submitted response. |
+| `annotated` | Query grain, **retrieval only**: this query's retrieval panel received at least one submitted response. |
 | `n_annotated_chunks` | Query grain: how many of its chunks did. |
 | `domain` | Human-readable programme name, as the record carries it. |
 | `language`, `role`, `topic`, `intent`, `difficulty`, `format`, `spec_stem`, `retried` | Per-query metadata from the querygen spec, carried through unchanged. |
@@ -175,8 +183,13 @@ denominators stay right.
 
 - **The source is the curated corpus, a superset of what was annotated.** It is *not*
   post-removal: curation selected a subset for import into Argilla, so most rows here belong
-  to queries nobody annotated. Filter on `annotated` before computing anything about
-  annotated data.
+  to queries nobody annotated — 464 of 1143 queries are annotated.
+- **`annotated` is retrieval-scoped and is not a general "was this query annotated" flag.**
+  It says the query's *retrieval panel* got a response. Grounding and generation were
+  annotated on their own records and cover more queries than retrieval does (447 grounding
+  and 713 generation units, against 464 retrieval-annotated queries), so filtering a
+  grounding or generation question on this column silently drops annotated data. Use it for
+  retrieval cuts only; for the other tasks, go to the export.
 - **Chunk-grain fan-out.** A `doc_id` appears once per retrieved chunk, so document
   *frequency* means counting rows and distinct *documents* means deduplicating on
   `(query_id, doc_id)`. **Never join on `chunk_id` alone** — 739 chunks here are retrieved
