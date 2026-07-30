@@ -18,6 +18,10 @@
 # filter response_status == "submitted" (IAA already does); label/constraint columns are
 # null on discarded rows.
 #
+# Every export is then pseudonymised in place (pseudonymize_export.py): pragmata writes the
+# Argilla username into annotator_id, and the usernames here are real names. The rewrite is
+# part of exporting, not an optional extra — the published tree must never hold names.
+#
 # Uses $PRAGMATA, which must resolve to the same tree the data was imported with. For a
 # non-standard export, call `pragmata annotation export` directly with a --base-dir
 # outside data/ or a domain --export-id — a non-domain export-id under $DATA_DIR lands in
@@ -47,6 +51,13 @@ for d in "${domains[@]}"; do
     --include-discarded \
     || { warn "export failed: $d"; rc=1; }
 done
+
+# Pseudonymise the identities the export just wrote. fatal, not warn: a tree that still
+# holds real names must not be reachable by transfer-push, so a failure here has to stop
+# the run rather than degrade like a per-domain export failure.
+section "pseudonymize"
+"$PY" scripts/annotation/pseudonymize_export.py "${domains[@]}" \
+  || fatal "pseudonymisation failed — the export tree may still hold real names"
 
 # Published-tree guard. Any directory here that isn't a domain stem gets shipped by
 # transfer-push and read as an extra domain downstream — silent and wrong. warn + rc=1 rather

@@ -61,9 +61,22 @@ OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 # incompatible change; check_snapshot then refuses anything older.
 #   2: agreement is a single pooled α per (task, label) under `pooled_agreement`; the
 #      per-domain and total n_items-weighted `mean_alpha` blocks are gone.
-SNAPSHOT_SCHEMA_VERSION = 2
+#   3: the pooled gap statistics and the IAA bootstrap parameters (`iaa` block: resamples,
+#      seed) are part of the shape. Both had been added without a bump, which forced
+#      check_snapshot to probe for individual fields; the version now carries that.
+SNAPSHOT_SCHEMA_VERSION = 3
 
 SNAPSHOT_LOG = LOGS_DIR / "log.jsonl"
+
+
+def _snapshot_log(path: Path | None) -> Path:
+    """Resolve the snapshot log path, or exit if there is none yet."""
+    path = path or SNAPSHOT_LOG
+    if not path.exists():
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
+    return path
 
 
 def read_snapshots(path: Path | None = None) -> list[dict]:
@@ -72,11 +85,7 @@ def read_snapshots(path: Path | None = None) -> list[dict]:
     One snapshot per line. Prefer select_snapshot() when only one is wanted: this parses
     all of them.
     """
-    path = path or SNAPSHOT_LOG
-    if not path.exists():
-        raise SystemExit(
-            f"no snapshot log at {path} - run `make annotation-log` first."
-        )
+    path = _snapshot_log(path)
     snapshots = read_jsonl(path)
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
@@ -89,11 +98,7 @@ def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
     Splits the log but parses only the selected line: the file is tens of MB and the
     reporting scripts need a single snapshot out of it.
     """
-    path = path or SNAPSHOT_LOG
-    if not path.exists():
-        raise SystemExit(
-            f"no snapshot log at {path} - run `make annotation-log` first."
-        )
+    path = _snapshot_log(path)
     lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
     if not lines:
         raise SystemExit(f"no snapshots in {path}")
@@ -108,10 +113,9 @@ def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
 def check_snapshot(snapshot: dict) -> None:
     """Refuse a snapshot the current reporting code cannot render faithfully.
 
-    Both failure modes are silent rather than loud: a v1 snapshot loses the whole
-    agreement section (pooled alpha replaced per-domain weighted means), and one predating
-    the pooled gap statistics renders blank cadence columns. The gap fields were added
-    without a version bump, which would have stranded every existing entry.
+    The failure mode is silent rather than loud: an older snapshot renders a section
+    blank or, worse, from a different definition, with no error. The version alone
+    decides — every shape change now comes with a bump, so no per-field probing.
     """
     at = snapshot.get("run_at", "unknown date")
     got = snapshot.get("schema_version", 1)
@@ -119,19 +123,40 @@ def check_snapshot(snapshot: dict) -> None:
         raise SystemExit(
             f"snapshot {at} is schema v{got}; this code needs "
             f"v{SNAPSHOT_SCHEMA_VERSION}.\n"
-            "Agreement moved from per-domain weighted means of alpha to a single pooled "
-            "alpha (one reliability matrix per task x label over all domains), so the two "
-            "are not interchangeable.\n"
-            "To render this snapshot, check out a revision from before that change."
+            "The shapes are not interchangeable: agreement moved to a single pooled alpha "
+            "per task x label, and the cadence and IAA-parameter blocks arrived later.\n"
+            "Re-run `make annotation-log` for a current snapshot, or check out a revision "
+            "from before the change to render this one."
         )
-    timing = (
-        ((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")
-    ) or {}
-    if "pooled_mean_gap_s" not in timing:
-        raise SystemExit(
-            f"snapshot {at} predates the pooled gap statistics, so the cadence "
-            f"columns would come out blank. Re-run `make annotation-log` and try again."
-        )
+
+
+def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
+    """(snapshot, identity) for the snapshot with this exact ``run_at``.
+
+    Reports pin the snapshot they read by timestamp rather than taking whichever is
+    last, so re-running a report later reproduces it. ``identity`` is
+    ``{run_at, sha256}`` where the digest covers that ONE line: the log is append-only,
+    so hashing the whole file would change every night and pin nothing.
+    """
+    path = _snapshot_log(path)
+    # Streamed and parsed line by line: the log grows without rotation, and matching on
+    # the raw text would couple this lookup to the writer's JSON separator convention.
+    with path.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            snapshot = json.loads(line)
+            if snapshot.get("run_at") != run_at:
+                continue
+            check_snapshot(snapshot)
+            digest = hashlib.sha256(line.encode()).hexdigest()
+            return snapshot, {"run_at": run_at, "sha256": digest}
+    raise SystemExit(
+        f"no snapshot with run_at={run_at} in {path}.\n"
+        "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
+        "another, or re-run `make annotation-log` and update the pin."
+    )
 
 
 def require_env(*names: str) -> list[str]:
@@ -159,16 +184,32 @@ def argilla_client():
     return resolve_argilla_client(url, key)
 
 
+def username_to_user_id(client=None) -> dict[str, str]:
+    """username -> Argilla user id, from the live instance.
+
+    The one definition of the pseudonymisation contract: the same annotator resolves to
+    the same UUID everywhere (log snapshots and export rewrites both call this), so
+    identities stay comparable across artifacts. Argilla user ids are assigned once and
+    never change. The mapping is derived at runtime and never written down.
+    """
+    from pragmata.core.annotation.export_fetcher import build_user_lookup
+
+    lookup = build_user_lookup(client if client is not None else argilla_client())
+    return {name: str(uid) for uid, name in lookup.items()}
+
+
 def eval_pragmata() -> SimpleNamespace:
-    """Resolve the eval-side pragmata pin: source tree, venv python, and CLI binary.
+    """Resolve the eval-side pragmata pin: source tree, its repo, and the CLI to run it.
 
     The annotation pipeline pins ``PRAGMATA_SRC`` at a frozen demo checkout that has
     no eval module at all, so eval needs its own pin. Kept separate (rather than
     moving the shared pin forward) so the live Argilla instance's annotation and
     export behaviour stays frozen while eval tracks upstream.
 
-    The eval CLI runs from the eval checkout's OWN venv: it needs ``pandera``, which
-    the workspace venv does not carry. Workspace-side glue keeps using ``$PY``.
+    One venv runs both: the CLI is the workspace venv's own ``pragmata``, invoked with
+    the pin on ``PYTHONPATH``, which shadows whatever the venv installed. The only thing
+    the eval module needs beyond the annotation side is ``pandera``, so the workspace
+    venv carries it rather than a second venv existing to supply it.
     """
     src = os.environ.get("PRAGMATA_EVAL_SRC")
     if not src:
@@ -180,15 +221,10 @@ def eval_pragmata() -> SimpleNamespace:
         raise SystemExit(
             f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}"
         )
-    venv = Path(
-        os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv"
-    ).resolve()
-    binary = venv / "bin" / "pragmata"
+    binary = ROOT / ".venv" / "bin" / "pragmata"
     if not binary.exists():
-        raise SystemExit(
-            f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv."
-        )
-    return SimpleNamespace(src=src_path, repo=src_path.parent, venv=venv, bin=binary)
+        raise SystemExit(f"no pragmata CLI at {binary} — create the workspace venv.")
+    return SimpleNamespace(src=src_path, repo=src_path.parent, bin=binary)
 
 
 def load_dotenv(path: Path) -> None:
@@ -259,7 +295,7 @@ def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     from datetime import date
 
     # DTZ011 is suppressed deliberately: the LOCAL date is the point - report dirs are
-    # named in the operator's timezone, not UTC. Revisited in the eval PR.
+    # named in the operator's timezone, not UTC, matching report_dir() above.
     target = explicit or (ROOT / "reports" / stage / date.today().isoformat())  # noqa: DTZ011
     target.mkdir(parents=True, exist_ok=True)
     return target
@@ -291,6 +327,12 @@ def domains() -> list[str]:
 # bare CSV is not enough — each one needs to name the code and inputs it came from.
 # This mirrors the manifest convention in scripts/transfer/sync.sh (sorted per-file
 # sha256) and the dated bundles under reproducibility/.
+#
+# The sidecar records IDENTITY only: code, inputs, parameters, snapshot, dictionary.
+# What a column means and how to read it belongs in the hand-authored data dictionary,
+# which every sidecar pins by hash — one authored explanation, not a copy per artifact —
+# so a CSV can always be paired with the wording that was current when it was written.
+DATA_DICTIONARY = ROOT / "docs" / "eval-data-dictionary.md"
 
 
 def sha256_file(path: Path) -> str:
@@ -337,20 +379,34 @@ def provenance(
     script: str,
     inputs: list[Path] | None = None,
     pragmata_src: Path | None = None,
+    snapshot: dict | None = None,
     **extra,
 ) -> dict:
-    """Provenance record for a generated artifact.
+    """Provenance record for a generated artifact — identity, not explanation.
 
     ``inputs`` are hashed individually so a changed export is detectable without
-    re-deriving anything. ``extra`` carries the caller's own decisions — filter
-    policy, bootstrap seed, source snapshot — which are the part a reader most
-    needs and the part no generic helper can infer.
+    re-deriving anything. ``snapshot`` is the ``{run_at, sha256}`` identity from
+    find_snapshot, for the artifacts derived from a log snapshot. ``extra`` carries the
+    caller's own parameters — filter policy, confidence level, seeds — which no generic
+    helper can infer.
+
+    The data dictionary is pinned unconditionally rather than passed in: every eval
+    artifact is read alongside it, so no script gets to omit it.
     """
     inputs = inputs or []
+    if not DATA_DICTIONARY.exists():
+        raise SystemExit(
+            f"no data dictionary at {DATA_DICTIONARY} — every eval sidecar pins it, and "
+            "write_csv copies it next to the CSVs."
+        )
     record = {
         "generated_at": datetime.now(UTC).isoformat(),
         "script": script,
         "workspace_git": git_describe(ROOT),
+        "data_dictionary": {
+            "path": str(DATA_DICTIONARY.relative_to(ROOT)),
+            "sha256": sha256_file(DATA_DICTIONARY),
+        },
         "inputs": [
             {
                 "path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p),
@@ -364,6 +420,8 @@ def provenance(
         # The pin is <checkout>/src, so the repo is its parent.
         record["pragmata_git"] = git_describe(pragmata_src.parent)
         record["pragmata_src"] = str(pragmata_src)
+    if snapshot is not None:
+        record["snapshot"] = snapshot
     record.update(extra)
     return record
 
@@ -385,6 +443,12 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     sidecar.write_text(
         json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    # The dictionary travels WITH the CSVs whose sidecars pin it: a bare CSV in a
+    # handover folder is unreadable without the wording the pin refers to. Done here,
+    # in the layer that already knows the output directory, so a direct script run and
+    # a make run behave identically and no second clock resolves "today's dir".
+    if "data_dictionary" in prov:
+        (path.parent / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
 
 
 def read_jsonl(path: Path) -> list[dict]:

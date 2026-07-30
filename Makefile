@@ -32,13 +32,25 @@
 #   make repro-reproduce PIN=2026-07-01-annotation-curation
 # See reproducibility/README.md for the bundle contract.
 #
+# Eval deliverables (reports/eval/<date>/, one CSV + provenance sidecar each):
+#   make eval-report                       # the two annotation tables + the retrieval manifest
+#   make eval-score                        # the corpus metric estimates
+#   make eval-catalog                      # the corpus catalog for the fairness audit
+# All three read the frozen canonical export and the snapshot pinned in
+# scripts/eval/eval_common.py. See docs/eval-data-dictionary.md for what the columns mean.
+#
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
-# it operates on — querygen-*, bot-*, combine-*, annotation-*, transfer-*, repro-*. Only
-# the orchestrator (pipeline, plan) is bare. The stage targets share their names with
-# pipeline.sh's slice tokens; see its usage block.
+# it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
+# repro-*. Only the orchestrator (pipeline, plan) is bare. The stage targets share their
+# names with pipeline.sh's slice tokens; see its usage block.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
+
+# Eval report output args. The scripts resolve the dated output dir themselves and drop
+# the data dictionary beside the CSVs (ws.write_csv); OUT= redirects for an off-date or
+# scratch run.
+EVAL_ARGS := $(if $(OUT),--out-dir $(OUT),)
 
 # Pass-through flags for pipeline.sh / plan, built from make vars.
 PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
@@ -53,6 +65,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-backup annotation-restore \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
+        eval-report eval-score eval-catalog \
         transfer-push transfer-pull transfer-verify \
         repro-pin repro-verify repro-reproduce help
 
@@ -120,6 +133,18 @@ annotation-report-pdf: ## Render latest snapshot tables -> reports/annotation/<d
 
 annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
+
+# --- eval deliverables (reports/eval/<date>/; OUT= to redirect) ---
+
+eval-report: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv, retrieval_manifest.csv
+	$(PY) scripts/eval/annotation_tables.py $(EVAL_ARGS)
+	$(PY) scripts/eval/retrieval_manifest.py $(EVAL_ARGS)
+
+eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)
+	$(PY) scripts/eval/score_human_annotations.py $(EVAL_ARGS)
+
+eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`; runs via uv, not the workspace venv)
+	scripts/eval/corpus_catalog.py $(EVAL_ARGS)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---

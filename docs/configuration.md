@@ -37,7 +37,7 @@ specs, and the `reproducibility/` bundle.
 | Not in git | Why | How to get it |
 |---|---|---|
 | `data/publikationsbot/*_combined*.jsonl` | large (~52M curated / ~119M full) | fetch the corpus artifact pinned in `reproducibility/.../pins.sha256`, or regenerate via `make pipeline` (querygen is non-deterministic) |
-| `data/annotation/exports/` | annotator **PII** (real names, notes) | re-export from live Argilla (`make annotation-export`) |
+| `data/annotation/exports/` | annotator **PII** (free-text notes; `annotator_id` is pseudonymised on export) | re-export from live Argilla (`make annotation-export`) |
 | `argilla_backup/` | large (~250M for the pinned pre-prune snapshot) | that snapshot is an external archive, pinned by `pins.sha256`; the rest are local recovery points, retained per `reproducibility/README.md` |
 | `.env`, `users.json`, `users.secrets.json` | secrets / names | copy the committed `.example` templates and fill in |
 

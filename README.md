@@ -23,7 +23,9 @@ Clone, then:
    then fill in the real roster + passwords. Both stay gitignored. See
    [Annotator roster](docs/configuration.md#annotator-roster).
 3. Point `PRAGMATA_SRC` at a `pragmata` checkout (provides the `pragmata` CLI) and create the
-   `.venv/` it expects.
+   `.venv/` it expects. Install `pragmata[annotation]` plus `pandera[pandas]` into it: the
+   one venv runs both the annotation pipeline and the eval stage, which is pinned
+   separately via `PRAGMATA_EVAL_SRC` and shadowed onto `PYTHONPATH`.
 4. `make help` lists the targets; preview a run with `make plan`.
 
 Data, logs, reports and Argilla backups are **not** committed - see

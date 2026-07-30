@@ -11,10 +11,13 @@ data/
 ├── publikationsbot/     source query corpora (<slug>_combined.jsonl) + querygen intermediates
 ├── annotation/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
-│   └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
+│   └── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
+│                        annotator_id is pseudonymised on export; see scripts/eval/README.md
 │                        one dir per domain config and nothing else: this tree is published
 │                        by transfer-push and consumers read exports/*/ as the domain list
 ├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
+├── eval-inputs/         workspace-staged CSVs handed to `eval score --path`; kept out of
+│                        eval/ so that tree holds only what pragmata wrote
 └── transfer/            Blob staging for eval data (see transfer/README.md); moves via Blob, not git
 ```
 
