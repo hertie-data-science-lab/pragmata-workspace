@@ -224,14 +224,8 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 def cmd_dump() -> None:
     client = ws.argilla_client()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    # The timestamp is second-resolution, so two dumps in the same second would collide;
-    # take the next free suffix rather than aborting a read-only operation.
     root = BACKUP_ROOT / ts
-    n = 1
-    while root.exists():
-        n += 1
-        root = BACKUP_ROOT / f"{ts}-{n}"
-    root.mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=False)
     print(f"backup root: {root}")
 
     datasets = list(client.datasets)
@@ -256,6 +250,8 @@ def cmd_dump() -> None:
             json.dumps(records_out, ensure_ascii=False)
         )
 
+        # No absolute path recorded: `key` is the directory name, resolved against the
+        # manifest at restore time, so a dump restores from wherever it was fetched to.
         manifest.append(
             {
                 "key": key,
@@ -263,7 +259,6 @@ def cmd_dump() -> None:
                 "name": ds.name,
                 "records": n_rec,
                 "submitted_responses": n_sub,
-                "path": str(target),
             }
         )
         print(
@@ -285,26 +280,6 @@ def cmd_dump() -> None:
 
 
 # --- restore -------------------------------------------------------------------
-
-
-def _dataset_dir(root: Path, entry: dict) -> Path:
-    """One manifest entry's directory, resolved relative to the manifest itself.
-
-    The manifest records an absolute ``path`` from dump time, so a dump copied or
-    fetched to any other location could not be restored from it. ``key`` is the
-    directory name under the manifest, so prefer that and fall back to the recorded
-    path only when the local directory is missing.
-    """
-    local = root / entry["key"]
-    if local.is_dir():
-        return local
-    recorded = entry.get("path")
-    if recorded and Path(recorded).is_dir():
-        return Path(recorded)
-    raise SystemExit(
-        f"no directory for {entry['key']} under {root} "
-        f"(the manifest recorded {recorded or 'no path'}, which is not there either)"
-    )
 
 
 def cmd_restore(
@@ -338,7 +313,7 @@ def cmd_restore(
     backup_by_entry: dict[int, list[dict]] = {}
     found_ids: set[str] = set()
     for i, m in enumerate(entries):
-        records = json.loads((_dataset_dir(root, m) / "records_full.json").read_text())
+        records = json.loads((root / m["key"] / "records_full.json").read_text())
         if record_id_set is not None:
             records = [d for d in records if d["id"] in record_id_set]
         backup_by_entry[i] = records
@@ -465,7 +440,7 @@ def cmd_restore(
             wspace = workspace(
                 ws_name
             )  # resolve/create first — datasets() needs the ws to exist
-            settings = rg.Settings.from_json(_dataset_dir(root, m) / "settings.json")
+            settings = rg.Settings.from_json(root / m["key"] / "settings.json")
             ds = rg.Dataset(
                 name=name, workspace=wspace, settings=settings, client=client
             ).create()

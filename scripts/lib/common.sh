@@ -17,7 +17,9 @@
 #   - All diagnostics (log/warn/fatal/section) go to STDERR, leaving stdout
 #     clean for scripts that emit data (e.g. merge_yaml).
 #   - .env / config precedence is "existing environment wins", so per-run
-#     overrides (FOO=bar make ...) are never clobbered by the files.
+#     overrides (FOO=bar make ...) are never clobbered by the files. An EMPTY
+#     value counts as unset throughout — the loaders fill it and require_env
+#     rejects it. workspace.py's loader follows the same rule.
 
 set -uo pipefail
 
@@ -43,19 +45,24 @@ section() { printf '\n=== %s ===\n'   "$*" >&2; }
 
 cd_root() { cd "$WORKSPACE_ROOT" || fatal "cannot cd to $WORKSPACE_ROOT"; }
 
-# --- dotenv loader: KEY=VALUE lines, existing env wins, no inline comments ---
+# --- trim leading/trailing whitespace from $1 into the variable named by $2 ---
+#     Parameter expansion, not `echo | xargs`: xargs applies shell-like quoting and
+#     would eat quotes and backslashes out of the value.
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  printf -v "$2" '%s' "${s%"${s##*[![:space:]]}"}"
+}
+
+# --- dotenv loader: KEY=VALUE lines, no inline comments ---
 load_dotenv() {
   local file="$1" line key val
   [[ -f "$file" ]] || return 0
   while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#"${line%%[![:space:]]*}"}"             # left-trim
+    trim "$line" line
     [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
-    key="${line%%=*}"; val="${line#*=}"
-    key="${key//[[:space:]]/}"
-    # Trim the value at both ends, matching workspace.py's load_dotenv (it strips);
-    # an untrimmed trailing space silently corrupts a URL or a path.
-    val="${val#"${val%%[![:space:]]*}"}"
-    val="${val%"${val##*[![:space:]]}"}"
+    trim "${line%%=*}" key
+    trim "${line#*=}" val
     [[ -z "${!key:-}" ]] && export "$key=$val"
   done < "$file"
 }
@@ -64,11 +71,14 @@ load_dotenv() {
 load_dotenv "$WORKSPACE_ROOT/configs/settings.conf"
 load_dotenv "$WORKSPACE_ROOT/.env"
 
-# Pin the pragmata source: if PRAGMATA_SRC is set (in .env), shadow the installed
-# package on PYTHONPATH so EVERY script resolves to it — both the `pragmata` CLI
-# ($PRAGMATA) and bare `import pragmata` ($PY). Unset → the installed package.
-# The wiring is version-controlled here; .env (gitignored) supplies the path.
-[[ -n "${PRAGMATA_SRC:-}" ]] && export PYTHONPATH="$PRAGMATA_SRC${PYTHONPATH:+:$PYTHONPATH}"
+# Pin the pragmata source: if PRAGMATA_SRC is set (in .env), shadow the installed package
+# on PYTHONPATH so the stages' subprocesses resolve to it — both the `pragmata` CLI
+# ($PRAGMATA) and bare `import pragmata` ($PY). Unset → the installed package. Guarded
+# against a duplicate prepend, since a stage script may source this under an already
+# exported PYTHONPATH.
+if [[ -n "${PRAGMATA_SRC:-}" && ":${PYTHONPATH:-}:" != *":$PRAGMATA_SRC:"* ]]; then
+  export PYTHONPATH="$PRAGMATA_SRC${PYTHONPATH:+:$PYTHONPATH}"
+fi
 
 # --- guard: fail fast if any required env var is unset/empty ---
 require_env() {
@@ -95,10 +105,7 @@ check_disk() {
 split_csv() {
   local IFS=',' item
   for item in ${1:-}; do
-    # Parameter expansion, not `echo | xargs`: xargs applies shell-like quoting and
-    # would eat quotes and backslashes out of the value.
-    item="${item#"${item%%[![:space:]]*}"}"
-    item="${item%"${item##*[![:space:]]}"}"
+    trim "$item" item
     [[ -n "$item" ]] && printf '%s\n' "$item"
   done
 }
@@ -112,7 +119,7 @@ config_stems() {
   local dir="$1" f stem
   for f in "$dir"/*.yaml; do
     [[ -e "$f" ]] || continue
-    stem="$(basename "$f" .yaml)"
+    stem="${f##*/}"; stem="${stem%.yaml}"
     [[ "$stem" == _* ]] || printf '%s\n' "$stem"
   done
 }

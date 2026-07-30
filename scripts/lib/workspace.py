@@ -178,7 +178,11 @@ def eval_pragmata() -> SimpleNamespace:
 
 
 def load_dotenv(path: Path) -> None:
-    """Load KEY=VALUE lines into os.environ; existing env wins. No inline comments."""
+    """Load KEY=VALUE lines into os.environ; a non-empty existing value wins.
+
+    No inline comments. An empty value counts as unset and gets filled - see the
+    convention in scripts/lib/common.sh.
+    """
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -186,40 +190,26 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip())
+        key = key.strip()
+        if not os.environ.get(key):
+            os.environ[key] = val.strip()
 
 
 def load_env() -> None:
-    """Load configs/settings.conf then .env (a pre-set environment beats both), and
-    apply the PRAGMATA_SRC pin.
+    """Load configs/settings.conf then .env, then apply the PRAGMATA_SRC pin.
 
-    scripts/lib/common.sh does the same for shell-launched stages, but the Makefile's
-    Python targets never go through it, so the pin was silently ignored when they ran
-    standalone. Applying it here covers every Python entrypoint.
+    The Makefile's Python targets never go through common.sh, so the pin was silently
+    ignored when they ran standalone. Applying it here covers every Python entrypoint.
     """
     load_dotenv(SETTINGS)
     load_dotenv(ROOT / ".env")
-    _pin_pragmata_src()
-
-
-def _pin_pragmata_src() -> None:
-    """Put PRAGMATA_SRC (if set) at the front of sys.path and of PYTHONPATH.
-
-    sys.path so ``import pragmata`` in this process resolves to the pinned tree rather
-    than the installed package; PYTHONPATH so subprocesses inherit the same pin. The eval
-    pin is separate and assigns PYTHONPATH outright (see eval_pragmata), so it is
-    unaffected.
-    """
     src = os.environ.get("PRAGMATA_SRC")
-    if not src:
-        return
-    # Front, not merely present: an installed pragmata may already be on sys.path, and
-    # the point of the pin is to shadow it. Idempotent on a second call.
-    if sys.path[:1] != [src]:
+    if src:
+        # Front, not merely present: an installed pragmata may already be on sys.path and
+        # the point of the pin is to shadow it. No PYTHONPATH export - no Python
+        # entrypoint here spawns a pragmata subprocess off the inherited environment
+        # (score_human builds its own env for the separate eval pin).
         sys.path.insert(0, src)
-    current = os.environ.get("PYTHONPATH", "")
-    if src not in current.split(os.pathsep):
-        os.environ["PYTHONPATH"] = f"{src}{os.pathsep}{current}" if current else src
 
 
 def local_dt(run_at: str) -> datetime:
