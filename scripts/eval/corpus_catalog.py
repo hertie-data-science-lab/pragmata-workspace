@@ -43,7 +43,7 @@ Three limits that belong in any published figure:
 
 Run (needs an active `az login` in the BSt tenant):
     ./corpus_catalog.py                     # write the catalog CSV
-    ./corpus_catalog.py --out PATH          # explicit output path
+    ./corpus_catalog.py --out-dir DIR       # explicit output directory
 """
 
 from __future__ import annotations
@@ -300,10 +300,15 @@ def build_rows(documents: list[dict]) -> list[dict]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--out", type=Path, default=None, help="Output CSV path.")
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="Output directory (default: reports/eval/<today>/).",
+    )
     args = ap.parse_args()
 
-    target = args.out or ws.stage_report_dir("eval") / "corpus_catalog.csv"
+    target = ws.stage_report_dir("eval", args.out_dir) / "corpus_catalog.csv"
 
     conn = vsi.connect(vsi.fetch_dsn())
     try:

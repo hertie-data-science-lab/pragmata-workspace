@@ -69,17 +69,23 @@ SNAPSHOT_SCHEMA_VERSION = 3
 SNAPSHOT_LOG = LOGS_DIR / "log.jsonl"
 
 
+def _snapshot_log(path: Path | None) -> Path:
+    """Resolve the snapshot log path, or exit if there is none yet."""
+    path = path or SNAPSHOT_LOG
+    if not path.exists():
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
+    return path
+
+
 def read_snapshots(path: Path | None = None) -> list[dict]:
     """Every snapshot in the log, oldest first — for callers that need the history.
 
     One snapshot per line. Prefer select_snapshot() when only one is wanted: this parses
     all of them.
     """
-    path = path or SNAPSHOT_LOG
-    if not path.exists():
-        raise SystemExit(
-            f"no snapshot log at {path} - run `make annotation-log` first."
-        )
+    path = _snapshot_log(path)
     snapshots = read_jsonl(path)
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
@@ -92,11 +98,7 @@ def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
     Splits the log but parses only the selected line: the file is tens of MB and the
     reporting scripts need a single snapshot out of it.
     """
-    path = path or SNAPSHOT_LOG
-    if not path.exists():
-        raise SystemExit(
-            f"no snapshot log at {path} - run `make annotation-log` first."
-        )
+    path = _snapshot_log(path)
     lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
     if not lines:
         raise SystemExit(f"no snapshots in {path}")
@@ -136,21 +138,20 @@ def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
     ``{run_at, sha256}`` where the digest covers that ONE line: the log is append-only,
     so hashing the whole file would change every night and pin nothing.
     """
-    path = path or SNAPSHOT_LOG
-    if not path.exists():
-        raise SystemExit(
-            f"no snapshot log at {path} - run `make annotation-log` first."
-        )
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or f'"run_at": "{run_at}"' not in line:
-            continue
-        snapshot = json.loads(line)
-        if snapshot.get("run_at") != run_at:
-            continue
-        check_snapshot(snapshot)
-        digest = hashlib.sha256(line.encode()).hexdigest()
-        return snapshot, {"run_at": run_at, "sha256": digest}
+    path = _snapshot_log(path)
+    # Streamed and parsed line by line: the log grows without rotation, and matching on
+    # the raw text would couple this lookup to the writer's JSON separator convention.
+    with path.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            snapshot = json.loads(line)
+            if snapshot.get("run_at") != run_at:
+                continue
+            check_snapshot(snapshot)
+            digest = hashlib.sha256(line.encode()).hexdigest()
+            return snapshot, {"run_at": run_at, "sha256": digest}
     raise SystemExit(
         f"no snapshot with run_at={run_at} in {path}.\n"
         "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
@@ -181,6 +182,20 @@ def argilla_client():
 
     url, key = require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
     return resolve_argilla_client(url, key)
+
+
+def username_to_user_id(client=None) -> dict[str, str]:
+    """username -> Argilla user id, from the live instance.
+
+    The one definition of the pseudonymisation contract: the same annotator resolves to
+    the same UUID everywhere (log snapshots and export rewrites both call this), so
+    identities stay comparable across artifacts. Argilla user ids are assigned once and
+    never change. The mapping is derived at runtime and never written down.
+    """
+    from pragmata.core.annotation.export_fetcher import build_user_lookup
+
+    lookup = build_user_lookup(client if client is not None else argilla_client())
+    return {name: str(uid) for uid, name in lookup.items()}
 
 
 def eval_pragmata() -> SimpleNamespace:
@@ -314,11 +329,9 @@ def domains() -> list[str]:
 # sha256) and the dated bundles under reproducibility/.
 #
 # The sidecar records IDENTITY only: code, inputs, parameters, snapshot, dictionary.
-# What a column means and how to read it belongs in the data dictionary, which the
-# sidecar pins by hash — one authored explanation, not a copy per artifact.
-
-# Hand-authored definitions for the eval report CSVs. Every sidecar pins it by hash, so
-# a CSV can always be paired with the wording that was current when it was written.
+# What a column means and how to read it belongs in the hand-authored data dictionary,
+# which every sidecar pins by hash — one authored explanation, not a copy per artifact —
+# so a CSV can always be paired with the wording that was current when it was written.
 DATA_DICTIONARY = ROOT / "docs" / "eval-data-dictionary.md"
 
 
@@ -384,7 +397,7 @@ def provenance(
     if not DATA_DICTIONARY.exists():
         raise SystemExit(
             f"no data dictionary at {DATA_DICTIONARY} — every eval sidecar pins it, and "
-            "the make targets copy it next to the CSVs."
+            "write_csv copies it next to the CSVs."
         )
     record = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -430,6 +443,12 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     sidecar.write_text(
         json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    # The dictionary travels WITH the CSVs whose sidecars pin it: a bare CSV in a
+    # handover folder is unreadable without the wording the pin refers to. Done here,
+    # in the layer that already knows the output directory, so a direct script run and
+    # a make run behave identically and no second clock resolves "today's dir".
+    if "data_dictionary" in prov:
+        (path.parent / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
 
 
 def read_jsonl(path: Path) -> list[dict]:

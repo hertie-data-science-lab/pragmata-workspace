@@ -47,15 +47,10 @@
 SHELL := /bin/bash
 PY := .venv/bin/python
 
-# Eval report output dir. Computed here as well as in the scripts so the make targets can
-# drop the data dictionary beside the CSVs; both use the LOCAL date (see
-# ws.stage_report_dir). OUT= overrides for an off-date or scratch run.
-EVAL_DICT := docs/eval-data-dictionary.md
-EVAL_OUT := $(if $(OUT),$(OUT),reports/eval/$(shell date +%F))
+# Eval report output args. The scripts resolve the dated output dir themselves and drop
+# the data dictionary beside the CSVs (ws.write_csv); OUT= redirects for an off-date or
+# scratch run.
 EVAL_ARGS := $(if $(OUT),--out-dir $(OUT),)
-# The dictionary travels WITH the CSVs: the sidecars pin it by hash, and a bare CSV in a
-# handover folder is unreadable without it.
-copy_dict = cp $(EVAL_DICT) $(EVAL_OUT)/ && echo "copied $(EVAL_DICT) -> $(EVAL_OUT)/"
 
 # Pass-through flags for pipeline.sh / plan, built from make vars.
 PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
@@ -144,15 +139,12 @@ annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date
 eval-report: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv, retrieval_manifest.csv
 	$(PY) scripts/eval/annotation_tables.py $(EVAL_ARGS)
 	$(PY) scripts/eval/retrieval_manifest.py $(EVAL_ARGS)
-	@$(copy_dict)
 
 eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)
 	$(PY) scripts/eval/score_human_annotations.py $(EVAL_ARGS)
-	@$(copy_dict)
 
 eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`; runs via uv, not the workspace venv)
-	scripts/eval/corpus_catalog.py $(if $(OUT),--out $(OUT)/corpus_catalog.csv,)
-	@$(copy_dict)
+	scripts/eval/corpus_catalog.py $(EVAL_ARGS)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---

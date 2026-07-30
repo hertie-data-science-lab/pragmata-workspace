@@ -87,7 +87,6 @@ from pragmata.api.annotation_export import export_annotations
 from pragmata.api.annotation_iaa import compute_iaa
 from pragmata.core.annotation.argilla_task_definitions import dataset_name
 from pragmata.core.annotation.client import resolve_argilla_client
-from pragmata.core.annotation.export_fetcher import build_user_lookup
 from pragmata.core.schemas.annotation_export import (
     GenerationAnnotation,
     GroundingAnnotation,
@@ -1033,9 +1032,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     url, key = ws.require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
     client = resolve_argilla_client(url, key)
     resolve = dataset_lookup(client)  # shared by progress + responses, all domains
-    NAME_TO_UUID.update(
-        {name: str(uid) for uid, name in build_user_lookup(client).items()}
-    )
+    NAME_TO_UUID.update(ws.username_to_user_id(client))
 
     domains_out: dict = {}
     tot_counts = empty_counts()

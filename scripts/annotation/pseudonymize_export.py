@@ -43,8 +43,6 @@ import workspace as ws
 
 ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.path
 
-from pragmata.core.annotation.export_fetcher import build_user_lookup
-
 TASK_FILES = ("retrieval.csv", "grounding.csv", "generation.csv")
 IAA_REPORT = Path("iaa") / "report.json"
 
@@ -53,16 +51,9 @@ def is_uuid(value: str) -> bool:
     """Whether a value has already been pseudonymised."""
     try:
         UUID(value)
-    except (ValueError, AttributeError, TypeError):
+    except ValueError:
         return False
     return True
-
-
-def name_to_uuid() -> dict[str, str]:
-    """username -> Argilla user id, from the live instance."""
-    return {
-        name: str(uid) for uid, name in build_user_lookup(ws.argilla_client()).items()
-    }
 
 
 def pseudonym(value: str, mapping: dict[str, str], where: Path) -> str:
@@ -131,7 +122,7 @@ def main() -> int:
     if not names:
         raise SystemExit(f"no exported domains under {root}")
 
-    mapping = name_to_uuid()
+    mapping = ws.username_to_user_id()
     total = 0
     for name in names:
         directory = root / name
