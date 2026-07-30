@@ -27,9 +27,8 @@ lockfile, bot parallelism, tee logging, continue-on-error.
 | `pipeline.sh --only annotation-setup`  | provision workspaces/users      |
 | `pipeline.sh --only annotation-import` | import every domain             |
 
-The stage tokens are the make target names for the same stages. `--filter` takes domains
-(`querygen-run`/`bot-run` expand each to `<domain>` + `<domain>_edgecase`); `--dry-run`
-prints the plan without running (`make plan`).
+`--filter` takes domains (`querygen-run`/`bot-run` expand each to `<domain>` +
+`<domain>_edgecase`); `--dry-run` prints the plan without running (`make plan`).
 
 `setup.sh` and `import.sh` are thin wrappers over pragmata's native `annotation setup` /
 `annotation import`. The only workspace-specific bits are the password merge in `setup.sh`

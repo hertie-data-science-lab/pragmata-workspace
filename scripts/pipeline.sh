@@ -18,8 +18,10 @@
 # the atomic stage scripts don't: stage-aware pre-flight, a lock, bot parallelism,
 # tee logging, per-stage timing, and continue-on-error with a final summary.
 #
-# Stage scripts remain runnable on their own; this just orchestrates them. The stage
-# tokens below are exactly the make target names for the same stages.
+# Stage scripts remain runnable on their own; this just orchestrates them.
+#
+# The stage tokens accepted by --from/--to/--only are exactly the make target names for
+# the same stages, so `--only bot-run` and `make bot-run` name one thing.
 #
 #   pipeline.sh                                 # full pipeline, all domains
 #   pipeline.sh --to bot-run                    # querygen-run + bot-run
@@ -40,8 +42,6 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root
 
-# Stage tokens, in order. These are the make target names for the same stages, so
-# `--only bot-run` and `make bot-run` name one thing.
 STAGES=(querygen-run bot-run combine-run annotation-setup annotation-import)
 
 # --- args ---

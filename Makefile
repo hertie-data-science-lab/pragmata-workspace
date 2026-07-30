@@ -26,12 +26,9 @@
 #   make annotation-import DOMAIN=gesundheit
 #
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
-# it operates on — querygen-*, bot-*, combine-*, annotation-* (incl. annotation-report-*,
-# which writes reports/annotation/), transfer-*. The stage targets use exactly the tokens
-# pipeline.sh accepts for --from/--to/--only, so `make bot-run` and `--only bot-run` name
-# one thing. Transport is transfer-*, not eval-*: it moves any tree through data/transfer/
-# and is not evaluation, so eval-* stays free for the eval compute stages. Only the
-# orchestrator itself (pipeline, plan) is bare.
+# it operates on — querygen-*, bot-*, combine-*, annotation-*, transfer-*. Only the
+# orchestrator (pipeline, plan) is bare. The stage targets share their names with
+# pipeline.sh's slice tokens; see its usage block.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
@@ -64,7 +61,7 @@ pipeline: ## Run a slice of the build pipeline, querygen-run -> annotation-impor
 plan: ## Preview a pipeline slice without running it (same FROM= TO= ONLY= FILTER= vars)
 	bash scripts/pipeline.sh --dry-run $(PIPELINE_ARGS)
 
-# --- pipeline stages (tokens match pipeline.sh's --from/--to/--only) ---
+# --- pipeline stages ---
 
 querygen-run: ## Stage: generate synthetic queries (SPECS=a,b to filter)
 	bash scripts/annotation/run_querygen.sh "$(SPECS)"
@@ -75,7 +72,7 @@ bot-run: ## Stage: run publikationsbot over generated queries (SPEC=x to filter)
 bot-probe: ## One-query bot smoke test; dumps raw SSE, writes no JSONL (SPEC=x to pick the spec)
 	$(PY) scripts/annotation/run_bot.py --probe $(if $(SPEC),--spec $(SPEC),)
 
-combine-run: ## Stage: pool bot batches, dedupe, intersperse edgecases -> data/publikationsbot/<domain>_combined.jsonl, the import-ready dataset (DOMAINS="a b" to filter)
+combine-run: ## Stage: pool bot batches + edgecases into the import-ready per-domain dataset (DOMAINS= to filter)
 	$(PY) scripts/annotation/build_combined.py $(DOMAINS)
 
 annotation-setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
@@ -121,7 +118,8 @@ annotation-report-pdf: ## Render latest snapshot tables -> reports/annotation/<d
 annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 
-# --- data transport (Blob, staged through data/transfer/) ---
+# --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
+#     historical - the pipe is not eval-specific) ---
 
 transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= dest prefix; both required)
 	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make transfer-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
@@ -138,12 +136,14 @@ transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFI
 # --- reproducibility ---
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
-	@echo "== verifying artifact checksums =="; \
+	@source scripts/lib/common.sh; \
+	echo "== verifying artifact checksums =="; \
 	sha256sum -c $(IMPORT)/checksums.sha256 2>/dev/null \
 	  || echo "(corpus/backup not present locally — fetch the external artifacts first)"; \
 	if [ "$(MODE)" = "structure" ] && [ -n "$(APPLY)" ]; then \
-	  for y in configs/annotation/domains/*.yaml; do d=$$(basename $$y .yaml); \
-	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; done; \
+	  while IFS= read -r d; do \
+	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; \
+	  done < <(config_stems configs/annotation/domains); \
 	elif [ "$(MODE)" = "responses" ] && [ -n "$(APPLY)" ]; then \
 	  test -n "$(BACKUP)" || { echo "usage: make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1"; exit 2; }; \
 	  $(PY) scripts/annotation/argilla_backup.py restore "$(BACKUP)" --apply; \
