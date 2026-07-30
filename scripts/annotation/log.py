@@ -123,7 +123,11 @@ NEAR_DEGENERATE_FRAC = (
 
 SESSION_GAP_S = float(os.environ.get("LOG_SESSION_GAP_MIN", "30")) * 60
 MIN_RECORDS = int(os.environ.get("LOG_MIN_RECORDS_FOR_TIMING", "5"))
-IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "200"))
+IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "1000"))
+# Fixed so the bootstrap CIs on alpha are reproducible: the same snapshot re-derived from
+# the same export yields the same interval. pragmata threads this straight into
+# numpy's default_rng. Recorded in every snapshot, and in the report sidecars.
+IAA_SEED = int(os.environ.get("LOG_IAA_SEED", "0"))
 
 JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 
@@ -846,6 +850,7 @@ def process_domain(
                 base_dir=base_dir,
                 tasks=TASKS,
                 n_resamples=IAA_RESAMPLES,
+                seed=IAA_SEED,
             )
             agr_by_task = {ta.task: ta for ta in report.tasks}
         except Exception as e:  # IAA-only failure shouldn't sink the counts
@@ -991,6 +996,7 @@ def pooled_agreement(
             base_dir=str(scratch_base),
             tasks=TASKS,
             n_resamples=IAA_RESAMPLES,
+            seed=IAA_SEED,
         )
     except Exception as e:
         log(f"  ! pooled IAA failed ({type(e).__name__}: {e})")
@@ -1097,6 +1103,9 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
         "run_at": datetime.now(timezone.utc).isoformat(),
         "schema_version": ws.SNAPSHOT_SCHEMA_VERSION,
         "session_gap_threshold_s": int(SESSION_GAP_S),
+        # The bootstrap parameters behind every alpha CI in this snapshot, so a report
+        # sidecar can carry them without re-reading the config.
+        "iaa": {"n_resamples": IAA_RESAMPLES, "seed": IAA_SEED},
         "pooled_agreement": pooled,
         "total": {
             "count": {**tot_counts, "n_annotators": len(tot_annotators)},
