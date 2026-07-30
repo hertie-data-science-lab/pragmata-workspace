@@ -729,12 +729,16 @@ def render(snap: dict) -> str:
     parts = [
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         (
-            "<small>**Counting units**:\n"
-            "- an **item** is one submitted annotation,\n"
-            "- a **panel** is a query's k-chunk retrieval set (complete only once every "
-            "chunk is annotated),\n"
-            "- a **record** is a fully completed end-to-end annotation for one query-answer "
-            "pair (incl all retrieval panels, all min_submitted).</small>"
+            "<small>**Counting units** (full definitions in "
+            "`docs/eval-data-dictionary.md`):\n"
+            "- a **response** is one annotator's submission on one record,\n"
+            "- a **record** is one annotatable thing — a chunk for retrieval, a query for "
+            "grounding and generation — and is *completed* once it has met its required "
+            "annotator count,\n"
+            "- a **panel** is a query's k chunk-records for retrieval (complete only once "
+            "every chunk has a submitted response),\n"
+            "- a **query group** is one query-answer pair across all three tasks: its "
+            "panel plus its grounding and generation records.</small>"
         ),
         "## Overall counts\n\n" + overall_counts(total),
         # Per-domain progress: record-level counts with retrieval panel completeness

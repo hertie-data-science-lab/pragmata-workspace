@@ -28,6 +28,10 @@ andy, unknown, mostly_male, male) rather than collapsing it, so coverage is visi
 instead of `andy` and `unknown` being merged into one bucket. `n_authors` and
 `n_authors_resolved` say how much of each row the claim rests on.
 
+Both gender columns use the same three-way encoding for the unresolved cases —
+`unknown` (no author recorded, or no name the dictionary knows) and `institutional` — so
+a cut on one column transfers to the other, and neither is ever blank.
+
 Three limits that belong in any published figure:
 
   1. The metadata records at most three authors (`verf1..verf3`), so "majority" is over
@@ -45,6 +49,7 @@ Run (needs an active `az login` in the BSt tenant):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from collections import Counter
@@ -203,6 +208,35 @@ def fetch_documents(cur) -> list[dict]:
     return [dict(zip(keys, row)) for row in cur.fetchall()]
 
 
+def collection_pin(cur, documents: list[dict]) -> dict:
+    """Input pin for the vector store, so corpus drift is detectable after the fact.
+
+    The corpus is a live Postgres collection with no version of its own, so unlike the
+    frozen export this catalog cannot be pinned by file hash. Two values stand in: the
+    collection's total row count (which also counts chunks carrying no doc_id, invisible
+    to the catalog itself) and a checksum over the per-document chunk counts the catalog
+    rests on. Either changing means the corpus moved.
+    """
+    cur.execute(
+        """
+        SELECT count(*)
+        FROM public.langchain_pg_embedding e
+        JOIN public.langchain_pg_collection c ON c.uuid = e.collection_id
+        WHERE c.name = %s;
+        """,
+        (MAIN_COLLECTION,),
+    )
+    content = "\n".join(
+        f"{doc['doc_id']}:{doc['n_chunks']}"
+        for doc in sorted(documents, key=lambda d: d["doc_id"])
+    )
+    return {
+        "collection_rows": int(cur.fetchone()[0]),
+        "n_documents": len(documents),
+        "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+    }
+
+
 def build_rows(documents: list[dict]) -> list[dict]:
     import gender_guesser.detector as gender
 
@@ -217,13 +251,15 @@ def build_rows(documents: list[dict]) -> list[dict]:
         raw, collapsed = classify(detector, recorded)
         n_recorded = sum(1 for name in recorded if name)
 
-        def unresolved(empty: str, n_recorded: int = n_recorded) -> str:
+        def unresolved(n_recorded: int = n_recorded) -> str:
             """Gender when no author could be classified: institutional, or absent.
 
-            Shared by first_author_gender and author_gender so the institutional case
-            cannot end up set on one and not the other.
+            Shared by first_author_gender and author_gender so both the institutional
+            case and the no-author case are encoded identically in the two columns. A
+            document with no recorded author is "unknown", never blank: a blank cell
+            reads as a missing value in the file rather than as a known absence.
             """
-            return "institutional" if n_recorded else empty
+            return "institutional" if n_recorded else "unknown"
 
         # Classify the FIRST recorded author on its own rather than taking raw[0].
         # classify() skips authors whose names don't parse, so `raw` is compacted and no
@@ -237,7 +273,7 @@ def build_rows(documents: list[dict]) -> list[dict]:
             # verf1 present but unparseable means institutional; absent means no author.
             first_raw, first_collapsed = (
                 "",
-                "institutional" if recorded and recorded[0] else unresolved(""),
+                "institutional" if recorded and recorded[0] else unresolved(),
             )
 
         rows.append(
@@ -254,7 +290,7 @@ def build_rows(documents: list[dict]) -> list[dict]:
                 "is_institutional": n_recorded > 0 and not raw,
                 "first_author_gender": first_collapsed,
                 "first_author_gender_raw": first_raw,
-                "author_gender": majority(collapsed) if raw else unresolved("unknown"),
+                "author_gender": majority(collapsed) if raw else unresolved(),
                 "female_present": "female" in collapsed,
                 "author_genders_raw": ";".join(raw),
             }
@@ -271,7 +307,9 @@ def main() -> int:
 
     conn = vsi.connect(vsi.fetch_dsn())
     try:
-        documents = fetch_documents(conn.cursor())
+        cursor = conn.cursor()
+        documents = fetch_documents(cursor)
+        source_pin = collection_pin(cursor, documents)
     finally:
         conn.close()
     rows = build_rows(documents)
@@ -289,43 +327,13 @@ def main() -> int:
                 "collection": MAIN_COLLECTION,
                 "app": APP_NAME,
                 "resource_group": RESOURCE_GROUP,
+                **source_pin,
             },
-            n_documents=len(rows),
             n_chunks_total=n_chunks_total,
             n_documents_with_resolved_author=resolved,
             n_documents_institutional=institutional,
             gender_coverage=round(resolved / len(rows), 4) if rows else None,
             grain="one row per doc_id",
-            caveats=[
-                (
-                    "author_gender is inferred from a first-name dictionary "
-                    "(gender-guesser), not recorded in the corpus, and is not a measure of "
-                    "how anyone identifies."
-                ),
-                (
-                    "The metadata records at most three authors (verf1..verf3), so "
-                    "'majority' is over RECORDED authors, not all authors."
-                ),
-                (
-                    "The heuristic is weaker on non-Western names; *_raw columns keep the "
-                    "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
-                    "(name absent from the dictionary)."
-                ),
-                (
-                    "Institutional authors have no personal name and are flagged "
-                    "is_institutional rather than counted as unknown people."
-                ),
-                (
-                    "author_gender='unknown' merges two populations: documents with no "
-                    "recorded author at all and documents whose author names the dictionary "
-                    "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
-                    "cut on author_gender alone."
-                ),
-                (
-                    "pub_year and extent_pages are parsed from free-text library fields; "
-                    "the raw extent string is kept in `extent` so the parse is auditable."
-                ),
-            ],
         ),
     )
 
