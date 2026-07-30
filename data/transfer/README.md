@@ -1,7 +1,7 @@
 # data/transfer/ (gitignored contents)
 
 Staging landing zone for eval data moved over Azure Blob by
-[`scripts/eval/sync.sh`](../../scripts/eval/sync.sh). Everything here except this
+[`scripts/transfer/sync.sh`](../../scripts/transfer/sync.sh). Everything here except this
 README and `.gitkeep` is gitignored - it moves via **Blob, not git** (git carries
 code; this carries data).
 
