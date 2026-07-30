@@ -18,6 +18,10 @@ Every bundle holds exactly two required files:
     honest record of a decision, just not a live one.
   - `fetch: <where to get them>` — printed when a pin comes out `ABSENT`, for artefacts
     that live outside git.
+
+  One further header is **informational only**, read by people rather than by `bundle.py`:
+  `superseded-by: <bundle>` — a later bundle has taken over this one's role. The superseded
+  bundle keeps its pins and must keep verifying; it is an archived record, not a retired one.
 - **`pins.sha256`** — *generated*, never hand-edited. One `<sha256>  <path>` line per file,
   paths relative to the repo root, `sha256sum` format (the same format family as
   `scripts/transfer/sync.sh`'s `MANIFEST.sha256`, which uses tree-relative paths instead).
@@ -40,7 +44,8 @@ by a bundle, plus the most recent.
 | `2026-05-initial-import/` | lineage | The original build + import of the corpus (querygen → bot → combine → import). Holds the original partition manifests, `provenance.md`, and the pins for the external corpus + pre-prune backup. |
 | `2026-07-01-annotation-curation/` | lineage | The curation: 21,346 → 4,244 records. Holds `curation_record.md`, the per-dataset keep-lists, the as-run audit log, and the curated-corpus pins. |
 | `2026-07-02-generation-descope/` | lineage, **retired** | Would have taken `Digitalisierung-und-Gemeinwohl_generation/generation_production` 100 → 80. Declared 2026-07-02 on the premise that the 20 dropped records held no responses; never applied; retired 2026-07-30 once the annotators had completed all 20. Excluded from composition. |
-| `2026-07-29-eval-report-freeze/` | freeze | The canonical annotation export behind every human-annotation and fairness number in the BSt report. Pins all 41 files so the figures stay reproducible while the live instance keeps moving. |
+| `2026-07-29-eval-report-freeze/` | freeze, **superseded** | The first canonical annotation export for the BSt report, pinning all 41 files. Superseded by `2026-07-30-eval-report/`; retained as an archived record and still verifies. Its export tree predates pseudonymisation and holds real annotator names, so it stays local. |
+| `2026-07-30-eval-report/` | freeze | The canonical data behind every human-annotation and fairness number in the BSt report: the pseudonymised export (41 files) **and** the report CSVs with their sidecars and data dictionary (11 files). |
 
 The lineage composes to an end state of **4,244 records** across 48 datasets — the
 2026-07-01 keep-lists, since the descope is retired. That matches live. Whether it still
