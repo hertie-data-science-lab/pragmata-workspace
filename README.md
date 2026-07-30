@@ -45,14 +45,16 @@ make setup          # provision Argilla workspaces + users    (DOMAIN= required)
 make import         # import one domain's combined JSONL       (DOMAIN= required)
 
 # Annotation ops
-make export         # export annotations to per-task CSVs      (DOMAIN= to filter)
-make log            # append an annotation snapshot to logs/annotation/log.jsonl
+make annotation-export  # export annotations to per-task CSVs  (DOMAIN= to filter)
+make annotation-log     # append a snapshot to logs/annotation/log.jsonl
+make annotation-daily   # nightly logging: export -> log.jsonl
+make annotation-backup  # status-preserving Argilla backup     (ARGS="restore <dir>")
+
+# Reporting
 make report         # render latest snapshot -> reports/annotation/<date>/ (+ plots)
 make report-tables  # render tables only -> report.md
 make report-pdf     # render tables -> report.pdf              (needs pandoc + xelatex)
-make plots          # render plots only, PNGs                  (needs matplotlib)
-make daily          # nightly logging: export -> log.jsonl
-make backup         # status-preserving Argilla backup         (ARGS="restore <dir>")
+make report-plots   # render plots only, PNGs                  (needs matplotlib)
 make reproduce-curation  # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
 
 # Eval data transport  (see docs/eval-data-transport.md)

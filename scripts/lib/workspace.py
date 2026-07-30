@@ -72,7 +72,7 @@ def read_snapshots(path: Path | None = None) -> list[dict]:
     """
     path = path or LOGS_DIR / "log.jsonl"
     if not path.exists():
-        raise SystemExit(f"no snapshot log at {path} - run `make log` first.")
+        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
     snapshots = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
@@ -106,7 +106,7 @@ def check_snapshot(snapshot: dict, *, where: str = "") -> None:
     if "pooled_mean_gap_s" not in timing:
         raise SystemExit(
             f"snapshot {at}{label} predates the pooled gap statistics, so the cadence "
-            f"columns would come out blank. Re-run `make log` and try again."
+            f"columns would come out blank. Re-run `make annotation-log` and try again."
         )
 
 

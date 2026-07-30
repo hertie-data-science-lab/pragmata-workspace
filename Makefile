@@ -17,6 +17,9 @@
 #   make combine DOMAINS="gesundheit europas-zukunft"
 #   make setup DOMAIN=gesundheit
 #   make import DOMAIN=gesundheit
+#
+# Naming: pipeline stages are bare (the five above, plus pipeline); everything else
+# is namespaced by what it operates on — annotation-*, report-*, eval-*.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
@@ -31,7 +34,10 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline querygen bot combine setup import log export report report-tables report-pdf plots daily backup reproduce-curation eval-push eval-pull eval-verify
+.PHONY: help pipeline querygen bot combine setup import \
+        annotation-log annotation-export annotation-backup annotation-daily \
+        report report-tables report-pdf report-plots \
+        reproduce-curation eval-push eval-pull eval-verify
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -56,15 +62,13 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/import.sh "$(DOMAIN)"
 
-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--summary for a CLI table)
+annotation-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--summary for a CLI table)
 	$(PY) scripts/annotation/log.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
-export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
+annotation-export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/annotation/export.sh $(DOMAIN)
 
-report: ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
-	$(PY) scripts/annotation/report_tables.py
-	$(PY) scripts/annotation/plot_summary.py
+report: report-tables report-plots ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
 
 report-tables: ## Render tables only -> reports/annotation/<date>/report.md
 	$(PY) scripts/annotation/report_tables.py
@@ -75,13 +79,13 @@ report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report
 	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
 	  && echo "wrote $${md%.md}.pdf"
 
-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
+report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 
-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report)
+annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report)
 	bash scripts/daily.sh
 
-backup: ## Status-preserving Argilla backup (make backup; ARGS="restore <dir>" to restore)
+annotation-backup: ## Status-preserving Argilla backup (dump; ARGS="restore <dir>" to restore)
 	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
 
 eval-push: ## Push a tree to the eval Blob (SRC= source tree, PREFIX= dest prefix; both required)
