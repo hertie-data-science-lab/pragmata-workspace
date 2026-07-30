@@ -179,11 +179,12 @@ denominators stay right.
   annotated data.
 - **Chunk-grain fan-out.** A `doc_id` appears once per retrieved chunk, so document
   *frequency* means counting rows and distinct *documents* means deduplicating on
-  `(query_id, doc_id)`. **Never join on `chunk_id` alone**: one chunk can be retrieved by
-  several queries, so a chunk-only join multiplies rows across unrelated queries.
+  `(query_id, doc_id)`. **Never join on `chunk_id` alone** — 739 chunks here are retrieved
+  by more than one query, so a chunk-only join multiplies rows across unrelated queries.
 - **Joining to the annotation exports.** They carry no `query_id`, only `record_uuid`. Join
-  on the **query text**, which is 1:1 with `query_id`, or on `(query_id, chunk_id)` after
-  resolving the query. Join to `corpus_catalog.csv` on `doc_id`.
+  on the **query text**, which is verified 1:1 with `query_id` (1143 texts, 1143 ids, both
+  directions), or on `(query_id, chunk_id)` once the query is resolved. Join to
+  `corpus_catalog.csv` on `doc_id`.
 
 ## `corpus_catalog.csv`
 

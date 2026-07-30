@@ -184,15 +184,17 @@ def argilla_client():
 
 
 def eval_pragmata() -> SimpleNamespace:
-    """Resolve the eval-side pragmata pin: source tree, venv python, and CLI binary.
+    """Resolve the eval-side pragmata pin: source tree, its repo, and the CLI to run it.
 
     The annotation pipeline pins ``PRAGMATA_SRC`` at a frozen demo checkout that has
     no eval module at all, so eval needs its own pin. Kept separate (rather than
     moving the shared pin forward) so the live Argilla instance's annotation and
     export behaviour stays frozen while eval tracks upstream.
 
-    The eval CLI runs from the eval checkout's OWN venv: it needs ``pandera``, which
-    the workspace venv does not carry. Workspace-side glue keeps using ``$PY``.
+    One venv runs both: the CLI is the workspace venv's own ``pragmata``, invoked with
+    the pin on ``PYTHONPATH``, which shadows whatever the venv installed. The only thing
+    the eval module needs beyond the annotation side is ``pandera``, so the workspace
+    venv carries it rather than a second venv existing to supply it.
     """
     src = os.environ.get("PRAGMATA_EVAL_SRC")
     if not src:
@@ -204,15 +206,10 @@ def eval_pragmata() -> SimpleNamespace:
         raise SystemExit(
             f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}"
         )
-    venv = Path(
-        os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv"
-    ).resolve()
-    binary = venv / "bin" / "pragmata"
+    binary = ROOT / ".venv" / "bin" / "pragmata"
     if not binary.exists():
-        raise SystemExit(
-            f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv."
-        )
-    return SimpleNamespace(src=src_path, repo=src_path.parent, venv=venv, bin=binary)
+        raise SystemExit(f"no pragmata CLI at {binary} — create the workspace venv.")
+    return SimpleNamespace(src=src_path, repo=src_path.parent, bin=binary)
 
 
 def load_dotenv(path: Path) -> None:

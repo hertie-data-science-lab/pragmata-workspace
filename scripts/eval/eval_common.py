@@ -69,9 +69,9 @@ UNIT_KEYS: dict[str, tuple[str, ...]] = {
 # Both live here rather than in each script so a refresh moves them once. The snapshot is
 # pinned by timestamp, not taken as "the latest": the nightly cron appends one every
 # night, so a report re-run months later must still read the line it was built from.
-FREEZE_DATE = "2026-07-29"
+FREEZE_DATE = "2026-07-30"
 FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
-CANONICAL_SNAPSHOT_RUN_AT = "2026-07-29T02:01:25Z"
+CANONICAL_SNAPSHOT_RUN_AT = "2026-07-30T12:41:38.450281+00:00"
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"

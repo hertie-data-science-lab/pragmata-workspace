@@ -2,6 +2,8 @@
 
 kind: freeze
 fetch: `make transfer-pull PREFIX=exports-frozen/2026-07-29` (the Azure Blob copy)
+superseded-by: `2026-07-30-eval-report/` - the report's canonical data is that freeze; this
+one is retained as an archived record and still verifies.
 
 The **canonical annotation export** for the BSt report. Every human-annotation and
 fairness-audit number in the report is derived from this snapshot and no other, so the
@@ -100,8 +102,10 @@ three. `panels` counts retrieval `record_uuid`s; `complete` is the STRICT
 Two things a reader must not miss:
 
 - **`zentrum-fuer-datenmanagement` has 70 panels and zero annotations.** It is a real
-  programme with imported records that nobody annotated - it must appear as an explicit
-  `n=0` row in every report table, not vanish.
+  programme with imported records that nobody annotated. Decided 2026-07-30: it is
+  **excluded from every report table**, not carried as an `n=0` row. An all-blank row reads
+  as a measurement rather than as an absence, so the gap is recorded here and in
+  `docs/eval-data-dictionary.md` instead.
 - **Retrieval panel completeness is 33% overall and very uneven.** Only demokratie
   (70/70), europas-zukunft (68/68) and kommunen (33/67) have enough complete panels to
   report retrieval metrics. See `reports/eval-pipeline-results.md` for what that means
