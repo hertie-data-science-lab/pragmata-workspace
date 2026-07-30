@@ -29,9 +29,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 require_env ARGILLA_API_URL ARGILLA_API_KEY
 
-# Every configs/annotation/domains/*.yaml stem (skip _helpers) — the domain list, and the
-# set the stray-dir check below validates the exports tree against.
-mapfile -t all_stems < <(cd configs/annotation/domains && for f in *.yaml; do [[ "$f" == _* ]] || echo "${f%.yaml}"; done)
+# Every configs/annotation/domains/*.yaml stem — the domain list, and the set the
+# stray-dir check below validates the exports tree against.
+mapfile -t all_stems < <(config_stems configs/annotation/domains)
 # Domains to export: the one given, else all of them.
 if [[ $# -ge 1 ]]; then
   domains=("$1")
