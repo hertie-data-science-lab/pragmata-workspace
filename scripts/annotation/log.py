@@ -78,16 +78,10 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/settings.conf + .env; existing env wins
+ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.path
 
-# Build against the demo deployment's pragmata. (NB: the data
-# was imported by the demo-branch pragmata (partition_scope topology), so we read
-# it back through the same branch). PRAGMATA_SRC (.env) shadows the
-# installed package on sys.path; unset → installed pragmata.
-_PRAGMATA_SRC = os.environ.get("PRAGMATA_SRC")
-if _PRAGMATA_SRC:
-    sys.path.insert(0, _PRAGMATA_SRC)
-
+# The data was imported by the pinned pragmata (partition_scope topology), so it must be
+# read back through the same tree. ws.load_env() applies the pin; unset → installed.
 import pragmata  # noqa: E402
 from pragmata.api.annotation_export import export_annotations  # noqa: E402
 from pragmata.api.annotation_iaa import compute_iaa  # noqa: E402
