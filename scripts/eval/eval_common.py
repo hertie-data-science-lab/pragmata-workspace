@@ -1,8 +1,12 @@
 """Shared vocabulary for the eval-stage report scripts.
 
 The report CSVs are a contract with the report author, so the things that decide a
-number — which rows count, what a scoring unit is, which population a statistic
-describes — are defined once here rather than re-derived per script.
+number — which rows count, what a unit is, which population a statistic describes — are
+defined once here rather than re-derived per script.
+
+The prose definitions of response / record / unit / panel / query group, and every
+column of every CSV, live in ``docs/eval-data-dictionary.md``. This module is the
+executable half of that document; keep the two in step.
 
 Import with the same preamble the annotation scripts use::
 
@@ -50,25 +54,33 @@ LABELS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# The unit that must be unique before scoring, matching pragmata's
-# _DUPLICATE_KEY_COLUMNS_BY_TASK (core/eval/transforms.py). Retrieval fans one query
-# out into one row per chunk; the other two are one row per query.
+# The columns identifying one UNIT — one record's responses majority-consolidated, the
+# grain eval ingests. Matches pragmata's _DUPLICATE_KEY_COLUMNS_BY_TASK
+# (core/eval/transforms.py). A retrieval record is one chunk, so a query's panel fans out
+# into one row per chunk; a grounding or generation record is one query.
 UNIT_KEYS: dict[str, tuple[str, ...]] = {
     "retrieval": ("record_uuid", "chunk_id"),
     "grounding": ("record_uuid",),
     "generation": ("record_uuid",),
 }
 
-# The default input tree: the frozen canonical export, not the live one the nightly
-# cron overwrites. See reproducibility/2026-07-29-eval-report-freeze/.
-FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / "2026-07-29"
+# --- the canonical freeze: one date and one snapshot behind every report number ------
+#
+# Both live here rather than in each script so a refresh moves them once. The snapshot is
+# pinned by timestamp, not taken as "the latest": the nightly cron appends one every
+# night, so a report re-run months later must still read the line it was built from.
+FREEZE_DATE = "2026-07-29"
+FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
+CANONICAL_SNAPSHOT_RUN_AT = "2026-07-29T02:01:25Z"
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
 
-# Excluded from every report output: the programme was seeded in Argilla (70 panels
-# imported) but never staffed, so it has zero annotations. Recorded in each provenance
-# sidecar.
+# Excluded from every report output, decided 2026-07-30: the programme was seeded in
+# Argilla (70 panels imported) but never staffed, so it has zero annotations in every
+# task. It is omitted rather than carried as an n=0 row, because an all-blank row in a
+# report table reads as a measurement rather than as an absence. The gap is recorded in
+# the reproducibility bundle and in the data dictionary instead.
 EXCLUDED_PROGRAMMES = frozenset({"zentrum-fuer-datenmanagement"})
 
 
@@ -85,6 +97,15 @@ def add_common_args(parser, *, default_exports: Path | None = None) -> None:
         type=Path,
         default=None,
         help="Output directory (default: reports/eval/<today>/).",
+    )
+
+
+def add_snapshot_arg(parser) -> None:
+    """Register --snapshot-run-at for the scripts that read a log snapshot."""
+    parser.add_argument(
+        "--snapshot-run-at",
+        default=CANONICAL_SNAPSHOT_RUN_AT,
+        help="run_at of the log snapshot to read (default: the canonical one).",
     )
 
 
@@ -155,9 +176,9 @@ NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
 def read_task(exports: Path, programme: str, task: str) -> pd.DataFrame:
     """Read one programme's task CSV, asserting the schema the filters rely on.
 
-    Returns an empty frame when the file is absent or empty. That is a real state, not
-    an error: zentrum-fuer-datenmanagement has imported records and zero annotations,
-    and must still appear as an n=0 row.
+    Returns an empty frame when the file is absent or empty. That is a real state rather
+    than an error: a task can be imported and never annotated, and the callers count it
+    as zero instead of failing.
     """
     path = exports / programme / f"{task}.csv"
     if not path.exists() or path.stat().st_size == 0:
@@ -222,10 +243,8 @@ def panel_totals(exports: Path, programme: str) -> tuple[int, int]:
 
     Taken from ``completeness_summary`` rather than counted off the CSV rows, because
     the rows only cover panels that received at least one submitted response. Counting
-    them undercounts the DENOMINATOR: zentrum-fuer-datenmanagement has 70 imported
-    panels and zero annotations, so a row-derived count reports 0 panels and hides the
-    programme's coverage gap entirely, and four other programmes undercount by 2-6.
-    Use n_queries() for "panels that have responses"; use this for "panels that exist".
+    them undercounts the DENOMINATOR — several programmes have panels nobody opened — so
+    a row-derived count would hide exactly the coverage gap these columns exist to show.
     """
     summary = export_meta(exports, programme).get("completeness_summary") or {}
     return int(summary.get("n_panels", 0)), int(summary.get("n_complete", 0))
@@ -260,13 +279,6 @@ def submitted(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty or "response_status" not in frame.columns:
         return frame
     return frame[frame["response_status"] == "submitted"]
-
-
-def drop_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
-    """Keep production ROWS only. For prevalence, never for scoring — see below."""
-    if frame.empty or "calibration" not in frame.columns:
-        return frame
-    return frame[~frame["calibration"].astype(bool)]
 
 
 def keep_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
@@ -305,28 +317,16 @@ def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[~all_calibration]
 
 
-def complete_panels(frame: pd.DataFrame) -> pd.DataFrame:
-    """Keep retrieval rows whose panel has every chunk submitted (STRICT).
-
-    `pragmata eval score` applies no completeness policy of its own — it groups by
-    record_uuid and averages whatever chunks are present — so an incomplete panel
-    yields a precision/nDCG/MRR computed over a partial chunk set. The export already
-    carries the flag; this is the filter that consumes it.
-    """
-    if frame.empty or "panel_complete" not in frame.columns:
-        return frame
-    return frame[frame["panel_complete"].astype(bool)]
-
-
 def consolidated_prevalence(
     frame: pd.DataFrame, task: str, label: str
 ) -> tuple[int, int]:
-    """(n_items, n_true) for one label, majority-consolidated per annotation unit.
+    """(n_units, n_true) for one label, majority-consolidated per unit.
 
     Follows pragmata's consolidate_labels_by_majority: a strict majority decides the
-    unit's label; an exact tie falls back to the first row's value in file order. So
-    n_items counts annotated units (not annotator responses), and n_true counts units
-    whose consolidated label is true - the same numbers eval score would ingest.
+    unit's label; an exact tie falls back to the first row's value in file order. So the
+    count is of annotated units, not of responses, and n_true counts units whose
+    consolidated label is true - the same numbers eval score would ingest. The client's
+    label table names this count `n_items`; see the data dictionary.
     """
     if frame.empty or label not in frame.columns:
         return 0, 0
@@ -337,21 +337,6 @@ def consolidated_prevalence(
         (positive == grouped["count"]) & grouped["first"].astype(bool)
     )
     return len(grouped), int(consolidated.sum())
-
-
-def latest_snapshot(nth: int = 1) -> dict:
-    """The Nth-from-last snapshot in logs/annotation/log.jsonl (1 = last).
-
-    Reading and the compatibility guards live in ws.select_snapshot, so these reports, the
-    annotation report tables and the plots all accept and refuse exactly the same
-    snapshots, and only the selected line is parsed.
-    """
-    if nth < 1:
-        # -0 is 0, the oldest snapshot - the opposite of "latest".
-        raise SystemExit(
-            f"--snapshot counts back from the last and must be >= 1, got {nth}."
-        )
-    return ws.select_snapshot(line=-nth)
 
 
 def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
@@ -367,36 +352,3 @@ def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
         for task, labels in per_task.items()
         for label, stats in (labels.get("per_label") or {}).items()
     }
-
-
-def n_queries(frame: pd.DataFrame) -> int:
-    """Distinct queries (record_uuid) — the unit every corpus metric averages over."""
-    if frame.empty or "record_uuid" not in frame.columns:
-        return 0
-    return int(frame["record_uuid"].nunique())
-
-
-def tied_label_units(frame: pd.DataFrame, task: str) -> tuple[int, int]:
-    """(units with >=1 tied label, units with >1 annotator) for a task frame.
-
-    pragmata consolidates repeated annotator rows by per-label majority, but sets
-    `majority_threshold = len(group) / 2` and excludes exact ties from the strict
-    majority — so a 1-of-2 split keeps whichever row was selected, i.e. the outcome
-    depends on CSV row order. This quantifies how much of the data that touches.
-    """
-    if frame.empty:
-        return 0, 0
-    keys = [k for k in UNIT_KEYS[task] if k in frame.columns]
-    labels = [c for c in LABELS[task] if c in frame.columns]
-    if not keys or not labels:
-        return 0, 0
-    grouped = frame.groupby(list(keys), sort=False)
-    n_tied = n_multi = 0
-    for _, group in grouped:
-        if len(group) < 2:
-            continue
-        n_multi += 1
-        positives = group[labels].astype(float).sum(axis=0)
-        if (positives == len(group) / 2).any():
-            n_tied += 1
-    return n_tied, n_multi

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Eval-pipeline run 1: corpus metrics from the human-labelled annotations.
+"""Corpus metrics from the human-labelled annotations.
+
+The human-label half of the eval stage. Its twin, `score_synthetic_predictions.py`, is
+reserved for the evaluator-model run and does not exist yet.
 
 Pools the frozen canonical export across programmes, runs `pragmata eval score` once
 per task, and collects every per-metric estimate into one tidy CSV — task x metric,
 16 rows. The metric taxonomy has no per-programme grain, and pooling is also what makes
-retrieval usable: complete panels are 181 queries pooled, against n<=5 in four of seven
-programmes taken singly.
+retrieval usable: panel completeness is very uneven, so several programmes contribute
+too few complete panels to report on their own. The composition of the pooled n is in
+`annotation_operations.csv`.
 
 **Why it filters first and passes --path.** `eval score` accepts `--export-id`, which
 would read the export directly — but it applies no completeness policy of its own
@@ -30,13 +34,13 @@ uncertainty over queries only — not annotator disagreement, by explicit design
 pragmata's docs/design/eval-scoring-metrics.md). Some labels have Krippendorff alpha
 at or below chance, and a tight Wilson interval on such labels reads as precision
 that is not there. Each row therefore carries the POOLED alpha of the label(s) it
-rests on — the matching population for pooled metrics — from the latest log snapshot.
+rests on — the matching population for pooled metrics — from the pinned log snapshot.
 
 Usage:
-  scripts/eval/score_human.py                        # calibration in, complete panels
-  scripts/eval/score_human.py --exclude-calibration  # production-only comparison run
-  scripts/eval/score_human.py --all-panels           # drop the completeness filter
-  scripts/eval/score_human.py --allow-dirty          # permit a dirty pragmata pin
+  scripts/eval/score_human_annotations.py                        # the reportable policy
+  scripts/eval/score_human_annotations.py --exclude-calibration  # production-only run
+  scripts/eval/score_human_annotations.py --all-panels           # no completeness filter
+  scripts/eval/score_human_annotations.py --allow-dirty          # allow a dirty pin
 """
 
 from __future__ import annotations
@@ -113,8 +117,6 @@ COLUMNS = [
     "source_labels",
     "alpha_min",
     "alpha_min_label",
-    "alpha_min_ci_low",
-    "alpha_min_ci_high",
     "alpha_n_items",
     "alpha_min_degenerate",
     "status",
@@ -123,6 +125,13 @@ COLUMNS = [
 
 # The reportable policy: calibration kept in, complete retrieval panels only.
 DEFAULT_POLICY = "calib-complete"
+
+# Where the pooled, filtered CSVs handed to `eval score --path` are staged. Deliberately
+# NOT under data/eval/: that is pragmata's own eval tool tree (see data/README.md), and
+# the ownership invariant in scripts/eval/README.md is that a tool tree holds only what
+# that tool produced. These are workspace-produced inputs TO the tool, so they get a
+# workspace-owned sibling; pragmata still writes its reports to data/eval/scores/.
+FILTERED_ROOT = ws.DATA_DIR / "eval-inputs"
 
 
 def policy_name(args) -> str:
@@ -163,12 +172,10 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
     alpha, label, stats = min(candidates, key=lambda c: c[0])
     row["alpha_min"] = f"{alpha:.4f}"
     row["alpha_min_label"] = label
-    for key, target in (
-        ("ci_lower", "alpha_min_ci_low"),
-        ("ci_upper", "alpha_min_ci_high"),
-    ):
-        if stats.get(key) is not None:
-            row[target] = f"{stats[key]:.4f}"
+    # No interval on alpha_min: the pooled alpha's bootstrap CI is resampled separately
+    # from the metric's, so putting the two side by side invited reading them as one
+    # uncertainty budget. The point estimate plus the degeneracy flag is what the metric
+    # rows need; the resample count and its determinism are in the data dictionary.
     row["alpha_n_items"] = stats.get("n_items", "")
     # alpha = 1 - Do/De is undefined at De = 0 (the label never varies in the pooled
     # calibration items) and pragmata returns 1.0 by convention. Without this flag,
@@ -286,6 +293,7 @@ def empty_rows(task: str, policy: str, status: str) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ec.add_common_args(ap)
+    ec.add_snapshot_arg(ap)
     ap.add_argument(
         "--exclude-calibration",
         action="store_true",
@@ -327,12 +335,12 @@ def main() -> int:
         )
 
     policy = policy_name(args)
-    filtered_root = ws.DATA_DIR / "eval" / "filtered" / policy
+    filtered_root = FILTERED_ROOT / policy
     rows: list[dict] = []
 
     # Pooled alpha, because the metrics are pooled: every domain's calibration items go
     # into one reliability matrix per (task, label) in the log snapshot.
-    snapshot = ec.latest_snapshot()
+    snapshot, identity = ws.find_snapshot(args.snapshot_run_at)
     alphas = ec.pooled_agreement(snapshot)
 
     for task in ec.TASKS:
@@ -376,9 +384,10 @@ def main() -> int:
         rows,
         columns=COLUMNS,
         prov=ws.provenance(
-            script="scripts/eval/score_human.py",
+            script="scripts/eval/score_human_annotations.py",
             inputs=ec.export_inputs(args.exports),
             pragmata_src=pin.src,
+            snapshot=identity,
             exports_tree=str(args.exports),
             policy=policy,
             grain="task x metric, pooled across programmes",
@@ -397,32 +406,7 @@ def main() -> int:
             ci_level=args.ci,
             n_resamples=args.n_resamples,
             seed=args.seed,
-            alpha_source={
-                "snapshot_run_at": snapshot.get("run_at"),
-                "population": "pooled calibration items",
-            },
-            caveats=[
-                (
-                    "CIs cover sampling uncertainty over queries only — not annotator "
-                    "disagreement or label error."
-                ),
-                (
-                    "alpha_* columns are the POOLED alpha over every domain's calibration "
-                    "items (pragmata computes IAA over overlapped rows only)."
-                ),
-                (
-                    "alpha_min_degenerate=True means the label never varies in that pooled "
-                    "population: alpha is undefined there and pragmata returns 1.0 by "
-                    "convention, so such an alpha is NOT evidence of reliability."
-                ),
-                (
-                    "The pooled retrieval n=181 is dominated by three programmes "
-                    "(demokratie 70, europas-zukunft 68, kommunen 33 = 171 of 181); "
-                    "nachhaltige contributes 0 complete panels. policy_grid.csv carries "
-                    "the full composition."
-                ),
-                "top_k is max(chunk_rank) and K varies per query; do not label these '@5'.",
-            ],
+            alpha_population="pooled calibration items",
         ),
     )
     print(f"wrote {target} ({len(rows)} rows, policy={policy})", file=sys.stderr)
