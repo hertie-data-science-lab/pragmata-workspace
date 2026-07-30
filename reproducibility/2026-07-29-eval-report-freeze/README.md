@@ -1,12 +1,14 @@
 # Eval report data freeze - 2026-07-29
 
+kind: freeze
+fetch: `make transfer-pull PREFIX=exports-frozen/2026-07-29` (the Azure Blob copy)
+
 The **canonical annotation export** for the BSt report. Every human-annotation and
 fairness-audit number in the report is derived from this snapshot and no other, so the
 figures stay reproducible while the live instance keeps moving.
 
-This is the first **run-provenance** bundle rather than an instance-lineage stage (see
-[`../README.md`](../README.md#two-kinds-of-reproducibility-artifact)): it pins one run's
-inputs by SHA256 and is not replayed in sequence with the numbered stages.
+This is a **freeze**, not a lineage stage (see [`../README.md`](../README.md)): it pins one
+run's inputs by SHA256 and is never replayed. `repro-reproduce` refuses it.
 
 ## Why a copy rather than stopping the cron
 
@@ -23,7 +25,7 @@ copy is what the report reads.
 
 | Path | What it is |
 |---|---|
-| `checksums.sha256` | Pins all 41 frozen files (repo-relative paths). |
+| `pins.sha256` | Pins all 41 frozen files (repo-relative paths). |
 | this README | Cutoff, counts, and the blob snapshot pin. |
 
 The export tree itself is **not in git** - it carries PII (`annotator_id` in every CSV,
@@ -42,7 +44,7 @@ frozen snapshot beside the rolling tree keeps the two independent.
 Verify locally from the repo root:
 
 ```
-sha256sum -c reproducibility/2026-07-29-eval-report-freeze/checksums.sha256
+make repro-verify PIN=2026-07-29-eval-report-freeze
 ```
 
 Or re-fetch and verify the blob copy (round-trip confirmed 2026-07-29):
@@ -55,11 +57,11 @@ make transfer-pull PREFIX=exports-frozen/2026-07-29
 
 | Pin | Value |
 |---|---|
-| Local tree (sha256 of `checksums.sha256`) | `5a6b5a76042741a79bc9789947325f46db7bde92fb4a27e8741dec4f2f16dcfd` |
+| Local tree (sha256 of `pins.sha256`) | `5a6b5a76042741a79bc9789947325f46db7bde92fb4a27e8741dec4f2f16dcfd` |
 | Blob snapshot (sha256 of `MANIFEST.sha256`) | `9cbaefad8a49b117f52884d83dd4d41bf351738f8075dee1b7f2873ff8aaeba4` |
 | Files | 41 |
 
-The two differ by design and are not comparable: `checksums.sha256` lists
+The two differ by design and are not comparable: `pins.sha256` lists
 repo-relative paths, `sync.sh`'s manifest lists tree-relative paths (`./domain/file`).
 Each pins the same bytes under its own naming.
 
