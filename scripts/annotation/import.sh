@@ -19,7 +19,8 @@ combined="data/publikationsbot/${d}_combined.jsonl"
 [[ -s "$combined" ]] || fatal "no combined JSONL: $combined (run build_combined.py first)"
 
 # Strip run_bot.py extras -> {query, answer, chunks, context_set, language}.
-clean="/tmp/${d}_combined.clean.jsonl"
+clean="$(mktemp --suffix=.jsonl)"
+trap 'rm -f "$clean"' EXIT
 jq -c '{query, answer, chunks, context_set, language}' "$combined" > "$clean" \
   || fatal "jq projection failed on $combined"
 "$PRAGMATA" annotation import "$clean" --config "$cfg" --base-dir "$DATA_DIR"
