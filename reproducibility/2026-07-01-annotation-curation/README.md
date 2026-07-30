@@ -27,9 +27,9 @@ first-class at `scripts/annotation/prune_to_keeplist.py`.
 This bundle's keep-lists and `_counts.json` are left at their audited 2026-07-01 values
 (4,244 ids, `Digitalisierung-und-Gemeinwohl_generation/generation_production` = 100). The
 2026-07-02 descope ([`../2026-07-02-generation-descope/`](../2026-07-02-generation-descope/))
-amends that one dataset to 80, so the **composed lineage end state is 4,224 ids** - which
-is what live holds and what `repro-reproduce` converges to. Editing this bundle instead
-would rewrite an independently-audited record.
+amends that one dataset to 80, so the **declared lineage end state is 4,224 ids** - what
+`repro-reproduce` converges to. Editing this bundle instead would rewrite an
+independently-audited record.
 
 ## Reproduce
 

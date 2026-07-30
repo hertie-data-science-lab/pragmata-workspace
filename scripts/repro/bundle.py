@@ -32,6 +32,9 @@ ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 BUNDLES = ws.ROOT / "reproducibility"
 PINS = "pins.sha256"
+# lineage: replayed in date order to rebuild the live instance. freeze: a self-contained
+# record of a run that happened once, never replayed.
+KINDS = ("lineage", "freeze")
 
 
 # --- bundle basics ------------------------------------------------------------------
@@ -63,6 +66,21 @@ def header(bundle: Path, field: str) -> str | None:
         if line.lower().startswith(f"{field}:"):
             return line.split(":", 1)[1].strip()
     return None
+
+
+def kind(bundle: Path) -> str:
+    """The bundle's `kind:` header, or exit.
+
+    Never defaulted: a bundle whose README lost the header would be silently dropped from
+    the lineage composition, and a wrong end state computed without complaint.
+    """
+    value = header(bundle, "kind")
+    if value not in KINDS:
+        raise SystemExit(
+            f"{bundle.name}/README.md needs a `kind: lineage` or `kind: freeze` header "
+            f"line (found: {value!r})"
+        )
+    return value
 
 
 def read_pins(bundle: Path) -> list[tuple[str, str]]:
@@ -193,7 +211,7 @@ def compose_keep_lists(dest: Path) -> dict[str, list[tuple[str, int]]]:
     """
     seen: dict[str, list[tuple[str, int]]] = {}
     for bundle in bundles():
-        if header(bundle, "kind") != "lineage":
+        if kind(bundle) != "lineage":
             continue
         for f in sorted((bundle / "keep_lists").glob("*.ids")):
             ids = [ln for ln in f.read_text().splitlines() if ln.strip()]
@@ -204,10 +222,9 @@ def compose_keep_lists(dest: Path) -> dict[str, list[tuple[str, int]]]:
 
 def cmd_reproduce(args: argparse.Namespace) -> int:
     bundle = bundle_dir(args.bundle)
-    kind = header(bundle, "kind")
-    if kind != "lineage":
+    if (found := kind(bundle)) != "lineage":
         raise SystemExit(
-            f"{bundle.name} is kind: {kind} — only lineage bundles replay. A freeze is a "
+            f"{bundle.name} is kind: {found} — only lineage bundles replay. A freeze is a "
             "self-contained record of something that happened once; verify it instead."
         )
 
@@ -277,7 +294,7 @@ def main() -> int:
     p.add_argument("paths", nargs="+", help="files or trees to pin (trees walked)")
     p.add_argument(
         "--kind",
-        choices=("lineage", "freeze"),
+        choices=KINDS,
         default="lineage",
         help="README kind header: lineage replays in date order, freeze never replays",
     )

@@ -38,8 +38,9 @@ by a bundle, plus the most recent.
 | `2026-07-02-generation-descope/` | lineage | Amends one dataset: `Digitalisierung-und-Gemeinwohl_generation/generation_production` 100 → 80 (dropped 20 records with zero submissions). |
 | `2026-07-29-eval-report-freeze/` | freeze | The canonical annotation export behind every human-annotation and fairness number in the BSt report. Pins all 41 files so the figures stay reproducible while the live instance keeps moving. |
 
-The three lineage bundles compose to the live end state: **4,224 records** across 48
-datasets. Composition is per keep-list **override, not union** — a later bundle's
+The three lineage bundles compose to a **declared** end state of **4,224 records** across 48
+datasets. Whether live matches it is what `repro-reproduce`'s preview tells you — it is not
+an assumption. Composition is per keep-list **override, not union** — a later bundle's
 `<workspace>__<dataset>.ids` replaces the earlier one wholesale, because a keep-list
 declares that dataset's end state rather than adding to it. A union would resurrect the
 20 records the descope removed.
