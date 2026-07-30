@@ -39,7 +39,8 @@ source partition survives at build time.
 Calibration: edgecases are kept out of the calibration set at import time
 (not here) by importing the pooled baseline first — the partition manifest
 fills its `calibration_max_records` cap from baseline records, leaving zero
-calibration slots for the subsequent edgecase import. See setup_and_import.sh.
+calibration slots for the subsequent edgecase import. See
+scripts/annotation/import.sh.
 
 Usage:
   scripts/annotation/build_combined.py                                    # all domains (configs/annotation/domains/)

@@ -1,4 +1,5 @@
 #!/bin/bash
+#>>> usage
 # scripts/pipeline.sh [--from STAGE] [--to STAGE] [--only STAGE]
 #                     [--filter DOMAINS] [--jobs N] [--no-preflight] [--dry-run]
 #
@@ -7,7 +8,7 @@
 #     querygen -> bot -> combine -> setup -> import
 #
 # over an optional domain filter, owning the cross-cutting concerns the atomic
-# stage scripts don't: stage-aware pre-flight, a lockfile, bot parallelism,
+# stage scripts don't: stage-aware pre-flight, a lock, bot parallelism,
 # tee logging, per-stage timing, and continue-on-error with a final summary.
 #
 # Stage scripts remain runnable on their own; this just orchestrates them.
@@ -24,8 +25,9 @@
 # --filter takes DOMAINS (e.g. gesundheit,europas-zukunft); querygen/bot expand
 # each to its specs (<domain> + <domain>_edgecase), combine/import use domains.
 #
-# Cron/tmux friendly: lockfile + exit codes + logs/annotation/pipeline.log. Example:
+# Cron/tmux friendly: lock + exit codes + logs/annotation/pipeline.log. Example:
 #   tmux new -s pipeline 'bash scripts/pipeline.sh'
+#<<< usage
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd_root
@@ -36,7 +38,13 @@ STAGES=(querygen bot combine setup import)
 FROM="querygen"; TO="import"; FILTER=""; JOBS="${N_PARALLEL_BOTS:-4}"
 DO_PREFLIGHT=1; DRY_RUN=0
 
-usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+# Help text is the header comment between the >>> usage / <<< usage markers, so it
+# cannot drift out of range the way a hardcoded line span does.
+usage() {
+  sed -n '/^#>>> usage/,/^#<<< usage/{ /^#[<>]\{3\} usage/d; s/^# \{0,1\}//; p; }' \
+    "${BASH_SOURCE[0]}"
+  exit "${1:-0}"
+}
 
 while (( $# )); do
   case "$1" in
@@ -63,14 +71,14 @@ FROM_IDX="$(stage_index "$FROM")"; TO_IDX="$(stage_index "$TO")"
 (( FROM_IDX <= TO_IDX )) || fatal "--from ($FROM) comes after --to ($TO)" 2
 in_slice() { local i; i="$(stage_index "$1")"; (( i >= FROM_IDX && i <= TO_IDX )); }
 
-# --- filter resolution ---
+# --- filter resolution (unfiltered lists come from config_stems in lib/common.sh) ---
 # domains: filter list, or all configs/annotation/domains/.
 filter_domains() {
   if [[ -n "$FILTER" ]]; then split_csv "$FILTER"
-  else ls configs/annotation/domains/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'; fi
+  else config_stems configs/annotation/domains; fi
 }
 # specs: each domain -> <domain> + <domain>_edgecase (only those with a spec yaml);
-# or all non-underscore specs when unfiltered.
+# or all specs when unfiltered.
 filter_specs() {
   if [[ -n "$FILTER" ]]; then
     local d s
@@ -80,7 +88,7 @@ filter_specs() {
       done
     done < <(split_csv "$FILTER")
   else
-    ls configs/annotation/querygen_specs/[!_]*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$//'
+    config_stems configs/annotation/querygen_specs
   fi
 }
 
@@ -133,7 +141,9 @@ preflight() {
   check_disk
   if in_slice querygen; then
     require_env OPENAI_API_KEY OPENAI_BASE_URL
-    local sample; sample="$(ls configs/annotation/querygen_specs/[!_]*.yaml | head -1)"
+    local stem; stem="$(config_stems configs/annotation/querygen_specs | head -1)"
+    [[ -n "$stem" ]] || fatal "no specs under configs/annotation/querygen_specs/" 4
+    local sample="configs/annotation/querygen_specs/${stem}.yaml"
     "$PY" scripts/annotation/merge_yaml.py configs/annotation/querygen_specs/_runtime.yaml "$sample" \
       | "$PY" -c "import sys,yaml; from pragmata.core.settings.querygen_settings import QueryGenRunSettings; QueryGenRunSettings.resolve(config=yaml.safe_load(sys.stdin))" \
         >/dev/null 2>&1 \
@@ -168,17 +178,44 @@ if (( DRY_RUN )); then
   exit 0
 fi
 
-# --- lockfile: one heavy run at a time ---
+# --- lock: one heavy run at a time ---
+# mkdir is atomic, so two simultaneous starts cannot both win the way a
+# check-then-write on a plain file lets them. The PID goes inside the dir, and is
+# only consulted to decide whether an existing lock is stale.
 LOCK=".pipeline.lock"
-if [[ -f "$LOCK" ]]; then
-  existing="$(cat "$LOCK" 2>/dev/null)"
-  if [[ -n "$existing" ]] && kill -0 "$existing" 2>/dev/null; then
-    fatal "another pipeline run is in flight (PID $existing)" 3
+LOCK_GRACE_S=60
+
+# Is an existing lock reclaimable? Default is NO: the winner of mkdir writes its pid a
+# moment later, so a missing or empty pid file means "held, mid-acquisition" — reading it
+# as stale is how a second process steals a live lock. Only two things justify reclaiming:
+# a recorded pid that is not alive, or no pid at all after LOCK_GRACE_S, which means the
+# winner died between mkdir and the write.
+lock_reclaimable() {
+  local pid age
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [[ -n "$pid" ]]; then
+    kill -0 "$pid" 2>/dev/null && return 1
+    log "stale lock: recorded PID $pid is not alive"
+    return 0
   fi
-  log "removing stale lockfile (PID $existing not alive)"
+  age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
+  (( age >= LOCK_GRACE_S )) || return 1
+  log "stale lock: no pid recorded after ${age}s"
+  return 0
+}
+
+if ! mkdir "$LOCK" 2>/dev/null; then
+  lock_reclaimable \
+    || fatal "another pipeline run is in flight (PID $(cat "$LOCK/pid" 2>/dev/null || echo 'not yet recorded'))" 3
+  # Rename-then-delete, so two processes that both judge the lock stale cannot have one
+  # delete the other's freshly created lock: only the process whose mv succeeds owns the
+  # removal, and mkdir below remains the single point of arbitration.
+  stale="$LOCK.stale.$$"
+  mv "$LOCK" "$stale" 2>/dev/null && rm -rf "$stale"
+  mkdir "$LOCK" || fatal "cannot take the lock at $LOCK (another run took it first)" 3
 fi
-echo $$ > "$LOCK"
-trap 'rm -f "$LOCK"' EXIT
+echo $$ > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT
 
 mkdir -p logs/annotation
 exec > >(tee -a logs/annotation/pipeline.log) 2>&1

@@ -52,6 +52,10 @@ load_dotenv() {
     [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
     key="${line%%=*}"; val="${line#*=}"
     key="${key//[[:space:]]/}"
+    # Trim the value at both ends, matching workspace.py's load_dotenv (it strips);
+    # an untrimmed trailing space silently corrupts a URL or a path.
+    val="${val#"${val%%[![:space:]]*}"}"
+    val="${val%"${val##*[![:space:]]}"}"
     [[ -z "${!key:-}" ]] && export "$key=$val"
   done < "$file"
 }
@@ -91,7 +95,24 @@ check_disk() {
 split_csv() {
   local IFS=',' item
   for item in ${1:-}; do
-    item="$(echo "$item" | xargs)"   # trim surrounding whitespace
+    # Parameter expansion, not `echo | xargs`: xargs applies shell-like quoting and
+    # would eat quotes and backslashes out of the value.
+    item="${item#"${item%%[![:space:]]*}"}"
+    item="${item%"${item##*[![:space:]]}"}"
     [[ -n "$item" ]] && printf '%s\n' "$item"
+  done
+}
+
+# --- config stems: every <dir>/*.yaml stem, `_`-prefixed helpers excluded (sorted).
+#     The single source of truth for "which domains/specs exist" on the shell side;
+#     workspace.py::domains() is its Python twin. Nullglob-safe: an empty directory
+#     yields nothing rather than a literal glob that passes a non-empty guard.
+#     Usage: mapfile -t stems < <(config_stems configs/annotation/domains)  ---
+config_stems() {
+  local dir="$1" f stem
+  for f in "$dir"/*.yaml; do
+    [[ -e "$f" ]] || continue
+    stem="$(basename "$f" .yaml)"
+    [[ "$stem" == _* ]] || printf '%s\n' "$stem"
   done
 }

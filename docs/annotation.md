@@ -51,7 +51,7 @@ tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect
 
 Two halves, deliberately split:
 
-- **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make daily`) -
+- **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make annotation-daily`) -
   chains `export.sh` (submitted annotations → per-domain CSVs) then `log.py --use-export`
   (live counts + IAA + cadence → append one snapshot to `logs/annotation/log.jsonl`).
 - **Reporting** is manual (`make report`): render the latest snapshot into
@@ -85,15 +85,15 @@ ad-hoc table. Nightly cron:
 
 ## Backup & restore
 
-`scripts/annotation/argilla_backup.py` (`make backup`) takes a status-preserving snapshot of
+`scripts/annotation/argilla_backup.py` (`make annotation-backup`) takes a status-preserving snapshot of
 **every** Argilla dataset - records, metadata, suggestions, and responses *with* their
 `submitted`/`draft`/`discarded` status (the SDK's own `to_disk` drops response status).
 Read-only; writes a timestamped tree under `argilla_backup/<UTC-ts>/` plus a `manifest.json`.
 
 ```bash
-make backup                                             # dump all datasets
-make backup ARGS="restore argilla_backup/<ts>"          # preview restore (dry-run)
-make backup ARGS="restore argilla_backup/<ts> --apply"  # write it
+make annotation-backup                                             # dump all datasets
+make annotation-backup ARGS="restore argilla_backup/<ts>"          # preview restore (dry-run)
+make annotation-backup ARGS="restore argilla_backup/<ts> --apply"  # write it
 ```
 
 `restore` reinstates the full snapshot - creating any dataset that no longer exists, and

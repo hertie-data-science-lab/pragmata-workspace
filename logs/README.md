@@ -9,5 +9,5 @@ logs/
     └── log.jsonl        append-only annotation snapshots (counts, calibration α, cadence)
 ```
 
-Written by `make log` / `scripts/annotation/log.py` (nightly via `scripts/daily.sh`).
+Written by `make annotation-log` / `scripts/annotation/log.py` (nightly via `scripts/daily.sh`).
 Rendered into `reports/` by `make report`.

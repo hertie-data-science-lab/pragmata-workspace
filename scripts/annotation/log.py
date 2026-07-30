@@ -68,6 +68,7 @@ import os
 import statistics
 import sys
 import tempfile
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -77,16 +78,10 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/settings.conf + .env; existing env wins
+ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.path
 
-# Build against the demo deployment's pragmata. (NB: the data
-# was imported by the demo-branch pragmata (partition_scope topology), so we read
-# it back through the same branch). PRAGMATA_SRC (.env) shadows the
-# installed package on sys.path; unset → installed pragmata.
-_PRAGMATA_SRC = os.environ.get("PRAGMATA_SRC")
-if _PRAGMATA_SRC:
-    sys.path.insert(0, _PRAGMATA_SRC)
-
+# The data was imported by the pinned pragmata (partition_scope topology), so it must be
+# read back through the same tree. ws.load_env() applies the pin; unset → installed.
 import pragmata  # noqa: E402
 from pragmata.api.annotation_export import export_annotations  # noqa: E402
 from pragmata.api.annotation_iaa import compute_iaa  # noqa: E402
@@ -654,6 +649,24 @@ def task_counts(events: list[dict], prog: dict) -> tuple[dict, set[str]]:
     return count, annotators
 
 
+def task_datasets(settings) -> Iterator[tuple[str, Task, str, str]]:
+    """Every (workspace, task, purpose, dataset name) the configured workspaces define.
+
+    Production and calibration are a dataset each. Yields coordinates rather than
+    resolved datasets so each caller keeps its own failure policy: counts must raise on
+    a hard fetch failure, progress logs it and continues.
+    """
+    for ws_name, wss in settings.workspaces.items():
+        for task in wss.tasks:
+            for cal in (False, True):
+                yield (
+                    ws_name,
+                    task,
+                    "calibration" if cal else "production",
+                    dataset_name(task, calibration=cal, dataset_id=settings.dataset_id),
+                )
+
+
 def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
     """Submitted-response events per task, via the Argilla REST records endpoint.
 
@@ -662,45 +675,39 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     responses only.
     """
     out: dict[Task, list[dict]] = {t: [] for t in TASKS}
-    for ws_name, wss in settings.workspaces.items():
-        for task in wss.tasks:
-            for cal in (False, True):
-                name = dataset_name(
-                    task, calibration=cal, dataset_id=settings.dataset_id
-                )
-                ds = client.datasets(name=name, workspace=ws_name)
-                if ds is None:
-                    continue
-                purpose = "calibration" if cal else "production"
-                offset, limit = 0, 1000
-                while True:
-                    r = http.get(
-                        f"/api/v1/datasets/{ds.id}/records",
-                        params={
-                            "include": "responses",
-                            "response_statuses": "submitted",
-                            "limit": limit,
-                            "offset": offset,
-                        },
-                    )
-                    r.raise_for_status()
-                    items = r.json().get("items", [])
-                    for rec in items:
-                        for resp in rec.get("responses") or []:
-                            ts = resp.get("inserted_at")
-                            if resp.get("status") == "submitted" and ts:
-                                out[task].append(
-                                    {
-                                        "user_id": str(resp.get("user_id")),
-                                        "at": datetime.fromisoformat(ts),
-                                        "purpose": purpose,
-                                        "record_id": str(resp.get("record_id")),
-                                        "task": task.value,
-                                    }
-                                )
-                    offset += len(items)
-                    if len(items) < limit:
-                        break
+    for ws_name, task, purpose, name in task_datasets(settings):
+        ds = client.datasets(name=name, workspace=ws_name)
+        if ds is None:
+            continue
+        offset, limit = 0, 1000
+        while True:
+            r = http.get(
+                f"/api/v1/datasets/{ds.id}/records",
+                params={
+                    "include": "responses",
+                    "response_statuses": "submitted",
+                    "limit": limit,
+                    "offset": offset,
+                },
+            )
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            for rec in items:
+                for resp in rec.get("responses") or []:
+                    ts = resp.get("inserted_at")
+                    if resp.get("status") == "submitted" and ts:
+                        out[task].append(
+                            {
+                                "user_id": str(resp.get("user_id")),
+                                "at": datetime.fromisoformat(ts),
+                                "purpose": purpose,
+                                "record_id": str(resp.get("record_id")),
+                                "task": task.value,
+                            }
+                        )
+            offset += len(items)
+            if len(items) < limit:
+                break
     return out
 
 
@@ -752,23 +759,16 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     "calibration": ...}}``. Datasets that don't exist are simply absent.
     """
     out: dict[Task, dict] = {t: {} for t in TASKS}
-    for ws_name, wss in settings.workspaces.items():
-        for task in wss.tasks:
-            for cal in (False, True):
-                name = dataset_name(
-                    task, calibration=cal, dataset_id=settings.dataset_id
-                )
-                try:
-                    ds = client.datasets(name=name, workspace=ws_name)
-                    if ds is None:
-                        continue
-                    prog = dict(ds.progress())
-                except Exception as e:
-                    log(
-                        f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}"
-                    )
-                    continue
-                out[task]["calibration" if cal else "production"] = prog
+    for ws_name, task, purpose, name in task_datasets(settings):
+        try:
+            ds = client.datasets(name=name, workspace=ws_name)
+            if ds is None:
+                continue
+            prog = dict(ds.progress())
+        except Exception as e:
+            log(f"  ! progress({ws_name}/{name}) failed: {type(e).__name__}: {e}")
+            continue
+        out[task][purpose] = prog
     return out
 
 

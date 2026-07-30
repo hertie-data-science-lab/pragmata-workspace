@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,12 +46,10 @@ def stage(tool: str) -> SimpleNamespace:
     )
 
 
-# Annotation stage (the only stage today; eval/ is a stub). Eval scripts call stage("eval").
+# Annotation stage paths. The eval scripts resolve their own output dir through
+# stage_report_dir("eval") and read explicit paths otherwise, so they need no bundle here.
 _A = stage("annotation")
-SCRIPTS_DIR = _A.scripts
-CONFIGS_DIR = _A.configs  # domains/, querygen_specs/, users.*
-DOMAINS_DIR = CONFIGS_DIR / "domains"  # per-domain annotation task YAMLs
-SPECS_DIR = CONFIGS_DIR / "querygen_specs"
+DOMAINS_DIR = _A.configs / "domains"  # per-domain annotation task YAMLs
 LOGS_DIR = _A.logs  # log.jsonl + run logs (flat)
 REPORTS_DIR = _A.reports  # rendered tables + plots
 EXPORTS_DIR = _A.data / "exports"  # pragmata annotation tool: exports/imports
@@ -63,6 +62,52 @@ OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 #   2: agreement is a single pooled α per (task, label) under `pooled_agreement`; the
 #      per-domain and total n_items-weighted `mean_alpha` blocks are gone.
 SNAPSHOT_SCHEMA_VERSION = 2
+
+
+def read_snapshots(path: Path | None = None) -> list[dict]:
+    """Every snapshot in logs/annotation/log.jsonl, oldest first.
+
+    One reader for all three consumers (report tables, plots, the eval report scripts),
+    so the file's location and its one-object-per-line shape are stated once.
+    """
+    path = path or LOGS_DIR / "log.jsonl"
+    if not path.exists():
+        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
+    snapshots = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not snapshots:
+        raise SystemExit(f"no snapshots in {path}")
+    return snapshots
+
+
+def check_snapshot(snapshot: dict, *, where: str = "") -> None:
+    """Refuse a snapshot the current reporting code cannot render faithfully.
+
+    Two guards, because both failure modes are silent rather than loud:
+      - schema_version: agreement moved from per-domain n_items-weighted means of alpha
+        to a single pooled alpha per (task, label). Rendering a v1 snapshot would drop
+        the entire agreement section and still look like a complete report.
+      - pooled gap statistics: added to log.py additively, without a version bump (one
+        would strand every existing entry). An older snapshot renders blank cadence
+        columns, which reads as "no cadence data" rather than "wrong snapshot".
+    """
+    at = snapshot.get("run_at", "unknown date")
+    label = f" ({where})" if where else ""
+    got = snapshot.get("schema_version", 1)
+    if got < SNAPSHOT_SCHEMA_VERSION:
+        raise SystemExit(
+            f"snapshot {at}{label} is schema v{got}; this code needs "
+            f"v{SNAPSHOT_SCHEMA_VERSION}.\n"
+            "Agreement moved from per-domain weighted means of alpha to a single pooled "
+            "alpha (one reliability matrix per task x label over all domains), so the two "
+            "are not interchangeable.\n"
+            "To render this snapshot, check out a revision from before that change."
+        )
+    timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
+    if "pooled_mean_gap_s" not in timing:
+        raise SystemExit(
+            f"snapshot {at}{label} predates the pooled gap statistics, so the cadence "
+            f"columns would come out blank. Re-run `make annotation-log` and try again."
+        )
 
 
 def eval_pragmata() -> SimpleNamespace:
@@ -102,9 +147,36 @@ def load_dotenv(path: Path) -> None:
 
 
 def load_env() -> None:
-    """Load configs/settings.conf then .env (a pre-set environment beats both)."""
+    """Load configs/settings.conf then .env (a pre-set environment beats both), and
+    apply the PRAGMATA_SRC pin.
+
+    scripts/lib/common.sh does the same for shell-launched stages, but the Makefile's
+    Python targets never go through it, so the pin was silently ignored when they ran
+    standalone. Applying it here covers every Python entrypoint.
+    """
     load_dotenv(SETTINGS)
     load_dotenv(ROOT / ".env")
+    _pin_pragmata_src()
+
+
+def _pin_pragmata_src() -> None:
+    """Put PRAGMATA_SRC (if set) at the front of sys.path and of PYTHONPATH.
+
+    sys.path so ``import pragmata`` in this process resolves to the pinned tree rather
+    than the installed package; PYTHONPATH so subprocesses inherit the same pin. The eval
+    pin is separate and assigns PYTHONPATH outright (see eval_pragmata), so it is
+    unaffected.
+    """
+    src = os.environ.get("PRAGMATA_SRC")
+    if not src:
+        return
+    # Front, not merely present: an installed pragmata may already be on sys.path, and
+    # the point of the pin is to shadow it. Idempotent on a second call.
+    if sys.path[:1] != [src]:
+        sys.path.insert(0, src)
+    current = os.environ.get("PYTHONPATH", "")
+    if src not in current.split(os.pathsep):
+        os.environ["PYTHONPATH"] = f"{src}{os.pathsep}{current}" if current else src
 
 
 def local_dt(run_at: str) -> datetime:
@@ -131,11 +203,11 @@ def report_dir(run_at: str) -> Path:
 def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     """Dated output dir for a stage's generated reports, ``reports/<stage>/<today>/``.
 
-    Lives here rather than in a stage helper so every script in one bundle resolves the
-    same date from the same clock. corpus_catalog.py runs as a standalone uv script and
-    cannot import the pandas-dependent eval helpers, and when it computed its own date
-    it drifted: a UTC date against the others' local date puts the CSVs in two different
-    directories for the last hours of each local day.
+    Lives here, not in a stage helper, so every script in one bundle resolves the same
+    date from the same clock — including corpus_catalog.py, which cannot import the
+    pandas-dependent eval helpers. A script computing its own date drifts: a UTC date
+    against the others' local date splits one bundle across two directories for the last
+    hours of each local day.
     """
     from datetime import date
 

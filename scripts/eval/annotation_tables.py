@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The two human-annotation tables: label agreement, and annotation operations.
 
-`annotation_label_summary` — programme x task x label, Drew's columns. Agreement comes
+`annotation_label_summary` — one row per programme x task x label. Agreement comes
 from each programme's `iaa/report.json`; `n_items`/`n_true` are counted over annotated
 UNITS after pragmata-style majority consolidation, so they are the same numbers eval
 scoring ingests (a record annotated by three people counts once, at its majority value).

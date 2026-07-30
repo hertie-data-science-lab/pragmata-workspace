@@ -16,21 +16,25 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 
 MERGE="scripts/annotation/merge_yaml.py"
-RUNTIME="configs/annotation/querygen_specs/_runtime.yaml"
+SPECS_DIR="configs/annotation/querygen_specs"
+RUNTIME="$SPECS_DIR/_runtime.yaml"
 
-# --- spec selection: comma-list, or all non-underscore specs ---
+# --- spec selection: comma-list, or every spec ---
 if [[ -n "${1:-}" ]]; then
   specs=()
   while IFS= read -r stem; do
-    if [[ -f "configs/annotation/querygen_specs/${stem}.yaml" ]]; then
-      specs+=("configs/annotation/querygen_specs/${stem}.yaml")
+    if [[ -f "$SPECS_DIR/${stem}.yaml" ]]; then
+      specs+=("$SPECS_DIR/${stem}.yaml")
     else
-      warn "no spec at configs/annotation/querygen_specs/${stem}.yaml, skipping"
+      warn "no spec at $SPECS_DIR/${stem}.yaml, skipping"
     fi
   done < <(split_csv "$1")
   [[ ${#specs[@]} -gt 0 ]] || fatal "no valid specs after filter" 6
 else
-  specs=(configs/annotation/querygen_specs/[!_]*.yaml)
+  specs=()
+  while IFS= read -r stem; do specs+=("$SPECS_DIR/${stem}.yaml"); done \
+    < <(config_stems "$SPECS_DIR")
+  [[ ${#specs[@]} -gt 0 ]] || fatal "no specs under $SPECS_DIR/" 6
 fi
 
 merged="$(mktemp --suffix=.yaml)"

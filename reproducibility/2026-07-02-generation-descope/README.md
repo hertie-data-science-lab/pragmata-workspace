@@ -47,5 +47,5 @@ keep-list, no drift), `distribution=OverlapTaskDistribution(min_submitted=1)`, 8
 status (checked including `draft`) - none partially worked. Prune preview against this
 amendment's keep-list reports `keep 80/80, delete 20/100`, matching expectation.
 
-Pre-amendment backup: see `make backup` output for run timestamp `20260702T094309Z`
+Pre-amendment backup: see `make annotation-backup` output for run timestamp `20260702T094309Z`
 (`argilla_backup/20260702T094309Z/manifest.json`, gitignored - local recovery point only).
