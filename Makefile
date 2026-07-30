@@ -9,7 +9,7 @@
 #   make pipeline TO=bot               # querygen + bot
 #   make pipeline FROM=combine         # combine + setup + import
 #   make pipeline ONLY=bot FILTER=gesundheit JOBS=8
-#   bash scripts/pipeline.sh --dry-run # preview a slice without running
+#   make plan TO=bot                   # preview a slice without running
 #
 # Single stages (call the stage scripts directly):
 #   make querygen SPECS=demokratie-und-zusammenhalt,europas-zukunft
@@ -18,11 +18,12 @@
 #   make setup DOMAIN=gesundheit
 #   make import DOMAIN=gesundheit
 #
-# Naming: pipeline stages are bare (the five above, plus pipeline) because they are also
-# pipeline.sh's --from/--to stage tokens. Everything else is namespaced by what it
-# operates on — annotation-*, report-*, transfer-*. The transport targets are transfer-*,
-# not eval-*: they move any tree through data/transfer/ and are not evaluation, so the
-# eval-* namespace stays free for the eval compute stages.
+# Naming: pipeline stages are bare (the five above, plus pipeline and plan) because they
+# are also pipeline.sh's --from/--to stage tokens. Every other target is namespaced by
+# the stage it operates on, matching the <artifact-kind>/<stage>/ directory grammar:
+# annotation-* (incl. annotation-report-*, which writes reports/annotation/) and
+# transfer-*. Transport is transfer-*, not eval-*: it moves any tree through
+# data/transfer/ and is not evaluation, so eval-* stays free for the eval compute stages.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
@@ -37,13 +38,12 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline querygen bot combine setup import \
-        annotation-log annotation-export annotation-backup annotation-daily \
-        report report-tables report-pdf report-plots \
-        reproduce-curation transfer-push transfer-pull transfer-verify
-
-help: ## Show this help
-	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+.PHONY: pipeline querygen bot combine setup import plan \
+        annotation-log annotation-export annotation-daily annotation-backup \
+        annotation-report annotation-report-tables annotation-report-pdf \
+        annotation-report-plots \
+        transfer-push transfer-pull transfer-verify \
+        reproduce-curation help
 
 pipeline: ## Run a pipeline slice (FROM= TO= ONLY= FILTER= JOBS=); no args = full
 	bash scripts/pipeline.sh $(PIPELINE_ARGS)
@@ -65,31 +65,34 @@ import: ## Stage: import one domain's combined JSONL (DOMAIN=)
 	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/import.sh "$(DOMAIN)"
 
+plan: ## Preview a pipeline slice without running it (same FROM= TO= ONLY= FILTER= vars)
+	bash scripts/pipeline.sh --dry-run $(PIPELINE_ARGS)
+
 annotation-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--summary for a CLI table)
 	$(PY) scripts/annotation/log.py $(if $(DOMAIN),--domain $(DOMAIN),)
 
 annotation-export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/annotation/export.sh $(DOMAIN)
 
-report: report-tables report-plots ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
+annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make annotation-report)
+	bash scripts/daily.sh
 
-report-tables: ## Render tables only -> reports/annotation/<date>/report.md
+annotation-backup: ## Status-preserving Argilla backup (dump; ARGS="restore <dir>" to restore)
+	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
+
+annotation-report: annotation-report-tables annotation-report-plots ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
+
+annotation-report-tables: ## Render tables only -> reports/annotation/<date>/report.md
 	$(PY) scripts/annotation/report_tables.py
 
-report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
+annotation-report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
 	@md=$$($(PY) scripts/annotation/report_tables.py); \
 	pandoc "$$md" -o "$${md%.md}.pdf" --pdf-engine=xelatex -V fontsize=9pt \
 	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
 	  && echo "wrote $${md%.md}.pdf"
 
-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
+annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
-
-annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report)
-	bash scripts/daily.sh
-
-annotation-backup: ## Status-preserving Argilla backup (dump; ARGS="restore <dir>" to restore)
-	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
 
 transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= dest prefix; both required)
 	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make transfer-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
@@ -116,3 +119,6 @@ reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|respon
 	fi; \
 	echo "== prune live -> curated keep-lists (no APPLY = preview, doubles as verification) =="; \
 	$(PY) scripts/annotation/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)
+
+help: ## Show this help
+	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-24s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)

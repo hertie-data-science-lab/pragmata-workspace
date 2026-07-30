@@ -28,7 +28,7 @@ lockfile, bot parallelism, tee logging, continue-on-error.
 | `pipeline.sh --only import`  | import every domain        |
 
 `--filter` takes domains (querygen/bot expand each to `<domain>` + `<domain>_edgecase`);
-`--dry-run` prints the plan without running.
+`--dry-run` prints the plan without running (`make plan`).
 
 `setup.sh` and `import.sh` are thin wrappers over pragmata's native `annotation setup` /
 `annotation import`. The only workspace-specific bits are the password merge in `setup.sh`
@@ -54,7 +54,7 @@ Two halves, deliberately split:
 - **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make annotation-daily`) -
   chains `export.sh` (submitted annotations → per-domain CSVs) then `log.py --use-export`
   (live counts + IAA + cadence → append one snapshot to `logs/annotation/log.jsonl`).
-- **Reporting** is manual (`make report`): render the latest snapshot into
+- **Reporting** is manual (`make annotation-report`): render the latest snapshot into
   `reports/annotation/<date>/` - `report_tables.py` writes `report.md` (pure data tables),
   `plot_summary.py` writes the PNGs, and `_latest` is repointed to the newest.
 
