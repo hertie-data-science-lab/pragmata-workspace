@@ -190,43 +190,10 @@ if (( DRY_RUN )); then
 fi
 
 # --- lock: one heavy run at a time ---
-# mkdir is atomic, so two simultaneous starts cannot both win the way a
-# check-then-write on a plain file lets them. The PID goes inside the dir, and is
-# only consulted to decide whether an existing lock is stale.
-LOCK=".pipeline.lock"
-LOCK_GRACE_S=60
-
-# Is an existing lock reclaimable? Default is NO: the winner of mkdir writes its pid a
-# moment later, so a missing or empty pid file means "held, mid-acquisition" — reading it
-# as stale is how a second process steals a live lock. Only two things justify reclaiming:
-# a recorded pid that is not alive, or no pid at all after LOCK_GRACE_S, which means the
-# winner died between mkdir and the write.
-lock_reclaimable() {
-  local pid age
-  pid="$(cat "$LOCK/pid" 2>/dev/null)"
-  if [[ -n "$pid" ]]; then
-    kill -0 "$pid" 2>/dev/null && return 1
-    log "stale lock: recorded PID $pid is not alive"
-    return 0
-  fi
-  age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
-  (( age >= LOCK_GRACE_S )) || return 1
-  log "stale lock: no pid recorded after ${age}s"
-  return 0
-}
-
-if ! mkdir "$LOCK" 2>/dev/null; then
-  lock_reclaimable \
-    || fatal "another pipeline run is in flight (PID $(cat "$LOCK/pid" 2>/dev/null || echo 'not yet recorded'))" 3
-  # Rename-then-delete, so two processes that both judge the lock stale cannot have one
-  # delete the other's freshly created lock: only the process whose mv succeeds owns the
-  # removal, and mkdir below remains the single point of arbitration.
-  stale="$LOCK.stale.$$"
-  mv "$LOCK" "$stale" 2>/dev/null && rm -rf "$stale"
-  mkdir "$LOCK" || fatal "cannot take the lock at $LOCK (another run took it first)" 3
-fi
-echo $$ > "$LOCK/pid"
-trap 'rm -rf "$LOCK"' EXIT
+# flock on a held fd: the kernel owns the lock, so it is released on exit however the
+# process dies. No pid file, no staleness heuristic, nothing to clean up.
+exec 9>".pipeline.lock"
+flock -n 9 || fatal "another pipeline run is in flight" 3
 
 mkdir -p logs/annotation
 exec > >(tee -a logs/annotation/pipeline.log) 2>&1
