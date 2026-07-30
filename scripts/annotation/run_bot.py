@@ -56,9 +56,11 @@ ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 RUNS_DIR = ws.RUNS_DIR
 OUT_DIR = ws.OUT_DIR
-OUT_DIR.mkdir(exist_ok=True)
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-PRD = os.environ["PUBLIKATIONSBOT_URL"]  # from .env
+# Bot base URL, resolved in main() rather than at import time so --help and probe-less
+# introspection work without a configured .env.
+PRD = ""
 LANG_MAP = {"german": "de", "english": "en"}
 
 # Throttle: seconds to sleep after each network-touching iteration (skipped/done
@@ -366,6 +368,7 @@ def process_spec(
 
     done = load_done_query_ids(out_path)
     n_added = n_skipped = n_error = n_retried = n_no_retrieval = 0
+    n_processed = 0
 
     with (
         csv_path.open() as f,
@@ -373,12 +376,10 @@ def process_spec(
         httpx.Client(timeout=240.0) as client,
     ):
         rows = list(csv.DictReader(f))
-        if max_queries:
-            rows = rows[:max_queries]
         total = len(rows)
-        print(
-            f"  {total} rows, {len(done)} already done, {total - len(done)} to process"
-        )
+        pending = sum(1 for r in rows if r["query_id"] not in done)
+        capped = min(pending, max_queries) if max_queries else pending
+        print(f"  {total} rows, {total - pending} already done, {capped} to process")
 
         token = tm.get()
         login(client, token)  # verify auth upfront; bot issues no sessionToken
@@ -388,6 +389,12 @@ def process_spec(
             if qid in done:
                 n_skipped += 1
                 continue
+            # The cap counts what this run processes, so it has to be applied after the
+            # resume filter: slicing the raw rows first means a spec whose first N
+            # queries are already done processes nothing.
+            if max_queries and n_processed >= max_queries:
+                break
+            n_processed += 1
 
             session = f"pragmata-eval-{qid}"  # unique per query = fresh chat, no history bleed
             retried = False
@@ -700,6 +707,14 @@ def probe_mode(spec_stem: str | None) -> int:
 # --- main -------------------------------------------------------------------
 
 
+def _resolve_bot_url() -> str:
+    """Bot base URL from the environment, or a clear exit if it is unset."""
+    url = os.environ.get("PUBLIKATIONSBOT_URL")
+    if not url:
+        sys.exit("PUBLIKATIONSBOT_URL is unset (set it in .env).")
+    return url
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
@@ -720,15 +735,23 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    global PRD
+    PRD = _resolve_bot_url()
+
     if args.probe:
         return probe_mode(args.spec)
 
     if args.spec:
         specs = [args.spec]
     else:
-        specs = sorted(p.name for p in RUNS_DIR.iterdir() if p.is_dir())
+        # Same condition as probe mode: a run dir without the CSV is not a spec.
+        specs = sorted(
+            p.name
+            for p in RUNS_DIR.iterdir()
+            if p.is_dir() and (p / "synthetic_queries.csv").exists()
+        )
     if not specs:
-        print(f"No specs found under {RUNS_DIR}")
+        print(f"No querygen runs with synthetic_queries.csv under {RUNS_DIR}")
         return 1
 
     print(
