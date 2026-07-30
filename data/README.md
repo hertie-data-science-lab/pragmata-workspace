@@ -13,7 +13,7 @@ data/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
 │   └── exports/         annotation outputs, per-task CSVs  ← PII (annotator_id); never commit
 │                        one dir per domain config and nothing else: this tree is published
-│                        by eval-push and consumers read exports/*/ as the domain list
+│                        by transfer-push and consumers read exports/*/ as the domain list
 ├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
 └── transfer/            Blob staging for eval data (see transfer/README.md); moves via Blob, not git
 ```
@@ -24,8 +24,9 @@ data/
   [`reproducibility/2026-07-01-annotation-curation/`](../reproducibility/2026-07-01-annotation-curation/).
   Fetch the pinned corpus/backup artifacts (checksums in that bundle), then
   `make reproduce-curation`.
-- **Regenerate from scratch**: run the pipeline (`make pipeline`) - querygen →
-  bot → combine → setup → import. Note querygen is non-deterministic LLM output.
+- **Regenerate from scratch**: run the pipeline (`make pipeline`) - querygen-run →
+  bot-run → combine-run → annotation-setup → annotation-import. Note querygen is
+  non-deterministic LLM output.
 
 The curated corpus (`*_combined.curated.jsonl`, ~52M) and the Argilla backups
 (~2.1G) are too large for git; they live as external release/archive artifacts

@@ -7,4 +7,5 @@ overview; run `make help` for the targets.
 - `daily.sh` - nightly logging (export → `logs/annotation/log.jsonl`).
 - `annotation/` - the stages (`run_querygen.sh`, `run_bot.py`, `build_combined.py`, `setup.sh`, `import.sh`, `export.sh`) plus logging/reporting helpers, `argilla_backup.py` (dump/restore), and `prune_to_keeplist.py` (reduce live Argilla to a keep-list; used by `make reproduce-curation`).
 - `lib/` - shared helpers: `common.sh` (shell) and `workspace.py` (python).
-- `eval/` - stub for the evaluation stage.
+- `eval/` - the eval-stage report scripts (the deliverable CSVs) plus shared vocabulary.
+- `transfer/` - `sync.sh`, the Blob pipe behind the `transfer-*` targets.

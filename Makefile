@@ -2,24 +2,33 @@
 # Run `make` or `make help` for the target list. Scripts remain runnable
 # directly; these targets just document the pipeline and wire up args.
 #
-# Pipeline order:  querygen -> bot -> combine -> setup -> import
+# Dataset build pipeline, in order (each stage is a make target and a pipeline.sh token):
+#   querygen-run       generate synthetic queries
+#   bot-run            query publikationsbot for answers + chunks
+#   combine-run        assemble the import-ready dataset
+#   annotation-setup   provision Argilla workspaces + users
+#   annotation-import  load the datasets into Argilla
+# It ends at the Argilla import; annotating, logging and reporting are separate ops.
 #
 # Orchestrated (scripts/pipeline.sh) — runs a contiguous slice over a filter:
-#   make pipeline                      # full pipeline, all domains
-#   make pipeline TO=bot               # querygen + bot
-#   make pipeline FROM=combine         # combine + setup + import
-#   make pipeline ONLY=bot FILTER=gesundheit JOBS=8
-#   bash scripts/pipeline.sh --dry-run # preview a slice without running
+#   make pipeline                          # full pipeline, all domains
+#   make pipeline TO=bot-run               # querygen-run + bot-run
+#   make pipeline FROM=combine-run         # combine-run + the two annotation stages
+#   make pipeline ONLY=bot-run FILTER=gesundheit JOBS=8
+#   make plan TO=bot-run                   # preview a slice without running
 #
 # Single stages (call the stage scripts directly):
-#   make querygen SPECS=demokratie-und-zusammenhalt,europas-zukunft
-#   make bot SPEC=gesundheit
-#   make combine DOMAINS="gesundheit europas-zukunft"
-#   make setup DOMAIN=gesundheit
-#   make import DOMAIN=gesundheit
+#   make querygen-run SPECS=demokratie-und-zusammenhalt,europas-zukunft
+#   make bot-run SPEC=gesundheit
+#   make bot-probe                         # one-query smoke test, writes no JSONL
+#   make combine-run DOMAINS="gesundheit europas-zukunft"
+#   make annotation-setup DOMAIN=gesundheit
+#   make annotation-import DOMAIN=gesundheit
 #
-# Naming: pipeline stages are bare (the five above, plus pipeline); everything else
-# is namespaced by what it operates on — annotation-*, report-*, eval-*.
+# Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
+# it operates on — querygen-*, bot-*, combine-*, annotation-*, transfer-*. Only the
+# orchestrator (pipeline, plan) is bare. The stage targets share their names with
+# pipeline.sh's slice tokens; see its usage block.
 
 SHELL := /bin/bash
 PY := .venv/bin/python
@@ -34,33 +43,47 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline querygen bot combine setup import \
-        annotation-log annotation-export annotation-backup annotation-daily \
-        report report-tables report-pdf report-plots \
-        reproduce-curation eval-push eval-pull eval-verify
+.PHONY: pipeline plan \
+        querygen-run bot-run bot-probe combine-run \
+        annotation-setup annotation-import \
+        annotation-log annotation-export annotation-daily \
+        annotation-backup annotation-restore \
+        annotation-report annotation-report-tables annotation-report-pdf \
+        annotation-report-plots \
+        transfer-push transfer-pull transfer-verify \
+        reproduce-curation help
 
-help: ## Show this help
-	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+# --- orchestrator ---
 
-pipeline: ## Run a pipeline slice (FROM= TO= ONLY= FILTER= JOBS=); no args = full
+pipeline: ## Run a slice of the build pipeline, querygen-run -> annotation-import (FROM= TO= ONLY= FILTER= JOBS=); no args = full
 	bash scripts/pipeline.sh $(PIPELINE_ARGS)
 
-querygen: ## Stage: generate synthetic queries (SPECS=a,b to filter)
+plan: ## Preview a pipeline slice without running it (same FROM= TO= ONLY= FILTER= vars)
+	bash scripts/pipeline.sh --dry-run $(PIPELINE_ARGS)
+
+# --- pipeline stages ---
+
+querygen-run: ## Stage: generate synthetic queries (SPECS=a,b to filter)
 	bash scripts/annotation/run_querygen.sh "$(SPECS)"
 
-bot: ## Stage: run publikationsbot over generated queries (SPEC=x to filter)
+bot-run: ## Stage: run publikationsbot over generated queries (SPEC=x to filter)
 	$(PY) scripts/annotation/run_bot.py $(if $(SPEC),--spec $(SPEC),)
 
-combine: ## Stage: pool runs + intersperse edgecases (DOMAINS="a b" to filter)
+bot-probe: ## One-query bot smoke test; dumps raw SSE, writes no JSONL (SPEC=x to pick the spec)
+	$(PY) scripts/annotation/run_bot.py --probe $(if $(SPEC),--spec $(SPEC),)
+
+combine-run: ## Stage: pool bot batches + edgecases into the import-ready per-domain dataset (DOMAINS= to filter)
 	$(PY) scripts/annotation/build_combined.py $(DOMAINS)
 
-setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
-	@test -n "$(DOMAIN)" || { echo "usage: make setup DOMAIN=<domain>"; exit 2; }
+annotation-setup: ## Stage: provision Argilla workspaces + users for one domain (DOMAIN=)
+	@test -n "$(DOMAIN)" || { echo "usage: make annotation-setup DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/setup.sh "$(DOMAIN)"
 
-import: ## Stage: import one domain's combined JSONL (DOMAIN=)
-	@test -n "$(DOMAIN)" || { echo "usage: make import DOMAIN=<domain>"; exit 2; }
+annotation-import: ## Stage: import one domain's combined JSONL (DOMAIN=)
+	@test -n "$(DOMAIN)" || { echo "usage: make annotation-import DOMAIN=<domain>"; exit 2; }
 	bash scripts/annotation/import.sh "$(DOMAIN)"
+
+# --- annotation ops ---
 
 annotation-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--summary for a CLI table)
 	$(PY) scripts/annotation/log.py $(if $(DOMAIN),--domain $(DOMAIN),)
@@ -68,48 +91,65 @@ annotation-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--su
 annotation-export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/annotation/export.sh $(DOMAIN)
 
-report: report-tables report-plots ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
+annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make annotation-report)
+	bash scripts/daily.sh
 
-report-tables: ## Render tables only -> reports/annotation/<date>/report.md
+annotation-backup: ## Status-preserving Argilla backup -> argilla_backup/<UTC-ts>/ (read-only)
+	$(PY) scripts/annotation/argilla_backup.py dump
+
+# Scoped restores (--workspace / --dataset / --record-id / --only) call the script directly.
+annotation-restore: ## Restore an Argilla backup (DIR= required); previews unless APPLY=1
+	@test -n "$(DIR)" || { echo "usage: make annotation-restore DIR=<backup-dir> [APPLY=1]"; exit 2; }
+	$(PY) scripts/annotation/argilla_backup.py restore "$(DIR)" $(if $(APPLY),--apply,)
+
+# --- annotation reporting ---
+
+annotation-report: annotation-report-tables annotation-report-plots ## Render latest snapshot -> reports/annotation/<date>/ (report.md + plots, +_latest)
+
+annotation-report-tables: ## Render tables only -> reports/annotation/<date>/report.md
 	$(PY) scripts/annotation/report_tables.py
 
-report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
+annotation-report-pdf: ## Render latest snapshot tables -> reports/annotation/<date>/report.pdf (needs pandoc + xelatex)
 	@md=$$($(PY) scripts/annotation/report_tables.py); \
 	pandoc "$$md" -o "$${md%.md}.pdf" --pdf-engine=xelatex -V fontsize=9pt \
 	  -V geometry:margin=1.5cm -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
 	  && echo "wrote $${md%.md}.pdf"
 
-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
+annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 
-annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make report)
-	bash scripts/daily.sh
+# --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
+#     historical - the pipe is not eval-specific) ---
 
-annotation-backup: ## Status-preserving Argilla backup (dump; ARGS="restore <dir>" to restore)
-	$(PY) scripts/annotation/argilla_backup.py $(if $(ARGS),$(ARGS),dump)
+transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= dest prefix; both required)
+	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make transfer-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
+	bash scripts/transfer/sync.sh push "$(SRC)" "$(PREFIX)"
 
-eval-push: ## Push a tree to the eval Blob (SRC= source tree, PREFIX= dest prefix; both required)
-	@test -n "$(SRC)" && test -n "$(PREFIX)" || { echo "usage: make eval-push SRC=<tree> PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh push "$(SRC)" "$(PREFIX)"
+transfer-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
+	@test -n "$(PREFIX)" || { echo "usage: make transfer-pull PREFIX=<prefix>"; exit 2; }
+	bash scripts/transfer/sync.sh pull $(PREFIX)
 
-eval-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
-	@test -n "$(PREFIX)" || { echo "usage: make eval-pull PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh pull $(PREFIX)
+transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
+	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
+	bash scripts/transfer/sync.sh verify $(PREFIX)
 
-eval-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
-	@test -n "$(PREFIX)" || { echo "usage: make eval-verify PREFIX=<prefix>"; exit 2; }
-	bash scripts/eval/sync.sh verify $(PREFIX)
+# --- reproducibility ---
 
 reproduce-curation: ## Rebuild the 2026-07-01 curated set (MODE=structure|responses, APPLY=1 to mutate, BACKUP= for responses). No args = preview.
-	@echo "== verifying artifact checksums =="; \
+	@source scripts/lib/common.sh; \
+	echo "== verifying artifact checksums =="; \
 	sha256sum -c $(IMPORT)/checksums.sha256 2>/dev/null \
 	  || echo "(corpus/backup not present locally — fetch the external artifacts first)"; \
 	if [ "$(MODE)" = "structure" ] && [ -n "$(APPLY)" ]; then \
-	  for y in configs/annotation/domains/*.yaml; do d=$$(basename $$y .yaml); \
-	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; done; \
+	  while IFS= read -r d; do \
+	    echo "== import $$d =="; bash scripts/annotation/import.sh "$$d"; \
+	  done < <(config_stems configs/annotation/domains); \
 	elif [ "$(MODE)" = "responses" ] && [ -n "$(APPLY)" ]; then \
 	  test -n "$(BACKUP)" || { echo "usage: make reproduce-curation MODE=responses BACKUP=<dir> APPLY=1"; exit 2; }; \
 	  $(PY) scripts/annotation/argilla_backup.py restore "$(BACKUP)" --apply; \
 	fi; \
 	echo "== prune live -> curated keep-lists (no APPLY = preview, doubles as verification) =="; \
 	$(PY) scripts/annotation/prune_to_keeplist.py --keep-lists $(CURATION)/keep_lists $(if $(APPLY),--apply,)
+
+help: ## Show this help
+	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-24s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)

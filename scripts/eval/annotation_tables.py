@@ -37,8 +37,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
-import eval_common as ec  # noqa: E402
-import workspace as ws  # noqa: E402
+import eval_common as ec
+import workspace as ws
 
 LABEL_COLUMNS = [
     "programme",
@@ -116,7 +116,9 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
             n_items, n_true = ec.consolidated_prevalence(frame, task, label)
             row["n_items"] = n_items
             row["n_true"] = n_true
-            row["n_annotators"] = int(frame["annotator_id"].nunique()) if not frame.empty else 0
+            row["n_annotators"] = (
+                int(frame["annotator_id"].nunique()) if not frame.empty else 0
+            )
 
             stats = agreement.get((task, label))
             if stats:
@@ -131,13 +133,21 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
                 row["n_items_calibration"] = stats.get("n_items", "")
                 # A null alpha is not a low alpha: the overlap was insufficient to
                 # compute one at all.
-                row["status"] = "ok" if stats.get("alpha") is not None else "no_alpha_insufficient_overlap"
+                row["status"] = (
+                    "ok"
+                    if stats.get("alpha") is not None
+                    else "no_alpha_insufficient_overlap"
+                )
             else:
-                row["status"] = "no_agreement_no_overlap" if not frame.empty else "no_data"
+                row["status"] = (
+                    "no_agreement_no_overlap" if not frame.empty else "no_data"
+                )
 
             if not frame.empty and label in frame.columns:
                 row["n_responses"] = int(frame[label].notna().sum())
-                row["n_true_responses"] = int(frame[label].astype(float).fillna(0).sum())
+                row["n_true_responses"] = int(
+                    frame[label].astype(float).fillna(0).sum()
+                )
 
             # Degenerate iff the label has no variance in the PAIRABLE overlap (items
             # with >=2 annotators) - the population alpha is computed on. Single-annotated
@@ -145,9 +155,13 @@ def label_rows(exports: Path, programme: str) -> list[dict]:
             # excluded from the test.
             if not calibration.empty and label in calibration.columns:
                 keys = list(ec.UNIT_KEYS[task])
-                multi = calibration.groupby(keys)["annotator_id"].transform("nunique") >= 2
+                multi = (
+                    calibration.groupby(keys)["annotator_id"].transform("nunique") >= 2
+                )
                 overlap = calibration.loc[multi, label].dropna()
-                row["degenerate_calibration"] = len(overlap) > 0 and overlap.nunique() == 1
+                row["degenerate_calibration"] = (
+                    len(overlap) > 0 and overlap.nunique() == 1
+                )
             rows.append(row)
     return rows
 
@@ -170,7 +184,9 @@ def units_annotated(exports: Path, programme: str, task: str) -> int:
     return int(frame.groupby(keys).ngroups)
 
 
-def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: Path) -> list[dict]:
+def ops_rows(
+    snapshot: dict, programme: str, curated: dict[str, int], exports: Path
+) -> list[dict]:
     """One flat row per task for a programme."""
     domain = (snapshot.get("domains") or {}).get(programme)
     if domain is None:
@@ -221,8 +237,12 @@ def ops_rows(snapshot: dict, programme: str, curated: dict[str, int], exports: P
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ec.add_common_args(ap)
-    ap.add_argument("--snapshot", type=int, default=1,
-                    help="Which snapshot to read, counting back from the last (default 1).")
+    ap.add_argument(
+        "--snapshot",
+        type=int,
+        default=1,
+        help="Which snapshot to read, counting back from the last (default 1).",
+    )
     args = ap.parse_args()
 
     snapshot = ec.latest_snapshot(args.snapshot)
@@ -230,7 +250,9 @@ def main() -> int:
     programmes = ec.programmes(args.exports)
     target_dir = ec.out_dir(args.out_dir)
 
-    labels = [row for programme in programmes for row in label_rows(args.exports, programme)]
+    labels = [
+        row for programme in programmes for row in label_rows(args.exports, programme)
+    ]
     ws.write_csv(
         target_dir / "annotation_label_summary.csv",
         labels,
@@ -242,50 +264,67 @@ def main() -> int:
             grain="programme x task x label",
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             caveats=[
-                "Two grains, named apart: n_items/n_true count annotated UNITS after "
-                "pragmata-style majority consolidation (ties fall back to the first row "
-                "in file order) - what eval scoring ingests; n_responses/"
-                "n_true_responses count individual annotator submissions - the daily "
-                "report's grain. Prevalence rates agree between the two; absolute "
-                "numbers differ wherever items were multi-annotated.",
-                "alpha/pct_agree are computed on the CALIBRATION overlap only "
-                "(n_items_calibration), not on n_items - pragmata's IAA drops "
-                "production rows.",
-                "degenerate_calibration=True marks a label with no variance in the "
-                "PAIRABLE overlap (calibration items with >=2 annotators - the "
-                "population alpha is computed on); alpha is undefined there and "
-                "pragmata returns 1.0 by convention, so those 1.0s are not evidence "
-                "of reliability.",
+                (
+                    "Two grains, named apart: n_items/n_true count annotated UNITS after "
+                    "pragmata-style majority consolidation (ties fall back to the first row "
+                    "in file order) - what eval scoring ingests; n_responses/"
+                    "n_true_responses count individual annotator submissions - the daily "
+                    "report's grain. Prevalence rates agree between the two; absolute "
+                    "numbers differ wherever items were multi-annotated."
+                ),
+                (
+                    "alpha/pct_agree are computed on the CALIBRATION overlap only "
+                    "(n_items_calibration), not on n_items - pragmata's IAA drops "
+                    "production rows."
+                ),
+                (
+                    "degenerate_calibration=True marks a label with no variance in the "
+                    "PAIRABLE overlap (calibration items with >=2 annotators - the "
+                    "population alpha is computed on); alpha is undefined there and "
+                    "pragmata returns 1.0 by convention, so those 1.0s are not evidence "
+                    "of reliability."
+                ),
             ],
         ),
     )
     print(f"wrote annotation_label_summary.csv ({len(labels)} rows)", file=sys.stderr)
 
-    ops = [row for programme in programmes for row in ops_rows(snapshot, programme, curated, args.exports)]
+    ops = [
+        row
+        for programme in programmes
+        for row in ops_rows(snapshot, programme, curated, args.exports)
+    ]
     ws.write_csv(
         target_dir / "annotation_operations.csv",
         ops,
         columns=OPS_COLUMNS,
         prov=ws.provenance(
             script="scripts/eval/annotation_tables.py",
-            inputs=[ws.LOGS_DIR / "log.jsonl"] + ec.export_inputs(args.exports, include_iaa=False),
+            inputs=[ws.LOGS_DIR / "log.jsonl"]
+            + ec.export_inputs(args.exports, include_iaa=False),
             exports_tree=str(args.exports),
             snapshot_run_at=snapshot.get("run_at"),
             grain="programme x task",
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             caveats=[
-                "Gaps are inter-submission spacing per annotator from the Argilla REST "
-                "API, pooled, with gaps above session_gap_threshold_s excluded as "
-                "breaks - the same machinery as the daily report. The export CSVs "
-                "cannot supply this: created_at is the record's updated_at, identical "
-                "across a record's annotators.",
-                "n_curated counts curated queries per programme; each query fans out "
-                "into all three tasks, so it repeats across a programme's task rows. "
-                "n_live counts live Argilla records: one per chunk for retrieval, one "
-                "per query otherwise.",
-                "n_panels (imported) comes from the export's completeness_summary; "
-                "n_panels_with_responses is counted off the export rows; they differ "
-                "where panels were never annotated.",
+                (
+                    "Gaps are inter-submission spacing per annotator from the Argilla REST "
+                    "API, pooled, with gaps above session_gap_threshold_s excluded as "
+                    "breaks - the same machinery as the daily report. The export CSVs "
+                    "cannot supply this: created_at is the record's updated_at, identical "
+                    "across a record's annotators."
+                ),
+                (
+                    "n_curated counts curated queries per programme; each query fans out "
+                    "into all three tasks, so it repeats across a programme's task rows. "
+                    "n_live counts live Argilla records: one per chunk for retrieval, one "
+                    "per query otherwise."
+                ),
+                (
+                    "n_panels (imported) comes from the export's completeness_summary; "
+                    "n_panels_with_responses is counted off the export rows; they differ "
+                    "where panels were never annotated."
+                ),
             ],
         ),
     )

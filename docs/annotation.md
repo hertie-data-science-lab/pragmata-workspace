@@ -19,16 +19,16 @@ Everything under `data/` is gitignored - see [Data & secrets](configuration.md#d
 filter, owning the cross-cutting concerns the stage scripts don't: stage-aware pre-flight,
 lockfile, bot parallelism, tee logging, continue-on-error.
 
-| Invocation                   | Covers                     |
-| ---------------------------- | -------------------------- |
-| `pipeline.sh`                | full pipeline              |
-| `pipeline.sh --to bot`       | querygen + bot             |
-| `pipeline.sh --from combine` | combine + setup + import   |
-| `pipeline.sh --only setup`   | provision workspaces/users |
-| `pipeline.sh --only import`  | import every domain        |
+| Invocation                             | Covers                          |
+| -------------------------------------- | ------------------------------- |
+| `pipeline.sh`                          | full pipeline                   |
+| `pipeline.sh --to bot-run`             | querygen-run + bot-run          |
+| `pipeline.sh --from combine-run`       | combine-run + the two annotation stages |
+| `pipeline.sh --only annotation-setup`  | provision workspaces/users      |
+| `pipeline.sh --only annotation-import` | import every domain             |
 
-`--filter` takes domains (querygen/bot expand each to `<domain>` + `<domain>_edgecase`);
-`--dry-run` prints the plan without running.
+`--filter` takes domains (`querygen-run`/`bot-run` expand each to `<domain>` +
+`<domain>_edgecase`); `--dry-run` prints the plan without running (`make plan`).
 
 `setup.sh` and `import.sh` are thin wrappers over pragmata's native `annotation setup` /
 `annotation import`. The only workspace-specific bits are the password merge in `setup.sh`
@@ -42,9 +42,9 @@ ops below. Each stage is a thin wrapper; read `scripts/annotation/` to see the e
 command it runs.
 
 ```bash
-make pipeline                             # full pipeline, all domains
-make pipeline TO=bot FILTER=gesundheit    # querygen + bot for one domain
-tmux new -s pipeline 'make pipeline'      # unattended, survives disconnect
+make pipeline                                 # full pipeline, all domains
+make pipeline TO=bot-run FILTER=gesundheit    # querygen-run + bot-run for one domain
+tmux new -s pipeline 'make pipeline'          # unattended, survives disconnect
 ```
 
 ## Logging & reporting
@@ -54,7 +54,7 @@ Two halves, deliberately split:
 - **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make annotation-daily`) -
   chains `export.sh` (submitted annotations → per-domain CSVs) then `log.py --use-export`
   (live counts + IAA + cadence → append one snapshot to `logs/annotation/log.jsonl`).
-- **Reporting** is manual (`make report`): render the latest snapshot into
+- **Reporting** is manual (`make annotation-report`): render the latest snapshot into
   `reports/annotation/<date>/` - `report_tables.py` writes `report.md` (pure data tables),
   `plot_summary.py` writes the PNGs, and `_latest` is repointed to the newest.
 
@@ -91,15 +91,16 @@ ad-hoc table. Nightly cron:
 Read-only; writes a timestamped tree under `argilla_backup/<UTC-ts>/` plus a `manifest.json`.
 
 ```bash
-make annotation-backup                                             # dump all datasets
-make annotation-backup ARGS="restore argilla_backup/<ts>"          # preview restore (dry-run)
-make annotation-backup ARGS="restore argilla_backup/<ts> --apply"  # write it
+make annotation-backup                                     # dump all datasets
+make annotation-restore DIR=argilla_backup/<ts>            # preview restore (dry-run)
+make annotation-restore DIR=argilla_backup/<ts> APPLY=1    # write it
 ```
 
-`restore` reinstates the full snapshot - creating any dataset that no longer exists, and
-writing onto ones that still exist. It **always previews first** (record counts, plus any
-response/metadata that would change) and only writes with `--apply`. Narrow the scope with
-`--workspace` / `--dataset` / `--record-id` (repeatable, AND'd), or restrict attributes with
-`--only {metadata,suggestions,responses}`. Take a fresh backup before restoring onto a live
-dataset - restoring reverts to that point in time, including any activity recorded after the
-snapshot.
+`annotation-restore` reinstates the full snapshot - creating any dataset that no longer
+exists, and writing onto ones that still exist. It **always previews first** (record counts,
+plus any response/metadata that would change) and only writes with `APPLY=1`. To narrow the
+scope with `--workspace` / `--dataset` / `--record-id` (repeatable, AND'd), or restrict
+attributes with `--only {metadata,suggestions,responses}`, call
+`scripts/annotation/argilla_backup.py restore` directly. Take a fresh backup before
+restoring onto a live dataset - restoring reverts to that point in time, including any
+activity recorded after the snapshot.

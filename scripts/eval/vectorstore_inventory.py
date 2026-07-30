@@ -13,8 +13,7 @@ The connection string is NOT stored here. It is pulled at runtime from the dev
 container app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares
 the app's resource group, so `az containerapp secret show` works without a VNet).
 
-Also the home of the DSN/connection helpers and the author-name vocabulary
-(`first_name`, `FEMALE`, `MALE`) that corpus_catalog.py imports.
+Also the home of the DSN/connection helpers corpus_catalog.py imports.
 
 Run (needs an active `az login` in the tenant):
     ./vectorstore_inventory.py               # counts + all metadata fields
@@ -77,40 +76,29 @@ FIELD_GLOSSARY = {
 }
 
 
-# --- author-name vocabulary (shared with corpus_catalog.py) ---
-# gender-guesser's six-way verdict collapsed to the two resolved classes; anything else
-# (andy, unknown) stays unresolved rather than being folded into one of these.
-FEMALE = {"female", "mostly_female"}
-MALE = {"male", "mostly_male"}
-
-
-def first_name(raw: str | None) -> str | None:
-    """Given name from a "Last, First" library string, or None if institutional.
-
-    Drops role suffixes like "(Verf.)"/"(Hrsg.)" and treats a missing "Last, First"
-    comma as an institutional author rather than guessing a single token is a surname.
-    """
-    if not raw:
-        return None
-    raw = re.sub(r"\(.*?\)", "", raw).strip()
-    if "," not in raw:
-        return None
-    given = raw.split(",", 1)[1].strip()
-    return given.split()[0].split("-")[0] if given else None
-
-
 def fetch_dsn() -> str:
     """Pull the vectorstore DSN from Azure. Errors never echo the value."""
     try:
         out = subprocess.run(
             [
-                "az", "containerapp", "secret", "show",
-                "--name", APP_NAME,
-                "--resource-group", RESOURCE_GROUP,
-                "--secret-name", SECRET_NAME,
-                "--query", "value", "-o", "tsv",
+                "az",
+                "containerapp",
+                "secret",
+                "show",
+                "--name",
+                APP_NAME,
+                "--resource-group",
+                RESOURCE_GROUP,
+                "--secret-name",
+                SECRET_NAME,
+                "--query",
+                "value",
+                "-o",
+                "tsv",
             ],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except FileNotFoundError:
         sys.exit("FATAL: `az` not found. Install the Azure CLI and `az login`.")
@@ -128,7 +116,7 @@ def connect(dsn: str):
     """Open a read-only connection. Any failure hides the DSN-bearing message."""
     try:
         conn = psycopg2.connect(dsn)
-    except Exception as e:  # noqa: BLE001 - message would leak the credential
+    except Exception as e:  # the message would leak the credential
         sys.exit(f"FATAL: could not connect to the vector store ({type(e).__name__}).")
     conn.set_session(readonly=True, autocommit=True)
     return conn
@@ -194,7 +182,6 @@ def report_fields(cur) -> None:
 
 
 def main() -> None:
-    # Raw description: the docstring above is a formatted usage block.
     argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     ).parse_args()

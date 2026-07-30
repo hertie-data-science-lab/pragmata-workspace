@@ -57,57 +57,106 @@ RUNS_DIR = DATA_DIR / "querygen" / "runs"  # querygen tool (pragmata sibling)
 OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 
 # Shape of one logs/annotation/log.jsonl snapshot. Lives here because log.py writes it and
-# report_tables.py reads it, and a duplicated constant would drift. Bump on an incompatible
-# change; report_tables.py refuses anything older rather than rendering a partial report.
+# the reporting scripts read it, and a duplicated constant would drift. Bump on an
+# incompatible change; check_snapshot then refuses anything older.
 #   2: agreement is a single pooled α per (task, label) under `pooled_agreement`; the
 #      per-domain and total n_items-weighted `mean_alpha` blocks are gone.
 SNAPSHOT_SCHEMA_VERSION = 2
 
+SNAPSHOT_LOG = LOGS_DIR / "log.jsonl"
+
 
 def read_snapshots(path: Path | None = None) -> list[dict]:
-    """Every snapshot in logs/annotation/log.jsonl, oldest first.
+    """Every snapshot in the log, oldest first — for callers that need the history.
 
-    One reader for all three consumers (report tables, plots, the eval report scripts),
-    so the file's location and its one-object-per-line shape are stated once.
+    One snapshot per line. Prefer select_snapshot() when only one is wanted: this parses
+    all of them.
     """
-    path = path or LOGS_DIR / "log.jsonl"
+    path = path or SNAPSHOT_LOG
     if not path.exists():
-        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
-    snapshots = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
+    snapshots = read_jsonl(path)
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
     return snapshots
 
 
-def check_snapshot(snapshot: dict, *, where: str = "") -> None:
+def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
+    """One checked snapshot by 0-based index, negative counting from the end.
+
+    Splits the log but parses only the selected line: the file is tens of MB and the
+    reporting scripts need a single snapshot out of it.
+    """
+    path = path or SNAPSHOT_LOG
+    if not path.exists():
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
+    lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+    if not lines:
+        raise SystemExit(f"no snapshots in {path}")
+    try:
+        snapshot = json.loads(lines[line])
+    except IndexError:
+        raise SystemExit(f"line {line} out of range ({len(lines)} snapshots)") from None
+    check_snapshot(snapshot)
+    return snapshot
+
+
+def check_snapshot(snapshot: dict) -> None:
     """Refuse a snapshot the current reporting code cannot render faithfully.
 
-    Two guards, because both failure modes are silent rather than loud:
-      - schema_version: agreement moved from per-domain n_items-weighted means of alpha
-        to a single pooled alpha per (task, label). Rendering a v1 snapshot would drop
-        the entire agreement section and still look like a complete report.
-      - pooled gap statistics: added to log.py additively, without a version bump (one
-        would strand every existing entry). An older snapshot renders blank cadence
-        columns, which reads as "no cadence data" rather than "wrong snapshot".
+    Both failure modes are silent rather than loud: a v1 snapshot loses the whole
+    agreement section (pooled alpha replaced per-domain weighted means), and one predating
+    the pooled gap statistics renders blank cadence columns. The gap fields were added
+    without a version bump, which would have stranded every existing entry.
     """
     at = snapshot.get("run_at", "unknown date")
-    label = f" ({where})" if where else ""
     got = snapshot.get("schema_version", 1)
     if got < SNAPSHOT_SCHEMA_VERSION:
         raise SystemExit(
-            f"snapshot {at}{label} is schema v{got}; this code needs "
+            f"snapshot {at} is schema v{got}; this code needs "
             f"v{SNAPSHOT_SCHEMA_VERSION}.\n"
             "Agreement moved from per-domain weighted means of alpha to a single pooled "
             "alpha (one reliability matrix per task x label over all domains), so the two "
             "are not interchangeable.\n"
             "To render this snapshot, check out a revision from before that change."
         )
-    timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
+    timing = (
+        ((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")
+    ) or {}
     if "pooled_mean_gap_s" not in timing:
         raise SystemExit(
-            f"snapshot {at}{label} predates the pooled gap statistics, so the cadence "
+            f"snapshot {at} predates the pooled gap statistics, so the cadence "
             f"columns would come out blank. Re-run `make annotation-log` and try again."
         )
+
+
+def require_env(*names: str) -> list[str]:
+    """Values of the named env vars, or exit naming the missing ones.
+
+    Empty counts as unset, matching common.sh's require_env.
+    """
+    values = [os.environ.get(n, "") for n in names]
+    missing = [n for n, v in zip(names, values) if not v]
+    if missing:
+        raise SystemExit(f"missing required env: {', '.join(missing)} (set in .env)")
+    return values
+
+
+def argilla_client():
+    """Argilla client for the configured instance, built by pragmata.
+
+    The pragmata import is function-local: this module is imported by standalone
+    ``uv run --script`` consumers that have no pragmata, and importing it at module scope
+    also cost every ``--help`` several seconds.
+    """
+    from pragmata.core.annotation.client import resolve_argilla_client
+
+    url, key = require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
+    return resolve_argilla_client(url, key)
 
 
 def eval_pragmata() -> SimpleNamespace:
@@ -123,19 +172,31 @@ def eval_pragmata() -> SimpleNamespace:
     """
     src = os.environ.get("PRAGMATA_EVAL_SRC")
     if not src:
-        raise SystemExit("PRAGMATA_EVAL_SRC is unset — see .env.example (eval needs its own pragmata pin).")
+        raise SystemExit(
+            "PRAGMATA_EVAL_SRC is unset — see .env.example (eval needs its own pragmata pin)."
+        )
     src_path = Path(src).resolve()
     if not (src_path / "pragmata").is_dir():
-        raise SystemExit(f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}")
-    venv = Path(os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv").resolve()
+        raise SystemExit(
+            f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}"
+        )
+    venv = Path(
+        os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv"
+    ).resolve()
     binary = venv / "bin" / "pragmata"
     if not binary.exists():
-        raise SystemExit(f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv.")
+        raise SystemExit(
+            f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv."
+        )
     return SimpleNamespace(src=src_path, repo=src_path.parent, venv=venv, bin=binary)
 
 
 def load_dotenv(path: Path) -> None:
-    """Load KEY=VALUE lines into os.environ; existing env wins. No inline comments."""
+    """Load KEY=VALUE lines into os.environ; a non-empty existing value wins.
+
+    No inline comments. An empty value counts as unset and gets filled - see the
+    convention in scripts/lib/common.sh.
+    """
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -143,40 +204,26 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip())
+        key = key.strip()
+        if not os.environ.get(key):
+            os.environ[key] = val.strip()
 
 
 def load_env() -> None:
-    """Load configs/settings.conf then .env (a pre-set environment beats both), and
-    apply the PRAGMATA_SRC pin.
+    """Load configs/settings.conf then .env, then apply the PRAGMATA_SRC pin.
 
-    scripts/lib/common.sh does the same for shell-launched stages, but the Makefile's
-    Python targets never go through it, so the pin was silently ignored when they ran
-    standalone. Applying it here covers every Python entrypoint.
+    The Makefile's Python targets never go through common.sh, so the pin was silently
+    ignored when they ran standalone. Applying it here covers every Python entrypoint.
     """
     load_dotenv(SETTINGS)
     load_dotenv(ROOT / ".env")
-    _pin_pragmata_src()
-
-
-def _pin_pragmata_src() -> None:
-    """Put PRAGMATA_SRC (if set) at the front of sys.path and of PYTHONPATH.
-
-    sys.path so ``import pragmata`` in this process resolves to the pinned tree rather
-    than the installed package; PYTHONPATH so subprocesses inherit the same pin. The eval
-    pin is separate and assigns PYTHONPATH outright (see eval_pragmata), so it is
-    unaffected.
-    """
     src = os.environ.get("PRAGMATA_SRC")
-    if not src:
-        return
-    # Front, not merely present: an installed pragmata may already be on sys.path, and
-    # the point of the pin is to shadow it. Idempotent on a second call.
-    if sys.path[:1] != [src]:
+    if src:
+        # Front, not merely present: an installed pragmata may already be on sys.path and
+        # the point of the pin is to shadow it. No PYTHONPATH export - no Python
+        # entrypoint here spawns a pragmata subprocess off the inherited environment
+        # (score_human builds its own env for the separate eval pin).
         sys.path.insert(0, src)
-    current = os.environ.get("PYTHONPATH", "")
-    if src not in current.split(os.pathsep):
-        os.environ["PYTHONPATH"] = f"{src}{os.pathsep}{current}" if current else src
 
 
 def local_dt(run_at: str) -> datetime:
@@ -211,7 +258,9 @@ def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     """
     from datetime import date
 
-    target = explicit or (ROOT / "reports" / stage / date.today().isoformat())
+    # DTZ011 is suppressed deliberately: the LOCAL date is the point - report dirs are
+    # named in the operator's timezone, not UTC. Revisited in the eval PR.
+    target = explicit or (ROOT / "reports" / stage / date.today().isoformat())  # noqa: DTZ011
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -240,7 +289,7 @@ def domains() -> list[str]:
 #
 # Report numbers get lifted into figures and then into a published document, so a
 # bare CSV is not enough — each one needs to name the code and inputs it came from.
-# This mirrors the manifest convention in scripts/eval/sync.sh (sorted per-file
+# This mirrors the manifest convention in scripts/transfer/sync.sh (sorted per-file
 # sha256) and the dated bundles under reproducibility/.
 
 
@@ -303,7 +352,10 @@ def provenance(
         "script": script,
         "workspace_git": git_describe(ROOT),
         "inputs": [
-            {"path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p), "sha256": sha256_file(p)}
+            {
+                "path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p),
+                "sha256": sha256_file(p),
+            }
             for p in inputs
             if p.exists()
         ],
@@ -330,7 +382,9 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
         for row in rows:
             writer.writerow({c: row.get(c, "") for c in columns})
     sidecar = path.with_suffix(path.suffix + ".provenance.json")
-    sidecar.write_text(json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    sidecar.write_text(
+        json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def read_jsonl(path: Path) -> list[dict]:

@@ -1,7 +1,7 @@
 # data/transfer/ (gitignored contents)
 
 Staging landing zone for eval data moved over Azure Blob by
-[`scripts/eval/sync.sh`](../../scripts/eval/sync.sh). Everything here except this
+[`scripts/transfer/sync.sh`](../../scripts/transfer/sync.sh). Everything here except this
 README and `.gitkeep` is gitignored - it moves via **Blob, not git** (git carries
 code; this carries data).
 
@@ -13,7 +13,7 @@ data/transfer/
 ```
 
 Each subtree arrives with a `MANIFEST.sha256` and is verified (`sha256sum -c`) on
-download; `make eval-verify PREFIX=<sub>` re-checks it locally any time.
+download; `make transfer-verify PREFIX=<sub>` re-checks it locally any time.
 
 **Ownership seam.** `sync.sh` **reads** pragmata's own tool trees
 (`data/annotation/`, `data/eval/`) in place and **writes only here** - never into

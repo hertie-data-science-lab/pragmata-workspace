@@ -9,7 +9,7 @@
 # A failed export does NOT abort the run: log reuses whatever CSVs exist and
 # IAA degrades gracefully, so counts/cadence still get logged.
 #
-# Reporting (markdown + plots) is a SEPARATE, manual step — run `make report`
+# Reporting (markdown + plots) is a SEPARATE, manual step — run `make annotation-report`
 # to render reports/annotation/<date>/ (report.md + *.png) from the latest
 # snapshot. Backup is likewise on-demand and deliberately not run here.
 

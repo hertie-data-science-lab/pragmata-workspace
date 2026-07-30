@@ -9,10 +9,9 @@ Joins to `retrieval_manifest.csv` on `doc_id` to ask whether retrieval
 over-represents any part of the corpus (by year, publisher, extent, or author gender).
 
 Extends the query pattern in `vectorstore_inventory.py` from aggregate counts to
-per-document rows, importing its DSN handling and author-name parser so the
-credential-hiding error paths and the name vocabulary live in one place. The connection
-string is never stored here: it is pulled at runtime from the dev container app's secret
-via `az`, and the connection is read-only.
+per-document rows, importing its DSN handling so the credential-hiding error paths live
+in one place. The connection string is never stored here: it is pulled at runtime from
+the dev container app's secret via `az`, and the connection is read-only.
 
 ## Author gender: what the columns mean, and what they cannot mean
 
@@ -51,28 +50,46 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# vectorstore_inventory.py owns the DSN handling (it pulls the secret via `az`, opens a
-# read-only connection, and never echoes the credential in an error) and the author-name
-# vocabulary. Imported rather than copied so both live in one place. `uv run --script`
-# isolates installed packages, not local imports, so the dependency-free workspace lib is
-# importable here too, giving this script the same dated output dir and provenance
-# sidecar contract as its four siblings. eval_common is NOT imported: it needs pandas,
-# which this script has no reason to install.
+# vectorstore_inventory.py owns the DSN handling: it pulls the secret via `az`, opens a
+# read-only connection, and never echoes the credential in an error. Imported rather than
+# copied so that handling lives in one place. `uv run --script` isolates installed
+# packages, not local imports, so the dependency-free workspace lib is importable here
+# too, giving this script the same dated output dir and provenance sidecar contract as its
+# four siblings. eval_common is NOT imported: it needs pandas, which this script has no
+# reason to install.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
-import vectorstore_inventory as vsi  # noqa: E402
-import workspace as ws  # noqa: E402
+import vectorstore_inventory as vsi
+import workspace as ws
 
-# --- shared with vectorstore_inventory.py: DB coordinates and author-name vocabulary ---
+# --- DB coordinates, shared with vectorstore_inventory.py ---
 MAIN_COLLECTION = vsi.MAIN_COLLECTION
 APP_NAME = vsi.APP_NAME
 RESOURCE_GROUP = vsi.RESOURCE_GROUP
-first_name = vsi.first_name
-FEMALE = vsi.FEMALE
-MALE = vsi.MALE
 
 AUTHOR_FIELDS = ("verf1", "verf2", "verf3")
+
+# gender-guesser's six-way verdict collapsed to the two resolved classes; anything else
+# (andy, unknown) stays unresolved rather than being folded into one of these.
+FEMALE = {"female", "mostly_female"}
+MALE = {"male", "mostly_male"}
+
+
+def first_name(raw: str | None) -> str | None:
+    """Given name from a "Last, First" library string, or None if institutional.
+
+    Drops role suffixes like "(Verf.)"/"(Hrsg.)" and treats a missing "Last, First"
+    comma as an institutional author rather than guessing a single token is a surname.
+    """
+    if not raw:
+        return None
+    raw = re.sub(r"\(.*?\)", "", raw).strip()
+    if "," not in raw:
+        return None
+    given = raw.split(",", 1)[1].strip()
+    return given.split()[0].split("-")[0] if given else None
+
 
 COLUMNS = [
     "doc_id",
@@ -137,7 +154,9 @@ def classify(detector, names: list[str | None]) -> tuple[list[str], list[str]]:
             continue
         verdict = detector.get_gender(given)
         raw.append(verdict)
-        collapsed.append("female" if verdict in FEMALE else "male" if verdict in MALE else "unknown")
+        collapsed.append(
+            "female" if verdict in FEMALE else "male" if verdict in MALE else "unknown"
+        )
     return raw, collapsed
 
 
@@ -216,7 +235,10 @@ def build_rows(documents: list[dict]) -> list[dict]:
             first_raw, first_collapsed = first_pair[0][0], first_pair[1][0]
         else:
             # verf1 present but unparseable means institutional; absent means no author.
-            first_raw, first_collapsed = "", "institutional" if recorded and recorded[0] else unresolved("")
+            first_raw, first_collapsed = (
+                "",
+                "institutional" if recorded and recorded[0] else unresolved(""),
+            )
 
         rows.append(
             {
@@ -263,7 +285,11 @@ def main() -> int:
         columns=COLUMNS,
         prov=ws.provenance(
             script="scripts/eval/corpus_catalog.py",
-            source={"collection": MAIN_COLLECTION, "app": APP_NAME, "resource_group": RESOURCE_GROUP},
+            source={
+                "collection": MAIN_COLLECTION,
+                "app": APP_NAME,
+                "resource_group": RESOURCE_GROUP,
+            },
             n_documents=len(rows),
             n_chunks_total=n_chunks_total,
             n_documents_with_resolved_author=resolved,
@@ -271,27 +297,42 @@ def main() -> int:
             gender_coverage=round(resolved / len(rows), 4) if rows else None,
             grain="one row per doc_id",
             caveats=[
-                "author_gender is inferred from a first-name dictionary "
-                "(gender-guesser), not recorded in the corpus, and is not a measure of "
-                "how anyone identifies.",
-                "The metadata records at most three authors (verf1..verf3), so "
-                "'majority' is over RECORDED authors, not all authors.",
-                "The heuristic is weaker on non-Western names; *_raw columns keep the "
-                "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
-                "(name absent from the dictionary).",
-                "Institutional authors have no personal name and are flagged "
-            "is_institutional rather than counted as unknown people.",
-            "author_gender='unknown' merges two populations: documents with no "
-            "recorded author at all and documents whose author names the dictionary "
-            "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
-            "cut on author_gender alone.",
-                "pub_year and extent_pages are parsed from free-text library fields; "
-                "the raw extent string is kept in `extent` so the parse is auditable.",
+                (
+                    "author_gender is inferred from a first-name dictionary "
+                    "(gender-guesser), not recorded in the corpus, and is not a measure of "
+                    "how anyone identifies."
+                ),
+                (
+                    "The metadata records at most three authors (verf1..verf3), so "
+                    "'majority' is over RECORDED authors, not all authors."
+                ),
+                (
+                    "The heuristic is weaker on non-Western names; *_raw columns keep the "
+                    "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
+                    "(name absent from the dictionary)."
+                ),
+                (
+                    "Institutional authors have no personal name and are flagged "
+                    "is_institutional rather than counted as unknown people."
+                ),
+                (
+                    "author_gender='unknown' merges two populations: documents with no "
+                    "recorded author at all and documents whose author names the dictionary "
+                    "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
+                    "cut on author_gender alone."
+                ),
+                (
+                    "pub_year and extent_pages are parsed from free-text library fields; "
+                    "the raw extent string is kept in `extent` so the parse is auditable."
+                ),
             ],
         ),
     )
 
-    print(f"wrote {target} ({len(rows)} documents, {n_chunks_total} chunks)", file=sys.stderr)
+    print(
+        f"wrote {target} ({len(rows)} documents, {n_chunks_total} chunks)",
+        file=sys.stderr,
+    )
     # Guarded: an empty result is possible (a stale MAIN_COLLECTION name) and the CSV
     # and sidecar are already written by this point, so the run should end with a usable
     # message rather than a ZeroDivisionError traceback over a valid artifact.

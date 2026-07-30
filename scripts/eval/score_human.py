@@ -52,8 +52,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
-import eval_common as ec  # noqa: E402
-import workspace as ws  # noqa: E402
+import eval_common as ec
+import workspace as ws
 
 # Which label(s) each metric is computed from, so the right alpha can be attached.
 # Derived from pragmata's core/eval/metrics.py formulas and the *_METRIC_LABELS maps
@@ -82,7 +82,16 @@ METRIC_LABELS: dict[str, tuple[str, ...]] = {
 }
 
 # Report keys that are not metrics.
-NON_METRIC_KEYS = {"task", "source", "notes", "created_at", "n_examples", "ci_level", "top_k", "n_panels_skipped"}
+NON_METRIC_KEYS = {
+    "task",
+    "source",
+    "notes",
+    "created_at",
+    "n_examples",
+    "ci_level",
+    "top_k",
+    "n_panels_skipped",
+}
 
 COLUMNS = [
     "task",
@@ -154,7 +163,10 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
     alpha, label, stats = min(candidates, key=lambda c: c[0])
     row["alpha_min"] = f"{alpha:.4f}"
     row["alpha_min_label"] = label
-    for key, target in (("ci_lower", "alpha_min_ci_low"), ("ci_upper", "alpha_min_ci_high")):
+    for key, target in (
+        ("ci_lower", "alpha_min_ci_low"),
+        ("ci_upper", "alpha_min_ci_high"),
+    ):
         if stats.get(key) is not None:
             row[target] = f"{stats[key]:.4f}"
     row["alpha_n_items"] = stats.get("n_items", "")
@@ -176,26 +188,41 @@ def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(pin.src)
     command = [
-        str(pin.bin), "eval", "score",
-        "--path", str(csv_path),
-        "--task", task,
+        str(pin.bin),
+        "eval",
+        "score",
+        "--path",
+        str(csv_path),
+        "--task",
+        task,
         # base_dir defaults to the process cwd. It is pragmata's tool-root PARENT —
         # tools write <base_dir>/{annotation,querygen,eval} as siblings — so this must
         # be data/, matching the existing data/annotation/ tree. Passing the repo root
         # instead scatters an eval/ tree beside the source.
-        "--base-dir", str(ws.DATA_DIR),
-        "--score-id", score_id,
-        "--ci", str(args.ci),
-        "--n-resamples", str(args.n_resamples),
-        "--seed", str(args.seed),
+        "--base-dir",
+        str(ws.DATA_DIR),
+        "--score-id",
+        score_id,
+        "--ci",
+        str(args.ci),
+        "--n-resamples",
+        str(args.n_resamples),
+        "--seed",
+        str(args.seed),
         # Panel completeness is pragmata's job (#305): skip records n_panels_skipped
         # on the report; --all-panels accepts the bias instead.
         "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
     ]
-    result = subprocess.run(command, env=env, capture_output=True, text=True)
+    # check=False: the returncode is handled explicitly below, to surface the CLI's own
+    # error tail rather than a bare CalledProcessError.
+    result = subprocess.run(
+        command, env=env, capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
-        raise SystemExit(f"eval score failed for {score_id}/{task}:\n  " + "\n  ".join(tail))
+        raise SystemExit(
+            f"eval score failed for {score_id}/{task}:\n  " + "\n  ".join(tail)
+        )
     return ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
 
 
@@ -210,9 +237,12 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
             # the conditional is undefined rather than zero.
             rows.append(
                 {
-                    "task": task, "metric": metric,
-                    "policy": policy, "n_examples": report.get("n_examples", ""),
-                    "ci_level": report.get("ci_level", ""), "status": "undefined_no_denominator",
+                    "task": task,
+                    "metric": metric,
+                    "policy": policy,
+                    "n_examples": report.get("n_examples", ""),
+                    "ci_level": report.get("ci_level", ""),
+                    "status": "undefined_no_denominator",
                 }
             )
             continue
@@ -239,9 +269,15 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
 def empty_rows(task: str, policy: str, status: str) -> list[dict]:
     """Explicit n=0 rows so a task cannot silently vanish from the report."""
     return [
-        {"task": task, "metric": metric, "policy": policy,
-         "n": 0, "n_examples": 0, "status": status,
-         "source_labels": ";".join(labels)}
+        {
+            "task": task,
+            "metric": metric,
+            "policy": policy,
+            "n": 0,
+            "n_examples": 0,
+            "status": status,
+            "source_labels": ";".join(labels),
+        }
         for metric, labels in METRIC_LABELS.items()
         if any(lab in ec.LABELS[task] for lab in labels)
     ]
@@ -250,17 +286,36 @@ def empty_rows(task: str, policy: str, status: str) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ec.add_common_args(ap)
-    ap.add_argument("--exclude-calibration", action="store_true",
-                    help="Comparison run: drop wholly-calibration queries (default: keep them).")
-    ap.add_argument("--all-panels", action="store_true",
-                    help="Score every retrieval panel, not just complete ones.")
-    ap.add_argument("--ci", type=float, default=0.95, help="Confidence level (default 0.95).")
-    ap.add_argument("--n-resamples", type=int, default=1000,
-                    help="Bootstrap iterations for the continuous retrieval metrics.")
-    ap.add_argument("--seed", type=int, default=0,
-                    help="Bootstrap RNG seed; fixed so intervals are reproducible.")
-    ap.add_argument("--allow-dirty", action="store_true",
-                    help="Score even if the pragmata pin has uncommitted changes.")
+    ap.add_argument(
+        "--exclude-calibration",
+        action="store_true",
+        help="Comparison run: drop wholly-calibration queries (default: keep them).",
+    )
+    ap.add_argument(
+        "--all-panels",
+        action="store_true",
+        help="Score every retrieval panel, not just complete ones.",
+    )
+    ap.add_argument(
+        "--ci", type=float, default=0.95, help="Confidence level (default 0.95)."
+    )
+    ap.add_argument(
+        "--n-resamples",
+        type=int,
+        default=1000,
+        help="Bootstrap iterations for the continuous retrieval metrics.",
+    )
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Bootstrap RNG seed; fixed so intervals are reproducible.",
+    )
+    ap.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Score even if the pragmata pin has uncommitted changes.",
+    )
     args = ap.parse_args()
 
     pin = ws.eval_pragmata()
@@ -286,7 +341,10 @@ def main() -> int:
             raw, frame = filtered_frame(args.exports, programme, task, args)
             if frame.empty:
                 status = "no_data" if raw.empty else "no_rows_after_filter"
-                print(f"  {programme}/{task}: contributes nothing ({status})", file=sys.stderr)
+                print(
+                    f"  {programme}/{task}: contributes nothing ({status})",
+                    file=sys.stderr,
+                )
                 continue
             frames.append(frame)
         if not frames:
@@ -327,28 +385,42 @@ def main() -> int:
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             filters={
                 "response_status": "submitted",
-                "calibration": "excluded (query grain)" if args.exclude_calibration else "included",
+                "calibration": "excluded (query grain)"
+                if args.exclude_calibration
+                else "included",
                 "retrieval_panels": (
-                    "all (--allow-incomplete-panels)" if args.all_panels
+                    "all (--allow-incomplete-panels)"
+                    if args.all_panels
                     else "incomplete skipped by pragmata (--skip-incomplete-panels)"
                 ),
             },
             ci_level=args.ci,
             n_resamples=args.n_resamples,
             seed=args.seed,
-            alpha_source={"snapshot_run_at": snapshot.get("run_at"), "population": "pooled calibration items"},
+            alpha_source={
+                "snapshot_run_at": snapshot.get("run_at"),
+                "population": "pooled calibration items",
+            },
             caveats=[
-                "CIs cover sampling uncertainty over queries only — not annotator "
-                "disagreement or label error.",
-                "alpha_* columns are the POOLED alpha over every domain's calibration "
-                "items (pragmata computes IAA over overlapped rows only).",
-                "alpha_min_degenerate=True means the label never varies in that pooled "
-                "population: alpha is undefined there and pragmata returns 1.0 by "
-                "convention, so such an alpha is NOT evidence of reliability.",
-                "The pooled retrieval n=181 is dominated by three programmes "
-                "(demokratie 70, europas-zukunft 68, kommunen 33 = 171 of 181); "
-                "nachhaltige contributes 0 complete panels. policy_grid.csv carries "
-                "the full composition.",
+                (
+                    "CIs cover sampling uncertainty over queries only — not annotator "
+                    "disagreement or label error."
+                ),
+                (
+                    "alpha_* columns are the POOLED alpha over every domain's calibration "
+                    "items (pragmata computes IAA over overlapped rows only)."
+                ),
+                (
+                    "alpha_min_degenerate=True means the label never varies in that pooled "
+                    "population: alpha is undefined there and pragmata returns 1.0 by "
+                    "convention, so such an alpha is NOT evidence of reliability."
+                ),
+                (
+                    "The pooled retrieval n=181 is dominated by three programmes "
+                    "(demokratie 70, europas-zukunft 68, kommunen 33 = 171 of 181); "
+                    "nachhaltige contributes 0 complete panels. policy_grid.csv carries "
+                    "the full composition."
+                ),
                 "top_k is max(chunk_rank) and K varies per query; do not label these '@5'.",
             ],
         ),

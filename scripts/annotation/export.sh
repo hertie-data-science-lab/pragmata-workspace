@@ -10,7 +10,7 @@
 # log.py, which runs its own throwaway export into a temp tree for IAA + label stats.
 #
 # Only domain stems may live under data/annotation/exports/ (plus the .gitkeep marker):
-# eval-push publishes that tree and consumers glob exports/*/ as the domain list, so a
+# transfer-push publishes that tree and consumers glob exports/*/ as the domain list, so a
 # stray dir arrives as an extra domain. The guard below warns on one.
 #
 # Exported WITH --include-discarded so discard rows (response_status=discarded,
@@ -49,7 +49,7 @@ for d in "${domains[@]}"; do
 done
 
 # Published-tree guard. Any directory here that isn't a domain stem gets shipped by
-# eval-push and read as an extra domain downstream — silent and wrong. warn + rc=1 rather
+# transfer-push and read as an extra domain downstream — silent and wrong. warn + rc=1 rather
 # than fatal, matching the per-domain failure path: daily.sh tolerates export failures so
 # that logging still runs.
 declare -A is_domain=()
@@ -58,7 +58,7 @@ for dir in "$DATA_DIR"/annotation/exports/*/; do
   [[ -d "$dir" ]] || continue
   name="$(basename "$dir")"
   [[ -n "${is_domain[$name]:-}" ]] || {
-    warn "stray dir in exports tree: $name — not a domain config; eval-push would publish it as a domain"
+    warn "stray dir in exports tree: $name — not a domain config; transfer-push would publish it as a domain"
     rc=1
   }
 done

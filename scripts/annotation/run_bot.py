@@ -58,9 +58,9 @@ RUNS_DIR = ws.RUNS_DIR
 OUT_DIR = ws.OUT_DIR
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Bot base URL, resolved in main() rather than at import time so --help and probe-less
-# introspection work without a configured .env.
-PRD = ""
+# Bot base URL. Read without raising so --help works on a box with no .env; main()
+# validates before any request.
+PRD = os.environ.get("PUBLIKATIONSBOT_URL", "")
 LANG_MAP = {"german": "de", "english": "en"}
 
 # Throttle: seconds to sleep after each network-touching iteration (skipped/done
@@ -707,14 +707,6 @@ def probe_mode(spec_stem: str | None) -> int:
 # --- main -------------------------------------------------------------------
 
 
-def _resolve_bot_url() -> str:
-    """Bot base URL from the environment, or a clear exit if it is unset."""
-    url = os.environ.get("PUBLIKATIONSBOT_URL")
-    if not url:
-        sys.exit("PUBLIKATIONSBOT_URL is unset (set it in .env).")
-    return url
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
@@ -734,9 +726,8 @@ def main() -> int:
         "Tune higher if the bot returns 5xx; lower at your own risk.",
     )
     args = ap.parse_args()
-
-    global PRD
-    PRD = _resolve_bot_url()
+    if not PRD:
+        sys.exit("PUBLIKATIONSBOT_URL is unset (set it in .env).")
 
     if args.probe:
         return probe_mode(args.spec)

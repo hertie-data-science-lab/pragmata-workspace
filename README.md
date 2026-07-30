@@ -24,7 +24,7 @@ Clone, then:
    [Annotator roster](docs/configuration.md#annotator-roster).
 3. Point `PRAGMATA_SRC` at a `pragmata` checkout (provides the `pragmata` CLI) and create the
    `.venv/` it expects.
-4. `make help` lists the targets; preview a run with `bash scripts/pipeline.sh --dry-run`.
+4. `make help` lists the targets; preview a run with `make plan`.
 
 Data, logs, reports and Argilla backups are **not** committed - see
 [Data & secrets](docs/configuration.md#data--secrets) and
@@ -36,33 +36,36 @@ Data, logs, reports and Argilla backups are **not** committed - see
 runnable directly), taking `VAR=value` overrides.
 
 ```
-# Pipeline  (querygen -> bot -> combine -> setup -> import)
-make pipeline       # run a slice: FROM= TO= ONLY= FILTER= JOBS=   (no args = full run)
-make querygen       # generate synthetic queries             (SPECS=a,b to filter)
-make bot            # run publikationsbot over the queries    (SPEC=x to filter)
-make combine        # pool runs + intersperse edgecases       (DOMAINS="a b")
-make setup          # provision Argilla workspaces + users    (DOMAIN= required)
-make import         # import one domain's combined JSONL       (DOMAIN= required)
+# Dataset build pipeline  (ends at the Argilla import)
+make pipeline                  # run a slice: FROM= TO= ONLY= FILTER= JOBS=  (no args = full run)
+make plan                      # preview a slice without running it  (same vars as pipeline)
+make querygen-run              # generate synthetic queries          (SPECS=a,b to filter)
+make bot-run                   # query publikationsbot for answers   (SPEC=x to filter)
+make bot-probe                 # one-query bot smoke test, writes no JSONL
+make combine-run               # assemble the import-ready dataset   (DOMAINS="a b")
+make annotation-setup          # provision Argilla workspaces + users (DOMAIN= required)
+make annotation-import         # load one domain's dataset into Argilla (DOMAIN= required)
 
 # Annotation ops
-make annotation-export  # export annotations to per-task CSVs  (DOMAIN= to filter)
-make annotation-log     # append a snapshot to logs/annotation/log.jsonl
-make annotation-daily   # nightly logging: export -> log.jsonl
-make annotation-backup  # status-preserving Argilla backup     (ARGS="restore <dir>")
+make annotation-export         # export annotations to per-task CSVs (DOMAIN= to filter)
+make annotation-log            # append a snapshot to logs/annotation/log.jsonl
+make annotation-daily          # nightly logging: export -> log.jsonl
+make annotation-backup         # status-preserving Argilla backup (dump)
+make annotation-restore        # restore a backup   (DIR= required; previews unless APPLY=1)
 
-# Reporting
-make report         # render latest snapshot -> reports/annotation/<date>/ (+ plots)
-make report-tables  # render tables only -> report.md
-make report-pdf     # render tables -> report.pdf              (needs pandoc + xelatex)
-make report-plots   # render plots only, PNGs                  (needs matplotlib)
-make reproduce-curation  # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
+# Annotation reporting  (-> reports/annotation/<date>/)
+make annotation-report         # tables + plots, and repoint _latest
+make annotation-report-tables  # tables only -> report.md
+make annotation-report-pdf     # tables -> report.pdf                (needs pandoc + xelatex)
+make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
-# Eval data transport  (see docs/eval-data-transport.md)
-make eval-push      # push a tree to the eval Blob             (SRC= source, PREFIX= dest; both required)
-make eval-pull      # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
-make eval-verify    # re-verify a pulled tree against its manifest (PREFIX=)
+# Data transport  (see docs/eval-data-transport.md)
+make transfer-push             # push a tree to the Blob             (SRC= source, PREFIX= dest; both required)
+make transfer-pull             # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
+make transfer-verify           # re-verify a pulled tree against its manifest (PREFIX=)
 
-make help           # list every target
+make reproduce-curation        # rebuild the 2026-07-01 curated set  (MODE= APPLY=)
+make help                      # list every target
 ```
 
 ## Documentation

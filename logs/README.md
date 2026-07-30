@@ -10,4 +10,4 @@ logs/
 ```
 
 Written by `make annotation-log` / `scripts/annotation/log.py` (nightly via `scripts/daily.sh`).
-Rendered into `reports/` by `make report`.
+Rendered into `reports/` by `make annotation-report`.

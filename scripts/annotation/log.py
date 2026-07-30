@@ -82,19 +82,19 @@ ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.p
 
 # The data was imported by the pinned pragmata (partition_scope topology), so it must be
 # read back through the same tree. ws.load_env() applies the pin; unset → installed.
-import pragmata  # noqa: E402
-from pragmata.api.annotation_export import export_annotations  # noqa: E402
-from pragmata.api.annotation_iaa import compute_iaa  # noqa: E402
-from pragmata.core.annotation.argilla_task_definitions import dataset_name  # noqa: E402
-from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
-from pragmata.core.annotation.export_fetcher import build_user_lookup  # noqa: E402
-from pragmata.core.schemas.annotation_export import (  # noqa: E402
+import pragmata
+from pragmata.api.annotation_export import export_annotations
+from pragmata.api.annotation_iaa import compute_iaa
+from pragmata.core.annotation.argilla_task_definitions import dataset_name
+from pragmata.core.annotation.client import resolve_argilla_client
+from pragmata.core.annotation.export_fetcher import build_user_lookup
+from pragmata.core.schemas.annotation_export import (
     GenerationAnnotation,
     GroundingAnnotation,
     RetrievalAnnotation,
 )
-from pragmata.core.schemas.annotation_task import Task  # noqa: E402
-from pragmata.core.settings.annotation_settings import AnnotationSettings  # noqa: E402
+from pragmata.core.schemas.annotation_task import Task
+from pragmata.core.settings.annotation_settings import AnnotationSettings
 
 # Defensive config sanitizer, keyed off the *active* pragmata's schema: drop any
 # top-level config key the loaded AnnotationSettings doesn't accept (extra="forbid").
@@ -667,7 +667,25 @@ def task_datasets(settings) -> Iterator[tuple[str, Task, str, str]]:
                 )
 
 
-def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
+def dataset_lookup(client):
+    """Memoised ``(workspace, name) -> dataset | None`` resolver.
+
+    fetch_progress and fetch_responses walk the same 48 datasets, so without this each
+    domain resolves every one twice over the network. Callers keep their own error
+    handling: this only caches what the client returned, including None.
+    """
+    cache: dict[tuple[str, str], object | None] = {}
+
+    def resolve(ws_name: str, name: str):
+        key = (ws_name, name)
+        if key not in cache:
+            cache[key] = client.datasets(name=name, workspace=ws_name)
+        return cache[key]
+
+    return resolve
+
+
+def fetch_responses(resolve, http: httpx.Client, settings) -> dict[Task, list[dict]]:
     """Submitted-response events per task, via the Argilla REST records endpoint.
 
     The SDK drops per-response timestamps; the REST payload keeps them. Returns
@@ -676,7 +694,7 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     """
     out: dict[Task, list[dict]] = {t: [] for t in TASKS}
     for ws_name, task, purpose, name in task_datasets(settings):
-        ds = client.datasets(name=name, workspace=ws_name)
+        ds = resolve(ws_name, name)
         if ds is None:
             continue
         offset, limit = 0, 1000
@@ -752,7 +770,7 @@ def sanitized_config(domain: str) -> tuple[Path, dict]:
     return Path(path), clean
 
 
-def fetch_progress(client, settings) -> dict[Task, dict]:
+def fetch_progress(resolve, settings) -> dict[Task, dict]:
     """Per-task record-level progress from Argilla ``dataset.progress()``.
 
     Returns ``{Task: {"production": {total, completed, pending}|absent,
@@ -761,7 +779,7 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     out: dict[Task, dict] = {t: {} for t in TASKS}
     for ws_name, task, purpose, name in task_datasets(settings):
         try:
-            ds = client.datasets(name=name, workspace=ws_name)
+            ds = resolve(ws_name, name)
             if ds is None:
                 continue
             prog = dict(ds.progress())
@@ -775,7 +793,8 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
 def process_domain(
     domain: str,
     client,
-    http: "httpx.Client",
+    resolve,
+    http: httpx.Client,
     *,
     use_export: bool = False,
     scratch_base: Path,
@@ -802,8 +821,8 @@ def process_domain(
             config=clean_cfg,
             overrides={"argilla": {"api_url": os.environ.get("ARGILLA_API_URL")}},
         )
-        progress = fetch_progress(client, settings)
-        responses = fetch_responses(client, http, settings)
+        progress = fetch_progress(resolve, settings)
+        responses = fetch_responses(resolve, http, settings)
 
         # The export feeds both IAA and label-stats. Default: write our own throwaway export
         # into the scratch tree, taking the dir from the writer rather than rebuilding
@@ -928,7 +947,7 @@ def pooled_agreement(
     retrieval), so concatenation cannot merge units across domains.
 
     The pooled export is written under ``scratch_base`` — never into
-    ``data/annotation/exports/``, which is published by eval-push and whose subdirectories
+    ``data/annotation/exports/``, which is published by transfer-push and whose subdirectories
     are read downstream as the domain list.
     """
     pooled_dir = scratch_base / "annotation" / "exports" / POOLED_EXPORT_ID
@@ -980,7 +999,9 @@ def pooled_agreement(
     per_task: dict = {}
     for ta in report.tasks:
         task = ta.task
-        marginals = calibration_marginals(pooled_dir / f"{task.value}.csv", _LABELS[task])
+        marginals = calibration_marginals(
+            pooled_dir / f"{task.value}.csv", _LABELS[task]
+        )
         per_label = {}
         for lab in ta.labels:
             per_label[lab.label] = {
@@ -1003,9 +1024,9 @@ def pooled_agreement(
 
 
 def run(domains: list[str], *, use_export: bool = False) -> dict:
-    url = os.environ.get("ARGILLA_API_URL")
-    key = os.environ["ARGILLA_API_KEY"]
+    url, key = ws.require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
     client = resolve_argilla_client(url, key)
+    resolve = dataset_lookup(client)  # shared by progress + responses, all domains
     NAME_TO_UUID.update(
         {name: str(uid) for uid, name in build_user_lookup(client).items()}
     )
@@ -1021,15 +1042,19 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     tot_completeness = empty_completeness()
 
     # scratch: throwaway exports live here, never in the published exports tree.
-    with httpx.Client(
-        base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
-    ) as http, tempfile.TemporaryDirectory(prefix="annotation-log-export-") as scratch:
+    with (
+        httpx.Client(
+            base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
+        ) as http,
+        tempfile.TemporaryDirectory(prefix="annotation-log-export-") as scratch,
+    ):
         for domain in domains:
             log(f"=== {domain} ===")
             try:
                 block = process_domain(
                     domain,
                     client,
+                    resolve,
                     http,
                     use_export=use_export,
                     scratch_base=Path(scratch),
@@ -1139,7 +1164,9 @@ def print_summary(result: dict) -> None:
 
     per_task = (result.get("pooled_agreement") or {}).get("per_task") or {}
     if per_task:
-        print("\npooled α (unweighted mean across labels, item-level data from all domains):")
+        print(
+            "\npooled α (unweighted mean across labels, item-level data from all domains):"
+        )
         for task, tv in per_task.items():
             degen = [
                 lab
@@ -1194,23 +1221,34 @@ def self_check() -> int:
     # session breaks are still reported.
     r2 = cadence(recs[:3], threshold_s=1800, min_records=5)
     assert r2["median_active_gap_s"] is None and r2["n_gaps_used"] == 2, r2
-    assert r2["mean_gap_s"] is None and r2["gap_p25_s"] is None and r2["gap_p75_s"] is None, r2
+    assert (
+        r2["mean_gap_s"] is None and r2["gap_p25_s"] is None and r2["gap_p75_s"] is None
+    ), r2
     # A single kept gap must not blow up: every quantile is that gap.
     r3 = cadence(recs[:2], threshold_s=1800, min_records=1)
     assert r3["gap_p25_s"] == r3["gap_p75_s"] == r3["median_active_gap_s"] == 300.0, r3
     # The pooled view carries the same four statistics, so a report can quote a
     # distribution per task/domain without reaching into by_annotator. It applies the
     # module-level MIN_RECORDS, so 3 pooled gaps are suppressed...
-    thin = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in recs])
+    thin = cadence_report(
+        [{"user_id": "u1", "at": at, "record_id": k} for k, at in recs]
+    )
     assert thin["per_annotator"]["pooled_median_active_gap_s"] is None, thin
     assert thin["per_annotator"]["n_gaps_used"] == 3, thin
     # ...while 6 gaps (five of 300s, one of 360s) report the whole distribution.
-    stream = [("r%d" % i, base + timedelta(minutes=m)) for i, m in enumerate([0, 5, 10, 15, 20, 25, 31])]
-    pooled = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in stream])["per_annotator"]
+    stream = [
+        (f"r{i}", base + timedelta(minutes=m))
+        for i, m in enumerate([0, 5, 10, 15, 20, 25, 31])
+    ]
+    pooled = cadence_report(
+        [{"user_id": "u1", "at": at, "record_id": k} for k, at in stream]
+    )["per_annotator"]
     assert pooled["n_gaps_used"] == 6, pooled
     assert pooled["pooled_median_active_gap_s"] == 300.0, pooled
     assert pooled["pooled_mean_gap_s"] == 310.0, pooled  # (300*5 + 360) / 6
-    assert pooled["pooled_gap_p25_s"] == 300.0 and pooled["pooled_gap_p75_s"] == 300.0, pooled
+    assert (
+        pooled["pooled_gap_p25_s"] == 300.0 and pooled["pooled_gap_p75_s"] == 300.0
+    ), pooled
     print("self-check OK")
     return 0
 

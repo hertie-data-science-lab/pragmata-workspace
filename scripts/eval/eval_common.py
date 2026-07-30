@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import workspace as ws  # noqa: E402
+import workspace as ws
 
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 
@@ -41,7 +41,13 @@ LABELS: dict[str, tuple[str, ...]] = {
         "source_cited",
         "fabricated_source",
     ),
-    "generation": ("proper_action", "response_on_topic", "helpful", "incomplete", "unsafe_content"),
+    "generation": (
+        "proper_action",
+        "response_on_topic",
+        "helpful",
+        "incomplete",
+        "unsafe_content",
+    ),
 }
 
 # The unit that must be unique before scoring, matching pragmata's
@@ -100,7 +106,11 @@ def programmes(exports: Path) -> list[str]:
     """
     if not exports.is_dir():
         raise SystemExit(f"no such export tree: {exports}")
-    return sorted(p.name for p in exports.iterdir() if p.is_dir() and p.name not in EXCLUDED_PROGRAMMES)
+    return sorted(
+        p.name
+        for p in exports.iterdir()
+        if p.is_dir() and p.name not in EXCLUDED_PROGRAMMES
+    )
 
 
 # Columns every filter and metric below depends on. Asserted once at read time so a
@@ -110,8 +120,14 @@ def programmes(exports: Path) -> list[str]:
 # is the exact defect this pipeline exists to prevent.
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
-        "record_uuid", "annotator_id", "response_status", "calibration",
-        "chunk_id", "chunk_rank", "n_retrieved_chunks", "panel_complete",
+        "record_uuid",
+        "annotator_id",
+        "response_status",
+        "calibration",
+        "chunk_id",
+        "chunk_rank",
+        "n_retrieved_chunks",
+        "panel_complete",
     ),
     "grounding": ("record_uuid", "annotator_id", "response_status", "calibration"),
     "generation": ("record_uuid", "annotator_id", "response_status", "calibration"),
@@ -125,7 +141,12 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
 # STRICT filter. Labels are deliberately NOT here: a discarded response legitimately
 # has none.
 NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
-    "retrieval": ("response_status", "calibration", "panel_complete", "n_retrieved_chunks"),
+    "retrieval": (
+        "response_status",
+        "calibration",
+        "panel_complete",
+        "n_retrieved_chunks",
+    ),
     "grounding": ("response_status", "calibration"),
     "generation": ("response_status", "calibration"),
 }
@@ -144,14 +165,20 @@ def read_task(exports: Path, programme: str, task: str) -> pd.DataFrame:
     frame = pd.read_csv(path)
     if frame.empty:
         return pd.DataFrame()
-    missing = [c for c in REQUIRED_COLUMNS[task] + LABELS[task] if c not in frame.columns]
+    missing = [
+        c for c in REQUIRED_COLUMNS[task] + LABELS[task] if c not in frame.columns
+    ]
     if missing:
         raise SystemExit(
             f"{path} is missing column(s) the report filters require: {', '.join(missing)}.\n"
             f"The export schema has changed; fix the scripts rather than letting a filter "
             f"silently pass every row through."
         )
-    nulls = {c: int(frame[c].isna().sum()) for c in NON_NULL_COLUMNS[task] if frame[c].isna().any()}
+    nulls = {
+        c: int(frame[c].isna().sum())
+        for c in NON_NULL_COLUMNS[task]
+        if frame[c].isna().any()
+    }
     if nulls:
         detail = ", ".join(f"{c} ({n} row(s))" for c, n in nulls.items())
         raise SystemExit(
@@ -267,7 +294,11 @@ def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
     Grounding and generation carry one record per query, so their records are never
     mixed and this reduces to the plain row filter — one rule covers all three tasks.
     """
-    if frame.empty or "calibration" not in frame.columns or "record_uuid" not in frame.columns:
+    if (
+        frame.empty
+        or "calibration" not in frame.columns
+        or "record_uuid" not in frame.columns
+    ):
         return frame
     calibration = frame["calibration"].astype(bool)
     all_calibration = calibration.groupby(frame["record_uuid"]).transform("all")
@@ -287,7 +318,9 @@ def complete_panels(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[frame["panel_complete"].astype(bool)]
 
 
-def consolidated_prevalence(frame: pd.DataFrame, task: str, label: str) -> tuple[int, int]:
+def consolidated_prevalence(
+    frame: pd.DataFrame, task: str, label: str
+) -> tuple[int, int]:
     """(n_items, n_true) for one label, majority-consolidated per annotation unit.
 
     Follows pragmata's consolidate_labels_by_majority: a strict majority decides the
@@ -300,26 +333,25 @@ def consolidated_prevalence(frame: pd.DataFrame, task: str, label: str) -> tuple
     keys = list(UNIT_KEYS[task])
     grouped = frame.groupby(keys, sort=False)[label].agg(["sum", "count", "first"])
     positive = grouped["sum"] * 2
-    consolidated = (positive > grouped["count"]) | ((positive == grouped["count"]) & grouped["first"].astype(bool))
+    consolidated = (positive > grouped["count"]) | (
+        (positive == grouped["count"]) & grouped["first"].astype(bool)
+    )
     return len(grouped), int(consolidated.sum())
 
 
 def latest_snapshot(nth: int = 1) -> dict:
     """The Nth-from-last snapshot in logs/annotation/log.jsonl (1 = last).
 
-    Reading and the compatibility guards live in ws.read_snapshots / ws.check_snapshot,
-    so these reports, the annotation report tables and the plots all accept and refuse
-    exactly the same snapshots.
+    Reading and the compatibility guards live in ws.select_snapshot, so these reports, the
+    annotation report tables and the plots all accept and refuse exactly the same
+    snapshots, and only the selected line is parsed.
     """
-    snapshots = ws.read_snapshots()
     if nth < 1:
-        # snapshots[-0] is snapshots[0], the oldest - the opposite of "latest".
-        raise SystemExit(f"--snapshot counts back from the last and must be >= 1, got {nth}.")
-    if nth > len(snapshots):
-        raise SystemExit(f"only {len(snapshots)} snapshots available, asked for {nth} from last.")
-    snapshot = snapshots[-nth]
-    ws.check_snapshot(snapshot, where=f"{nth} from last")
-    return snapshot
+        # -0 is 0, the oldest snapshot - the opposite of "latest".
+        raise SystemExit(
+            f"--snapshot counts back from the last and must be >= 1, got {nth}."
+        )
+    return ws.select_snapshot(line=-nth)
 
 
 def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:

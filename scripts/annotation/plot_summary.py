@@ -22,12 +22,12 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.dates as mdates  # noqa: E402
-import matplotlib.patches as mpatches  # noqa: E402
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.dates as mdates
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import workspace as ws  # noqa: E402
+import workspace as ws
 
 TASK_ORDER = ["retrieval", "grounding", "generation"]
 
@@ -164,7 +164,7 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
             prev,
             color=colors,
             xerr=xerr,
-            error_kw=dict(ecolor="#333333", capsize=3, lw=1),
+            error_kw={"ecolor": "#333333", "capsize": 3, "lw": 1},
         )
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)
@@ -203,10 +203,7 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
 def plot_pace(snap: dict, out: Path) -> bool:
     """Pooled median active gap by domain and by task (minutes).
 
-    Both panels read a pooled median straight from the snapshot. The task panel used to
-    compute a gap-count-weighted mean of per-annotator medians instead, which is a
-    different statistic (a mean of medians, not the median of the pooled gaps) and read
-    high; report_tables.py already published the pooled value from `total.timing_by_task`.
+    Both panels read a pooled median straight from the snapshot rather than deriving one.
     """
     domains = snap.get("domains", {})
     dom = []
@@ -279,15 +276,11 @@ def main() -> None:
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-date out-dir, matches report_tables)
 
+    # The whole history for the burn-up/burn-down series, which only reads counts and so
+    # spans every schema version; the single --line snapshot the other panels describe is
+    # checked, and an incompatible one exits rather than rendering silently.
     snaps = ws.read_snapshots(args.jsonl)
-    try:
-        snap = snaps[args.line]
-    except IndexError:
-        sys.exit(f"line {args.line} out of range ({len(snaps)} snapshots)")
-    # Same guard as report_tables: refuse a snapshot these panels cannot describe rather
-    # than rendering one silently. The burn-up/burn-down series only reads counts, which
-    # every schema version carries, so the whole history stays plottable.
-    ws.check_snapshot(snap, where=f"line {args.line}")
+    snap = ws.select_snapshot(args.jsonl, args.line)
     if args.out_dir:
         out = args.out_dir
         out.mkdir(parents=True, exist_ok=True)

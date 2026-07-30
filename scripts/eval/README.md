@@ -29,6 +29,8 @@ structurally: the two VNets are not peered, so there is no route between them.
 
 ## `sync.sh` - the pipe
 
+Lives in `scripts/transfer/`, not here: it moves any tree and is not eval-specific.
+
 ```
 sync.sh push <src> <prefix>    # CPU→Blob: upload a tree + a sha256 manifest
 sync.sh pull <prefix>          # Blob→box: download into data/transfer/<prefix>/, then verify
@@ -43,9 +45,9 @@ receiving end and fails loudly on any mismatch.
 Driven from the `Makefile`:
 
 ```
-make eval-push SRC=<tree> PREFIX=<p>  # upload <tree> to blob <prefix>/ (+ manifest, pin)
-make eval-pull PREFIX=predictions     # blob predictions/ → data/transfer/predictions/ (+ verify)
-make eval-verify PREFIX=exports       # re-check a pulled tree against its manifest
+make transfer-push SRC=<tree> PREFIX=<p>  # upload <tree> to blob <prefix>/ (+ manifest, pin)
+make transfer-pull PREFIX=predictions     # blob predictions/ → data/transfer/predictions/ (+ verify)
+make transfer-verify PREFIX=exports       # re-check a pulled tree against its manifest
 ```
 
 ## Ownership invariant (staging)

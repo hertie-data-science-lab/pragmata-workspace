@@ -10,5 +10,5 @@ reports/
     └── _latest -> <date>  symlink to the most recent
 ```
 
-Written by `make report` (`report_tables.py` + `plot_summary.py`) from
+Written by `make annotation-report` (`report_tables.py` + `plot_summary.py`) from
 `logs/annotation/log.jsonl`.
