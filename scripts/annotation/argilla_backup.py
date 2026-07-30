@@ -10,14 +10,16 @@ dump   (default) -- snapshot EVERY dataset to disk. Read-only against the
        discarded) -- so annotations restore faithfully (to_disk drops it).
 
 restore <dir> [--workspace WS ...] [--dataset NAME ...] [--record-id ID ...]
-       [--only {metadata,suggestions,responses} ...] [--apply] -- restore the
-       full snapshot (fields, metadata, suggestions, responses) back into
-       Argilla, creating missing datasets/workspaces and writing onto existing
-       ones alike. Narrow scope with --workspace/--dataset/--record-id
-       (repeatable, AND'd together; default: everything in the manifest); pass
-       --only to restore just some attributes (fields are always included).
-       Always prints a preview of what would change first; nothing is written
-       unless --apply is given.
+       [--record-id-file FILE ...] [--only {metadata,suggestions,responses} ...]
+       [--apply] -- restore the full snapshot (fields, metadata, suggestions,
+       responses) back into Argilla, creating missing datasets/workspaces and
+       writing onto existing ones alike. Narrow scope with
+       --workspace/--dataset/--record-id/--record-id-file (repeatable, AND'd
+       together; default: everything in the manifest); pass --only to restore
+       just some attributes (fields are always included). Always prints a
+       preview of what would change first; nothing is written unless --apply.
+       Dataset directories are resolved under the manifest's own directory, so
+       a dump restores from wherever it was fetched to.
 
        Uses Settings.from_json + the Dataset(workspace=) constructor, NOT
        from_disk -- from_disk silently ignores a Workspace object and falls
@@ -41,6 +43,8 @@ import workspace as ws  # noqa: E402
 
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 
+from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
+
 BACKUP_ROOT = ws.ROOT / "argilla_backup"
 
 
@@ -50,7 +54,7 @@ def _client() -> rg.Argilla:
     if not (url and key):
         sys.exit("missing ARGILLA_API_URL / ARGILLA_API_KEY (set in .env)")
     print(f"connecting to {url}")
-    return rg.Argilla(api_url=url, api_key=key)
+    return resolve_argilla_client(url, key)
 
 
 # --- status-preserving (de)serialization --------------------------------------
@@ -237,8 +241,14 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 def cmd_dump() -> None:
     client = _client()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    # The timestamp is second-resolution, so two dumps in the same second would collide;
+    # take the next free suffix rather than aborting a read-only operation.
     root = BACKUP_ROOT / ts
-    root.mkdir(parents=True, exist_ok=False)
+    n = 1
+    while root.exists():
+        n += 1
+        root = BACKUP_ROOT / f"{ts}-{n}"
+    root.mkdir(parents=True)
     print(f"backup root: {root}")
 
     datasets = list(client.datasets)
@@ -246,8 +256,8 @@ def cmd_dump() -> None:
 
     manifest: list[dict] = []
     for i, ds in enumerate(datasets, 1):
-        ws = ds.workspace.name
-        key = f"{ws}__{ds.name}"
+        ws_name = ds.workspace.name  # not `ws`: that is the workspace lib module
+        key = f"{ws_name}__{ds.name}"
         target = root / key
         target.mkdir(parents=True, exist_ok=False)
 
@@ -266,7 +276,7 @@ def cmd_dump() -> None:
         manifest.append(
             {
                 "key": key,
-                "workspace": ws,
+                "workspace": ws_name,
                 "name": ds.name,
                 "records": n_rec,
                 "submitted_responses": n_sub,
@@ -292,6 +302,26 @@ def cmd_dump() -> None:
 
 
 # --- restore -------------------------------------------------------------------
+
+
+def _dataset_dir(root: Path, entry: dict) -> Path:
+    """One manifest entry's directory, resolved relative to the manifest itself.
+
+    The manifest records an absolute ``path`` from dump time, so a dump copied or
+    fetched to any other location could not be restored from it. ``key`` is the
+    directory name under the manifest, so prefer that and fall back to the recorded
+    path only when the local directory is missing.
+    """
+    local = root / entry["key"]
+    if local.is_dir():
+        return local
+    recorded = entry.get("path")
+    if recorded and Path(recorded).is_dir():
+        return Path(recorded)
+    raise SystemExit(
+        f"no directory for {entry['key']} under {root} "
+        f"(the manifest recorded {recorded or 'no path'}, which is not there either)"
+    )
 
 
 def cmd_restore(
@@ -325,7 +355,7 @@ def cmd_restore(
     backup_by_entry: dict[int, list[dict]] = {}
     found_ids: set[str] = set()
     for i, m in enumerate(entries):
-        records = json.loads((Path(m["path"]) / "records_full.json").read_text())
+        records = json.loads((_dataset_dir(root, m) / "records_full.json").read_text())
         if record_id_set is not None:
             records = [d for d in records if d["id"] in record_id_set]
         backup_by_entry[i] = records
@@ -452,7 +482,7 @@ def cmd_restore(
             wspace = workspace(
                 ws_name
             )  # resolve/create first — datasets() needs the ws to exist
-            settings = rg.Settings.from_json(Path(m["path"]) / "settings.json")
+            settings = rg.Settings.from_json(_dataset_dir(root, m) / "settings.json")
             ds = rg.Dataset(
                 name=name, workspace=wspace, settings=settings, client=client
             ).create()

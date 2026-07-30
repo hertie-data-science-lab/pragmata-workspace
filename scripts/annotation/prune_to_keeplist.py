@@ -22,17 +22,29 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
-import argilla as rg
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import workspace as ws  # noqa: E402
+
+ws.load_env()  # configs/settings.conf + .env; existing env wins
+
+from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
 
 
-def _client() -> rg.Argilla:
-    return rg.Argilla(api_url=os.environ["ARGILLA_API_URL"], api_key=os.environ["ARGILLA_API_KEY"])
+def _client():
+    url = os.environ.get("ARGILLA_API_URL")
+    key = os.environ.get("ARGILLA_API_KEY")
+    if not (url and key):
+        sys.exit("missing ARGILLA_API_URL / ARGILLA_API_KEY (set in .env)")
+    return resolve_argilla_client(url, key)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--keep-lists", type=Path, required=True, help="dir of <ws>__<dataset>.ids files")
     ap.add_argument("--workspace", action="append", default=None, help="limit to these workspace(s)")
     ap.add_argument("--apply", action="store_true", help="delete; default preview only")
