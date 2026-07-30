@@ -667,7 +667,25 @@ def task_datasets(settings) -> Iterator[tuple[str, Task, str, str]]:
                 )
 
 
-def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
+def dataset_lookup(client):
+    """Memoised ``(workspace, name) -> dataset | None`` resolver.
+
+    fetch_progress and fetch_responses walk the same 48 datasets, so without this each
+    domain resolves every one twice over the network. Callers keep their own error
+    handling: this only caches what the client returned, including None.
+    """
+    cache: dict[tuple[str, str], object | None] = {}
+
+    def resolve(ws_name: str, name: str):
+        key = (ws_name, name)
+        if key not in cache:
+            cache[key] = client.datasets(name=name, workspace=ws_name)
+        return cache[key]
+
+    return resolve
+
+
+def fetch_responses(resolve, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
     """Submitted-response events per task, via the Argilla REST records endpoint.
 
     The SDK drops per-response timestamps; the REST payload keeps them. Returns
@@ -676,7 +694,7 @@ def fetch_responses(client, http: "httpx.Client", settings) -> dict[Task, list[d
     """
     out: dict[Task, list[dict]] = {t: [] for t in TASKS}
     for ws_name, task, purpose, name in task_datasets(settings):
-        ds = client.datasets(name=name, workspace=ws_name)
+        ds = resolve(ws_name, name)
         if ds is None:
             continue
         offset, limit = 0, 1000
@@ -752,7 +770,7 @@ def sanitized_config(domain: str) -> tuple[Path, dict]:
     return Path(path), clean
 
 
-def fetch_progress(client, settings) -> dict[Task, dict]:
+def fetch_progress(resolve, settings) -> dict[Task, dict]:
     """Per-task record-level progress from Argilla ``dataset.progress()``.
 
     Returns ``{Task: {"production": {total, completed, pending}|absent,
@@ -761,7 +779,7 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
     out: dict[Task, dict] = {t: {} for t in TASKS}
     for ws_name, task, purpose, name in task_datasets(settings):
         try:
-            ds = client.datasets(name=name, workspace=ws_name)
+            ds = resolve(ws_name, name)
             if ds is None:
                 continue
             prog = dict(ds.progress())
@@ -775,6 +793,7 @@ def fetch_progress(client, settings) -> dict[Task, dict]:
 def process_domain(
     domain: str,
     client,
+    resolve,
     http: "httpx.Client",
     *,
     use_export: bool = False,
@@ -802,8 +821,8 @@ def process_domain(
             config=clean_cfg,
             overrides={"argilla": {"api_url": os.environ.get("ARGILLA_API_URL")}},
         )
-        progress = fetch_progress(client, settings)
-        responses = fetch_responses(client, http, settings)
+        progress = fetch_progress(resolve, settings)
+        responses = fetch_responses(resolve, http, settings)
 
         # The export feeds both IAA and label-stats. Default: write our own throwaway export
         # into the scratch tree, taking the dir from the writer rather than rebuilding
@@ -1005,6 +1024,7 @@ def pooled_agreement(
 def run(domains: list[str], *, use_export: bool = False) -> dict:
     url, key = ws.require_env("ARGILLA_API_URL", "ARGILLA_API_KEY")
     client = resolve_argilla_client(url, key)
+    resolve = dataset_lookup(client)  # shared by progress + responses, all domains
     NAME_TO_UUID.update(
         {name: str(uid) for uid, name in build_user_lookup(client).items()}
     )
@@ -1029,6 +1049,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
                 block = process_domain(
                     domain,
                     client,
+                    resolve,
                     http,
                     use_export=use_export,
                     scratch_base=Path(scratch),

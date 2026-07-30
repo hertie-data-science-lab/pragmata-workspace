@@ -48,11 +48,11 @@ STAGES=(querygen-run bot-run combine-run annotation-setup annotation-import)
 FROM="querygen-run"; TO="annotation-import"; FILTER=""; JOBS="${N_PARALLEL_BOTS:-4}"
 DO_PREFLIGHT=1; DRY_RUN=0
 
-# Help text is the header comment between the >>> usage / <<< usage markers, so it
-# cannot drift out of range the way a hardcoded line span does.
+# Help text is the header comment between the marker lines, so it cannot drift out of
+# range the way a hardcoded line span does.
 usage() {
-  sed -n '/^#>>> usage/,/^#<<< usage/{ /^#[<>]\{3\} usage/d; s/^# \{0,1\}//; p; }' \
-    "${BASH_SOURCE[0]}"
+  sed -n '/^#>>> usage/,/^#<<< usage/p' "${BASH_SOURCE[0]}" \
+    | sed '1d; $d; s/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
