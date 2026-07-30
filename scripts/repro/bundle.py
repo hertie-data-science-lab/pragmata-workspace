@@ -64,8 +64,9 @@ def bundle_dir(name: str) -> Path:
 def header(bundle: Path, field: str) -> str | None:
     """Value of a `<field>: <value>` line in the bundle README, or None.
 
-    Two headers are machine-read: `kind` (lineage or freeze) and `fetch` (where
-    out-of-git artefacts live, printed when a pin comes out ABSENT).
+    Three headers are machine-read: `kind` (lineage or freeze), `status` (`retired` drops a
+    bundle out of replay composition), and `fetch` (where out-of-git artefacts live,
+    printed when a pin comes out ABSENT).
     """
     for line in (bundle / "README.md").read_text().splitlines():
         if line.lower().startswith(f"{field}:"):
@@ -215,21 +216,30 @@ def cmd_verify(args: argparse.Namespace) -> int:
 # --- reproduce ---------------------------------------------------------------------
 
 
+def retired(bundle: Path) -> bool:
+    """Whether the bundle is excluded from replay by a `status: retired` header.
+
+    A retired bundle declared an end state that was never applied and is no longer wanted,
+    so replaying it would move live away from where it actually is. `kind:` stays whatever
+    it was — the bundle is still an honest record of a decision, just not a live one.
+    """
+    return header(bundle, "status") == "retired"
+
+
 def compose_keep_lists(dest: Path) -> dict[str, list[tuple[str, int]]]:
-    """Copy every lineage bundle's keep-lists into `dest`, latest bundle winning.
+    """Copy every active lineage bundle's keep-lists into `dest`, latest bundle winning.
 
     Bundles replay in date order (their dir names sort by ISO date). A later bundle's
     `<ws>__<dataset>.ids` REPLACES the earlier one wholesale: a keep-list is a declared
     end state for that dataset, not an addition. Unioning them instead would resurrect
-    exactly the records a later bundle descoped, which is why the composed total is
-    below the first bundle's.
+    exactly the records a later bundle descoped.
 
     Returns each keep-list's declaring bundles in order, so the caller can report which
     ones were superseded.
     """
     seen: dict[str, list[tuple[str, int]]] = {}
     for bundle in bundles():
-        if kind(bundle) != "lineage":
+        if kind(bundle) != "lineage" or retired(bundle):
             continue
         for f in sorted((bundle / "keep_lists").glob("*.ids")):
             ids = [ln for ln in f.read_text().splitlines() if ln.strip()]
@@ -245,6 +255,11 @@ def cmd_reproduce(args: argparse.Namespace) -> int:
             f"{bundle.name} is kind: {found} — only lineage bundles replay. A freeze is a "
             "self-contained record of something that happened once; verify it instead."
         )
+    if retired(bundle):
+        raise SystemExit(
+            f"{bundle.name} is status: retired — it is excluded from the composition, so "
+            "replaying toward it would move live away from where it is. See its README."
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         keep_lists = Path(tmp)
@@ -255,6 +270,9 @@ def cmd_reproduce(args: argparse.Namespace) -> int:
         print(
             "== composed keep-lists: every lineage bundle in date order, latest wins =="
         )
+        for skipped in bundles():
+            if retired(skipped):
+                print(f"  skipped, status: retired -> {skipped.name}")
         for name, chain in sorted(seen.items()):
             if len(chain) > 1:
                 trail = " -> ".join(f"{n} ({src})" for src, n in chain)

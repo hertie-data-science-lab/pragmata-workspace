@@ -22,14 +22,17 @@ criteria, the verification result, and provenance.
 The full corpus + backup pins live in stage 1's `pins.sha256`; the reproduction **tool** is
 first-class at `scripts/annotation/prune_to_keeplist.py`.
 
-## Superseded by stage 3
+## This is the end of the lineage
 
-This bundle's keep-lists and `_counts.json` are left at their audited 2026-07-01 values
-(4,244 ids, `Digitalisierung-und-Gemeinwohl_generation/generation_production` = 100). The
-2026-07-02 descope ([`../2026-07-02-generation-descope/`](../2026-07-02-generation-descope/))
-amends that one dataset to 80, so the **declared lineage end state is 4,224 ids** - what
-`repro-reproduce` converges to. Editing this bundle instead would rewrite an
-independently-audited record.
+These keep-lists and `_counts.json` stand at their audited 2026-07-01 values — **4,244 ids**,
+`Digitalisierung-und-Gemeinwohl_generation/generation_production` = 100 — and that is also
+where the lineage ends, so it is what `repro-reproduce` converges to and what live holds.
+
+The 2026-07-02 descope
+([`../2026-07-02-generation-descope/`](../2026-07-02-generation-descope/)) would have amended
+that one dataset to 80, but it was never applied and was retired on 2026-07-30 once the
+annotators had completed all 20 records it would have dropped. It carries `status: retired`
+and is excluded from composition.
 
 ## Reproduce
 
@@ -46,10 +49,10 @@ make repro-reproduce PIN=2026-07-01-annotation-curation MODE=responses BACKUP=<d
 - **MODE=structure** rebuilds record structure from the corpus (no responses).
 - **MODE=responses** restores the exact state incl. annotations from the backup.
 - **No MODE/APPLY** runs `prune_to_keeplist.py` in preview against the current instance.
-  Every keep-list of every lineage bundle is composed first, latest date winning per
-  dataset, so the preview is measured against the composed 4,224-id state - not this
-  bundle's 4,244. On a live instance already at that state it reports `delete 0` and no
-  missing keep-ids, and that preview *is* the verification.
+  Every active lineage bundle's keep-lists are composed first, latest date winning per
+  dataset; with the descope retired that composition is this bundle's 4,244 ids. On a live
+  instance at that state it reports `delete 0` and no missing keep-ids, and that preview
+  *is* the verification.
 
 ## Why a prune step (not a plain re-import)
 

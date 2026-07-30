@@ -9,11 +9,12 @@
 |---|---|---|
 | `2026-05-initial-import/` | lineage | Original build + import: the partition manifests, `provenance.md` (querygen model/dates, the non-determinism caveat), and pins for the external corpus + pre-prune backup. |
 | `2026-07-01-annotation-curation/` | lineage | The curation, 21,346 → 4,244 records: `curation_record.md`, the per-dataset keep-lists, `apply_log.jsonl`. |
-| `2026-07-02-generation-descope/` | lineage | Amends one dataset to 80 records, taking the declared lineage end state to **4,224**. |
+| `2026-07-02-generation-descope/` | lineage, **retired** | Would have taken one dataset to 80 records. Declared 2026-07-02, never applied, retired 2026-07-30 once its premise expired (the annotators completed all 20 records it would have dropped). Excluded from replay. |
 | `2026-07-29-eval-report-freeze/` | freeze | The canonical annotation export behind the BSt report's human-annotation and fairness numbers. Never replayed. |
 
 `kind: lineage` bundles are replayed in date order to rebuild the live Argilla instance;
-`kind: freeze` bundles are self-contained records of a single run.
+`kind: freeze` bundles are self-contained records of a single run. A `status: retired` header
+drops a bundle out of replay while keeping it on the record.
 
 ## Targets
 
@@ -35,10 +36,11 @@ Reproduction is **declarative**: the keep-lists are the desired end state, and
 on its own — import fans every query into all three tasks, so the superset has to be built
 and then pruned down.
 
-`repro-reproduce` composes **every** lineage bundle's keep-lists in date order before
-pruning, later dates overriding earlier ones per dataset. That is what makes the replay land
-on the declared 4,224-record end state rather than stopping at the 2026-07-01 bundle's 4,244.
-Whether live already matches that state is what the preview reports; do not assume it.
+`repro-reproduce` composes **every** active lineage bundle's keep-lists in date order before
+pruning, later dates overriding earlier ones per dataset, and reports what it skipped. The
+lineage currently ends at **4,244 records** across 48 datasets — the 2026-07-01 keep-lists,
+the 2026-07-02 descope being retired. Whether live still matches that is what the preview
+reports; do not assume it.
 
 Point `ARGILLA_API_URL`/`ARGILLA_API_KEY` at the target, fetch the pinned artefacts, then:
 

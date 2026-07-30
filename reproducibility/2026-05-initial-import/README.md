@@ -41,9 +41,10 @@ for d in configs/annotation/domains/*.yaml; do make annotation-import DOMAIN=$(b
 > `annotation-import`, `checksums.sha256` -> `pins.sha256`); the recipe above is the
 > current, runnable form. The artifacts and the pinned hashes are unchanged.
 
-This rebuilds the full imported instance. To then reduce it to the current curated set,
-continue with `make repro-reproduce PIN=2026-07-01-annotation-curation` — which composes
-every later lineage bundle's keep-lists, so it lands on the live end state, not stage 2's.
+This rebuilds the full imported instance. To then reduce it to the curated set, continue with
+`make repro-reproduce PIN=2026-07-01-annotation-curation` — which composes every active
+lineage bundle's keep-lists in date order, so it lands on the end of the lineage (4,244
+records) whatever later bundles exist.
 
 > The corpus itself is **not regenerable to identical bytes** - querygen is
 > non-deterministic LLM output over a live bot (see `provenance.md`). Reproduction fetches

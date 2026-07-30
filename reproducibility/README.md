@@ -7,11 +7,15 @@ date order. Nothing else lives here.
 
 Every bundle holds exactly two required files:
 
-- **`README.md`** — what it records, why, and how to verify it. Two header lines beside the
+- **`README.md`** — what it records, why, and how to verify it. Three header lines beside the
   title are machine-read:
   - `kind: lineage` — a step that is **replayed in date order** to rebuild the live Argilla
     instance. `kind: freeze` — a **self-contained record** of a run that happened once,
     **never replayed**.
+  - `status: retired` — optional. Drops the bundle out of replay composition: it declared an
+    end state that was never applied and is no longer wanted, so replaying it would move live
+    away from where it actually is. `kind:` stays whatever it was — the bundle is still an
+    honest record of a decision, just not a live one.
   - `fetch: <where to get them>` — printed when a pin comes out `ABSENT`, for artefacts
     that live outside git.
 - **`pins.sha256`** — *generated*, never hand-edited. One `<sha256>  <path>` line per file,
@@ -35,15 +39,17 @@ by a bundle, plus the most recent.
 |---|---|---|
 | `2026-05-initial-import/` | lineage | The original build + import of the corpus (querygen → bot → combine → import). Holds the original partition manifests, `provenance.md`, and the pins for the external corpus + pre-prune backup. |
 | `2026-07-01-annotation-curation/` | lineage | The curation: 21,346 → 4,244 records. Holds `curation_record.md`, the per-dataset keep-lists, the as-run audit log, and the curated-corpus pins. |
-| `2026-07-02-generation-descope/` | lineage | Amends one dataset: `Digitalisierung-und-Gemeinwohl_generation/generation_production` 100 → 80 (dropped 20 records with zero submissions). |
+| `2026-07-02-generation-descope/` | lineage, **retired** | Would have taken `Digitalisierung-und-Gemeinwohl_generation/generation_production` 100 → 80. Declared 2026-07-02 on the premise that the 20 dropped records held no responses; never applied; retired 2026-07-30 once the annotators had completed all 20. Excluded from composition. |
 | `2026-07-29-eval-report-freeze/` | freeze | The canonical annotation export behind every human-annotation and fairness number in the BSt report. Pins all 41 files so the figures stay reproducible while the live instance keeps moving. |
 
-The three lineage bundles compose to a **declared** end state of **4,224 records** across 48
-datasets. Whether live matches it is what `repro-reproduce`'s preview tells you — it is not
-an assumption. Composition is per keep-list **override, not union** — a later bundle's
+The lineage composes to an end state of **4,244 records** across 48 datasets — the
+2026-07-01 keep-lists, since the descope is retired. That matches live. Whether it still
+does is what `repro-reproduce`'s preview tells you; it is not an assumption.
+
+Composition is per keep-list **override, not union** — a later bundle's
 `<workspace>__<dataset>.ids` replaces the earlier one wholesale, because a keep-list
-declares that dataset's end state rather than adding to it. A union would resurrect the
-20 records the descope removed.
+declares that dataset's end state rather than adding to it. That rule is what makes a
+descope reachable at all, so it stays even though no active bundle currently exercises it.
 
 ## The three targets
 
