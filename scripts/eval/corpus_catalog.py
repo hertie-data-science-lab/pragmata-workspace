@@ -9,10 +9,10 @@ Joins to `retrieval_manifest.csv` on `doc_id` to ask whether retrieval
 over-represents any part of the corpus (by year, publisher, extent, or author gender).
 
 Extends the query pattern in `vectorstore_inventory.py` from aggregate counts to
-per-document rows, importing its DSN handling so the credential-hiding error paths live
-in one place. The connection string is never stored here: it is pulled at runtime from
-the dev container app's secret via `az`, and the connection is read-only. The author
-name parser is duplicated rather than imported, because there it is a nested closure.
+per-document rows, importing its DSN handling and author-name parser so the
+credential-hiding error paths and the name vocabulary live in one place. The connection
+string is never stored here: it is pulled at runtime from the dev container app's secret
+via `az`, and the connection is read-only.
 
 ## Author gender: what the columns mean, and what they cannot mean
 
@@ -51,10 +51,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# vectorstore_inventory.py owns the DSN handling: it pulls the secret via `az` and opens
-# a read-only connection, taking care never to echo the credential in an error. Imported
-# rather than copied so that handling lives in one place. `uv run --script` isolates
-# installed packages, not local imports, so the dependency-free workspace lib is
+# vectorstore_inventory.py owns the DSN handling (it pulls the secret via `az`, opens a
+# read-only connection, and never echoes the credential in an error) and the author-name
+# vocabulary. Imported rather than copied so both live in one place. `uv run --script`
+# isolates installed packages, not local imports, so the dependency-free workspace lib is
 # importable here too, giving this script the same dated output dir and provenance
 # sidecar contract as its four siblings. eval_common is NOT imported: it needs pandas,
 # which this script has no reason to install.
@@ -64,15 +64,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import vectorstore_inventory as vsi  # noqa: E402
 import workspace as ws  # noqa: E402
 
-# --- dev container app coordinates (shared with vectorstore_inventory.py) ---
+# --- shared with vectorstore_inventory.py: DB coordinates and author-name vocabulary ---
 MAIN_COLLECTION = vsi.MAIN_COLLECTION
 APP_NAME = vsi.APP_NAME
 RESOURCE_GROUP = vsi.RESOURCE_GROUP
+first_name = vsi.first_name
+FEMALE = vsi.FEMALE
+MALE = vsi.MALE
 
 AUTHOR_FIELDS = ("verf1", "verf2", "verf3")
-
-FEMALE = {"female", "mostly_female"}
-MALE = {"male", "mostly_male"}
 
 COLUMNS = [
     "doc_id",
@@ -92,24 +92,6 @@ COLUMNS = [
     "female_present",
     "author_genders_raw",
 ]
-
-
-def first_name(raw: str | None) -> str | None:
-    """Given name from a "Last, First" library string, or None if institutional.
-
-    Kept local because the equivalent in vectorstore_inventory.py is a closure nested
-    inside its gender report, so there is nothing importable; the two must stay in step
-    by hand. Drops role suffixes like "(Verf.)"/"(Hrsg.)" and treats a missing
-    "Last, First" comma as an institutional author rather than guessing a single token
-    is a surname.
-    """
-    if not raw:
-        return None
-    raw = re.sub(r"\(.*?\)", "", raw).strip()
-    if "," not in raw:
-        return None
-    given = raw.split(",", 1)[1].strip()
-    return given.split()[0].split("-")[0] if given else None
 
 
 def parse_year(raw: str | None) -> str:

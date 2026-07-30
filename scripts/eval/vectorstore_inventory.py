@@ -1,11 +1,11 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["psycopg2-binary", "gender-guesser"]
+# dependencies = ["psycopg2-binary"]
 # ///
 """Inventory the publikationsbot vector store (Postgres + pgvector).
 
-Answers two questions against BSt's live DB, cross-checked from independent sources:
+Answers two questions against the live DB, cross-checked from independent sources:
   1. How many publications does the bot have?    -> total + per-collection doc counts
   2. What are ALL the metadata fields?           -> union of jsonb keys, with glossary
 
@@ -13,9 +13,11 @@ The connection string is NOT stored here. It is pulled at runtime from the dev
 container app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares
 the app's resource group, so `az containerapp secret show` works without a VNet).
 
-Run (needs an active `az login` in the BSt tenant):
-    ./vectorstore_inventory.py               # count + all metadata fields
-    ./vectorstore_inventory.py --gender      # + rough author-gender breakdown (opt-in)
+Also the home of the DSN/connection helpers and the author-name vocabulary
+(`first_name`, `FEMALE`, `MALE`) that corpus_catalog.py imports.
+
+Run (needs an active `az login` in the tenant):
+    ./vectorstore_inventory.py               # counts + all metadata fields
 
 Env overrides (defaults target the dev app):
     PB_RESOURCE_GROUP, PB_APP_NAME, PB_SECRET_NAME
@@ -36,9 +38,9 @@ RESOURCE_GROUP = os.environ.get("PB_RESOURCE_GROUP", "rg-chatbot-dev-sweden-001"
 APP_NAME = os.environ.get("PB_APP_NAME", "publikationsbot-backend-dev")
 SECRET_NAME = os.environ.get("PB_SECRET_NAME", "publikationsbot-vectorstore-uri")
 
-# The collection holding the publications corpus. The gender pass is restricted
-# to it (author fields don't exist in the other collections); the counts/fields
-# reports still enumerate every collection.
+# The collection holding the publications corpus. Per-document work (corpus_catalog.py)
+# is restricted to it, since author fields don't exist in the other collections; the
+# counts/fields reports below still enumerate every collection.
 MAIN_COLLECTION = os.environ.get("PB_MAIN_COLLECTION", "azureopenaiembeddings")
 
 # German library/ILS metadata keys -> English meaning. Keys not listed here fall
@@ -73,6 +75,28 @@ FIELD_GLOSSARY = {
     "export_type": "Export type",
     "url": "URL",
 }
+
+
+# --- author-name vocabulary (shared with corpus_catalog.py) ---
+# gender-guesser's six-way verdict collapsed to the two resolved classes; anything else
+# (andy, unknown) stays unresolved rather than being folded into one of these.
+FEMALE = {"female", "mostly_female"}
+MALE = {"male", "mostly_male"}
+
+
+def first_name(raw: str | None) -> str | None:
+    """Given name from a "Last, First" library string, or None if institutional.
+
+    Drops role suffixes like "(Verf.)"/"(Hrsg.)" and treats a missing "Last, First"
+    comma as an institutional author rather than guessing a single token is a surname.
+    """
+    if not raw:
+        return None
+    raw = re.sub(r"\(.*?\)", "", raw).strip()
+    if "," not in raw:
+        return None
+    given = raw.split(",", 1)[1].strip()
+    return given.split()[0].split("-")[0] if given else None
 
 
 def fetch_dsn() -> str:
@@ -169,81 +193,17 @@ def report_fields(cur) -> None:
             print(f"  {key:<24} {FIELD_GLOSSARY.get(key, '(unknown)')}")
 
 
-def report_gender(cur) -> None:
-    """Rough author-gender breakdown. Opt-in: name-guessing is imprecise."""
-    import gender_guesser.detector as gender
-
-    det = gender.Detector(case_sensitive=False)
-    cur.execute(
-        """
-        SELECT DISTINCT ON (e.cmetadata->>'doc_id')
-               e.cmetadata->>'pers1', e.cmetadata->>'verf1',
-               e.cmetadata->>'verf2', e.cmetadata->>'verf3'
-        FROM public.langchain_pg_embedding e
-        JOIN public.langchain_pg_collection c ON c.uuid = e.collection_id
-        WHERE c.name = %s
-        ORDER BY e.cmetadata->>'doc_id';
-        """,
-        (MAIN_COLLECTION,),
-    )
-    rows = cur.fetchall()
-    if not rows:
-        sys.exit(f"FATAL: no rows in collection {MAIN_COLLECTION!r} — is the name current?")
-
-    def first_name(raw: str | None) -> str | None:
-        if not raw:
-            return None
-        raw = re.sub(r"\(.*?\)", "", raw).strip()  # drop (Verf.), (Hrsg.)
-        if "," not in raw:  # no "Last, First" comma -> institutional author
-            return None
-        given = raw.split(",", 1)[1].strip()
-        return given.split()[0].split("-")[0] if given else None
-
-    FEMALE, MALE = {"female", "mostly_female"}, {"male", "mostly_male"}
-    has_female = male_only = unknown_only = no_person = 0
-    for names in rows:
-        genders = [
-            det.get_gender(fn)
-            for n in names
-            if (fn := first_name(n)) is not None
-        ]
-        if not genders:
-            no_person += 1
-        elif any(g in FEMALE for g in genders):
-            has_female += 1
-        elif all(g in MALE for g in genders):
-            male_only += 1
-        else:
-            unknown_only += 1
-
-    total = len(rows)
-    banner("AUTHOR GENDER (rough estimate — see caveats)", gap=True)
-    print(f"\nTotal publications:                       {total}")
-    print(f"At least one author classified female:    {has_female} ({has_female/total:.1%})")
-    print(f"All authors classified male:              {male_only} ({male_only/total:.1%})")
-    print(f"Institutional author only / no author:    {no_person} ({no_person/total:.1%})")
-    print(f"Personal author, gender unresolved:       {unknown_only} ({unknown_only/total:.1%})")
-    print(
-        "\nCaveats: first-name heuristic; weaker on non-Western names; multi-author\n"
-        "docs count as female-included if ANY author matches (presence, not share)."
-    )
-
-
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        "--gender", action="store_true",
-        help="also print a rough author-gender breakdown (imprecise, opt-in)",
-    )
-    args = ap.parse_args()
+    # Raw description: the docstring above is a formatted usage block.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
 
     conn = connect(fetch_dsn())
     try:
         cur = conn.cursor()
         report_counts(cur)
         report_fields(cur)
-        if args.gender:
-            report_gender(cur)
     finally:
         conn.close()
 
