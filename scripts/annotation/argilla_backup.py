@@ -423,9 +423,9 @@ def cmd_restore(
         print("dry-run: no changes written. Re-run with --apply to write the above.")
         return
 
-    ws_cache: dict[str, "rg.Workspace"] = {}
+    ws_cache: dict[str, rg.Workspace] = {}
 
-    def workspace(name: str) -> "rg.Workspace":  # resolve/create once per name
+    def workspace(name: str) -> rg.Workspace:  # resolve/create once per name
         if name not in ws_cache:
             ws_cache[name] = (
                 client.workspaces(name)
@@ -520,7 +520,9 @@ def main() -> None:
         record_ids = list(args.record_ids) if args.record_ids else []
         for f in args.record_id_files or []:
             record_ids.extend(
-                line.strip() for line in Path(f).read_text().splitlines() if line.strip()
+                line.strip()
+                for line in Path(f).read_text().splitlines()
+                if line.strip()
             )
         cmd_restore(
             args.backup_dir,

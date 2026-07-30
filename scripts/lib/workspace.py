@@ -74,7 +74,9 @@ def read_snapshots(path: Path | None = None) -> list[dict]:
     """
     path = path or SNAPSHOT_LOG
     if not path.exists():
-        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
     snapshots = read_jsonl(path)
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
@@ -89,7 +91,9 @@ def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
     """
     path = path or SNAPSHOT_LOG
     if not path.exists():
-        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
+        raise SystemExit(
+            f"no snapshot log at {path} - run `make annotation-log` first."
+        )
     lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
     if not lines:
         raise SystemExit(f"no snapshots in {path}")
@@ -120,7 +124,9 @@ def check_snapshot(snapshot: dict) -> None:
             "are not interchangeable.\n"
             "To render this snapshot, check out a revision from before that change."
         )
-    timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
+    timing = (
+        ((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")
+    ) or {}
     if "pooled_mean_gap_s" not in timing:
         raise SystemExit(
             f"snapshot {at} predates the pooled gap statistics, so the cadence "
@@ -166,14 +172,22 @@ def eval_pragmata() -> SimpleNamespace:
     """
     src = os.environ.get("PRAGMATA_EVAL_SRC")
     if not src:
-        raise SystemExit("PRAGMATA_EVAL_SRC is unset — see .env.example (eval needs its own pragmata pin).")
+        raise SystemExit(
+            "PRAGMATA_EVAL_SRC is unset — see .env.example (eval needs its own pragmata pin)."
+        )
     src_path = Path(src).resolve()
     if not (src_path / "pragmata").is_dir():
-        raise SystemExit(f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}")
-    venv = Path(os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv").resolve()
+        raise SystemExit(
+            f"PRAGMATA_EVAL_SRC does not look like a pragmata src tree: {src_path}"
+        )
+    venv = Path(
+        os.environ.get("PRAGMATA_EVAL_VENV") or src_path.parent / ".venv"
+    ).resolve()
     binary = venv / "bin" / "pragmata"
     if not binary.exists():
-        raise SystemExit(f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv.")
+        raise SystemExit(
+            f"no pragmata CLI at {binary} — set PRAGMATA_EVAL_VENV to the eval checkout's venv."
+        )
     return SimpleNamespace(src=src_path, repo=src_path.parent, venv=venv, bin=binary)
 
 
@@ -244,7 +258,9 @@ def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     """
     from datetime import date
 
-    target = explicit or (ROOT / "reports" / stage / date.today().isoformat())
+    # DTZ011 is suppressed deliberately: the LOCAL date is the point - report dirs are
+    # named in the operator's timezone, not UTC. Revisited in the eval PR.
+    target = explicit or (ROOT / "reports" / stage / date.today().isoformat())  # noqa: DTZ011
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -336,7 +352,10 @@ def provenance(
         "script": script,
         "workspace_git": git_describe(ROOT),
         "inputs": [
-            {"path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p), "sha256": sha256_file(p)}
+            {
+                "path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p),
+                "sha256": sha256_file(p),
+            }
             for p in inputs
             if p.exists()
         ],
@@ -363,7 +382,9 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
         for row in rows:
             writer.writerow({c: row.get(c, "") for c in columns})
     sidecar = path.with_suffix(path.suffix + ".provenance.json")
-    sidecar.write_text(json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    sidecar.write_text(
+        json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def read_jsonl(path: Path) -> list[dict]:

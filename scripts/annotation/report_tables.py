@@ -328,7 +328,9 @@ def iaa_by_label(pooled: dict) -> str:
             continue
         entries = sorted(
             (tv.get("per_label") or {}).items(),
-            key=lambda kv: -(kv[1].get("alpha") if kv[1].get("alpha") is not None else -2),
+            key=lambda kv: (
+                -(kv[1].get("alpha") if kv[1].get("alpha") is not None else -2)
+            ),
         )
         for lbl, lv in entries:
             de = lv.get("expected_disagreement")
@@ -350,7 +352,17 @@ def iaa_by_label(pooled: dict) -> str:
     if not rows:
         return ""
     return _html_table(
-        ["Task", "Label", "α (pooled)", "% agree", "Items†", "Ratings", "Minority", "Prev.*", "De"],
+        [
+            "Task",
+            "Label",
+            "α (pooled)",
+            "% agree",
+            "Items†",
+            "Ratings",
+            "Minority",
+            "Prev.*",
+            "De",
+        ],
         rows,
     )
 

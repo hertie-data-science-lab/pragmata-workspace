@@ -34,8 +34,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--keep-lists", type=Path, required=True, help="dir of <ws>__<dataset>.ids files")
-    ap.add_argument("--workspace", action="append", default=None, help="limit to these workspace(s)")
+    ap.add_argument(
+        "--keep-lists",
+        type=Path,
+        required=True,
+        help="dir of <ws>__<dataset>.ids files",
+    )
+    ap.add_argument(
+        "--workspace", action="append", default=None, help="limit to these workspace(s)"
+    )
     ap.add_argument("--apply", action="store_true", help="delete; default preview only")
     args = ap.parse_args()
 
@@ -63,7 +70,9 @@ def main() -> None:
             ds.records.delete(to_delete, batch_size=64)
             print(f"    deleted {len(to_delete)}")
 
-    print(f"\nTOTAL: keep {grand_keep}, delete {grand_del} (filter: {args.workspace or 'ALL'})")
+    print(
+        f"\nTOTAL: keep {grand_keep}, delete {grand_del} (filter: {args.workspace or 'ALL'})"
+    )
     if not args.apply:
         print("(preview only; pass --apply to mutate)")
 

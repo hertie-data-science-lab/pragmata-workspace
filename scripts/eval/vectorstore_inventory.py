@@ -81,13 +81,24 @@ def fetch_dsn() -> str:
     try:
         out = subprocess.run(
             [
-                "az", "containerapp", "secret", "show",
-                "--name", APP_NAME,
-                "--resource-group", RESOURCE_GROUP,
-                "--secret-name", SECRET_NAME,
-                "--query", "value", "-o", "tsv",
+                "az",
+                "containerapp",
+                "secret",
+                "show",
+                "--name",
+                APP_NAME,
+                "--resource-group",
+                RESOURCE_GROUP,
+                "--secret-name",
+                SECRET_NAME,
+                "--query",
+                "value",
+                "-o",
+                "tsv",
             ],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except FileNotFoundError:
         sys.exit("FATAL: `az` not found. Install the Azure CLI and `az login`.")
@@ -105,7 +116,7 @@ def connect(dsn: str):
     """Open a read-only connection. Any failure hides the DSN-bearing message."""
     try:
         conn = psycopg2.connect(dsn)
-    except Exception as e:  # noqa: BLE001 - message would leak the credential
+    except Exception as e:  # the message would leak the credential
         sys.exit(f"FATAL: could not connect to the vector store ({type(e).__name__}).")
     conn.set_session(readonly=True, autocommit=True)
     return conn

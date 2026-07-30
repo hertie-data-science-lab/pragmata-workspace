@@ -685,7 +685,7 @@ def dataset_lookup(client):
     return resolve
 
 
-def fetch_responses(resolve, http: "httpx.Client", settings) -> dict[Task, list[dict]]:
+def fetch_responses(resolve, http: httpx.Client, settings) -> dict[Task, list[dict]]:
     """Submitted-response events per task, via the Argilla REST records endpoint.
 
     The SDK drops per-response timestamps; the REST payload keeps them. Returns
@@ -794,7 +794,7 @@ def process_domain(
     domain: str,
     client,
     resolve,
-    http: "httpx.Client",
+    http: httpx.Client,
     *,
     use_export: bool = False,
     scratch_base: Path,
@@ -999,7 +999,9 @@ def pooled_agreement(
     per_task: dict = {}
     for ta in report.tasks:
         task = ta.task
-        marginals = calibration_marginals(pooled_dir / f"{task.value}.csv", _LABELS[task])
+        marginals = calibration_marginals(
+            pooled_dir / f"{task.value}.csv", _LABELS[task]
+        )
         per_label = {}
         for lab in ta.labels:
             per_label[lab.label] = {
@@ -1040,9 +1042,12 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     tot_completeness = empty_completeness()
 
     # scratch: throwaway exports live here, never in the published exports tree.
-    with httpx.Client(
-        base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
-    ) as http, tempfile.TemporaryDirectory(prefix="annotation-log-export-") as scratch:
+    with (
+        httpx.Client(
+            base_url=url, headers={"X-Argilla-Api-Key": key}, timeout=60.0
+        ) as http,
+        tempfile.TemporaryDirectory(prefix="annotation-log-export-") as scratch,
+    ):
         for domain in domains:
             log(f"=== {domain} ===")
             try:
@@ -1159,7 +1164,9 @@ def print_summary(result: dict) -> None:
 
     per_task = (result.get("pooled_agreement") or {}).get("per_task") or {}
     if per_task:
-        print("\npooled α (unweighted mean across labels, item-level data from all domains):")
+        print(
+            "\npooled α (unweighted mean across labels, item-level data from all domains):"
+        )
         for task, tv in per_task.items():
             degen = [
                 lab
@@ -1214,23 +1221,34 @@ def self_check() -> int:
     # session breaks are still reported.
     r2 = cadence(recs[:3], threshold_s=1800, min_records=5)
     assert r2["median_active_gap_s"] is None and r2["n_gaps_used"] == 2, r2
-    assert r2["mean_gap_s"] is None and r2["gap_p25_s"] is None and r2["gap_p75_s"] is None, r2
+    assert (
+        r2["mean_gap_s"] is None and r2["gap_p25_s"] is None and r2["gap_p75_s"] is None
+    ), r2
     # A single kept gap must not blow up: every quantile is that gap.
     r3 = cadence(recs[:2], threshold_s=1800, min_records=1)
     assert r3["gap_p25_s"] == r3["gap_p75_s"] == r3["median_active_gap_s"] == 300.0, r3
     # The pooled view carries the same four statistics, so a report can quote a
     # distribution per task/domain without reaching into by_annotator. It applies the
     # module-level MIN_RECORDS, so 3 pooled gaps are suppressed...
-    thin = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in recs])
+    thin = cadence_report(
+        [{"user_id": "u1", "at": at, "record_id": k} for k, at in recs]
+    )
     assert thin["per_annotator"]["pooled_median_active_gap_s"] is None, thin
     assert thin["per_annotator"]["n_gaps_used"] == 3, thin
     # ...while 6 gaps (five of 300s, one of 360s) report the whole distribution.
-    stream = [("r%d" % i, base + timedelta(minutes=m)) for i, m in enumerate([0, 5, 10, 15, 20, 25, 31])]
-    pooled = cadence_report([{"user_id": "u1", "at": at, "record_id": k} for k, at in stream])["per_annotator"]
+    stream = [
+        (f"r{i}", base + timedelta(minutes=m))
+        for i, m in enumerate([0, 5, 10, 15, 20, 25, 31])
+    ]
+    pooled = cadence_report(
+        [{"user_id": "u1", "at": at, "record_id": k} for k, at in stream]
+    )["per_annotator"]
     assert pooled["n_gaps_used"] == 6, pooled
     assert pooled["pooled_median_active_gap_s"] == 300.0, pooled
     assert pooled["pooled_mean_gap_s"] == 310.0, pooled  # (300*5 + 360) / 6
-    assert pooled["pooled_gap_p25_s"] == 300.0 and pooled["pooled_gap_p75_s"] == 300.0, pooled
+    assert (
+        pooled["pooled_gap_p25_s"] == 300.0 and pooled["pooled_gap_p75_s"] == 300.0
+    ), pooled
     print("self-check OK")
     return 0
 

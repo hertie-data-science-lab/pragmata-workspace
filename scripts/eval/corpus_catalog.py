@@ -90,6 +90,7 @@ def first_name(raw: str | None) -> str | None:
     given = raw.split(",", 1)[1].strip()
     return given.split()[0].split("-")[0] if given else None
 
+
 COLUMNS = [
     "doc_id",
     "pub_year",
@@ -153,7 +154,9 @@ def classify(detector, names: list[str | None]) -> tuple[list[str], list[str]]:
             continue
         verdict = detector.get_gender(given)
         raw.append(verdict)
-        collapsed.append("female" if verdict in FEMALE else "male" if verdict in MALE else "unknown")
+        collapsed.append(
+            "female" if verdict in FEMALE else "male" if verdict in MALE else "unknown"
+        )
     return raw, collapsed
 
 
@@ -232,7 +235,10 @@ def build_rows(documents: list[dict]) -> list[dict]:
             first_raw, first_collapsed = first_pair[0][0], first_pair[1][0]
         else:
             # verf1 present but unparseable means institutional; absent means no author.
-            first_raw, first_collapsed = "", "institutional" if recorded and recorded[0] else unresolved("")
+            first_raw, first_collapsed = (
+                "",
+                "institutional" if recorded and recorded[0] else unresolved(""),
+            )
 
         rows.append(
             {
@@ -279,7 +285,11 @@ def main() -> int:
         columns=COLUMNS,
         prov=ws.provenance(
             script="scripts/eval/corpus_catalog.py",
-            source={"collection": MAIN_COLLECTION, "app": APP_NAME, "resource_group": RESOURCE_GROUP},
+            source={
+                "collection": MAIN_COLLECTION,
+                "app": APP_NAME,
+                "resource_group": RESOURCE_GROUP,
+            },
             n_documents=len(rows),
             n_chunks_total=n_chunks_total,
             n_documents_with_resolved_author=resolved,
@@ -287,27 +297,42 @@ def main() -> int:
             gender_coverage=round(resolved / len(rows), 4) if rows else None,
             grain="one row per doc_id",
             caveats=[
-                "author_gender is inferred from a first-name dictionary "
-                "(gender-guesser), not recorded in the corpus, and is not a measure of "
-                "how anyone identifies.",
-                "The metadata records at most three authors (verf1..verf3), so "
-                "'majority' is over RECORDED authors, not all authors.",
-                "The heuristic is weaker on non-Western names; *_raw columns keep the "
-                "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
-                "(name absent from the dictionary).",
-                "Institutional authors have no personal name and are flagged "
-            "is_institutional rather than counted as unknown people.",
-            "author_gender='unknown' merges two populations: documents with no "
-            "recorded author at all and documents whose author names the dictionary "
-            "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
-            "cut on author_gender alone.",
-                "pub_year and extent_pages are parsed from free-text library fields; "
-                "the raw extent string is kept in `extent` so the parse is auditable.",
+                (
+                    "author_gender is inferred from a first-name dictionary "
+                    "(gender-guesser), not recorded in the corpus, and is not a measure of "
+                    "how anyone identifies."
+                ),
+                (
+                    "The metadata records at most three authors (verf1..verf3), so "
+                    "'majority' is over RECORDED authors, not all authors."
+                ),
+                (
+                    "The heuristic is weaker on non-Western names; *_raw columns keep the "
+                    "six-way verdict so 'andy' (ambiguous) stays distinct from 'unknown' "
+                    "(name absent from the dictionary)."
+                ),
+                (
+                    "Institutional authors have no personal name and are flagged "
+                    "is_institutional rather than counted as unknown people."
+                ),
+                (
+                    "author_gender='unknown' merges two populations: documents with no "
+                    "recorded author at all and documents whose author names the dictionary "
+                    "cannot classify. Split them on n_authors (0 vs >0) before any fairness "
+                    "cut on author_gender alone."
+                ),
+                (
+                    "pub_year and extent_pages are parsed from free-text library fields; "
+                    "the raw extent string is kept in `extent` so the parse is auditable."
+                ),
             ],
         ),
     )
 
-    print(f"wrote {target} ({len(rows)} documents, {n_chunks_total} chunks)", file=sys.stderr)
+    print(
+        f"wrote {target} ({len(rows)} documents, {n_chunks_total} chunks)",
+        file=sys.stderr,
+    )
     # Guarded: an empty result is possible (a stale MAIN_COLLECTION name) and the CSV
     # and sidecar are already written by this point, so the run should end with a usable
     # message rather than a ZeroDivisionError traceback over a valid artifact.

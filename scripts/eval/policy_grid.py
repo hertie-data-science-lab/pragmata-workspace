@@ -112,7 +112,11 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
         "n_rows_submitted": len(sub),
         "n_rows_production": len(prod),
         "n_rows_calibration": len(calib),
-        "n_units_annotated": int(sub.groupby([k for k in ec.UNIT_KEYS[task] if k in sub.columns]).ngroups) if not sub.empty else 0,
+        "n_units_annotated": int(
+            sub.groupby([k for k in ec.UNIT_KEYS[task] if k in sub.columns]).ngroups
+        )
+        if not sub.empty
+        else 0,
         "n_annotators": int(sub["annotator_id"].nunique()) if not sub.empty else 0,
         "n_queries_all_incl_calib": n_queries_all,
         "n_queries_all_prod_only": ec.n_queries(prod),
@@ -135,7 +139,9 @@ def row_for(exports: Path, programme: str, task: str) -> dict:
 def print_markdown(rows: list[dict]) -> None:
     """The 2x2 as a markdown table, for pasting into the working doc."""
     print("\n### Queries surviving each policy\n")
-    print("| Programme | Task | all+calib | all, prod | complete+calib | complete, prod | mean chunks/q |")
+    print(
+        "| Programme | Task | all+calib | all, prod | complete+calib | complete, prod | mean chunks/q |"
+    )
     print("|---|---|---:|---:|---:|---:|---:|")
     for r in rows:
         print(
@@ -144,7 +150,9 @@ def print_markdown(rows: list[dict]) -> None:
             f"{r['n_queries_complete_prod_only']} | {r['mean_chunks_per_query_all'] or '-'} |"
         )
     print("\n### Majority-consolidation ties\n")
-    print("| Programme | Task | multi-ann. | tied | share | multi-ann. (prod) | tied (prod) |")
+    print(
+        "| Programme | Task | multi-ann. | tied | share | multi-ann. (prod) | tied (prod) |"
+    )
     print("|---|---|---:|---:|---:|---:|---:|")
     total_multi = total_tied = total_multi_prod = total_tied_prod = 0
     for r in rows:
@@ -155,7 +163,9 @@ def print_markdown(rows: list[dict]) -> None:
         total_multi_prod += mp
         total_tied_prod += tp
         share = f"{tied / multi:.1%}" if multi else "-"
-        print(f"| {r['programme']} | {r['task']} | {multi} | {tied} | {share} | {mp} | {tp} |")
+        print(
+            f"| {r['programme']} | {r['task']} | {multi} | {tied} | {share} | {mp} | {tp} |"
+        )
     print(
         f"| **TOTAL** | | **{total_multi}** | **{total_tied}** | | "
         f"**{total_multi_prod}** | **{total_tied_prod}** |"
@@ -172,7 +182,9 @@ def print_markdown(rows: list[dict]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ec.add_common_args(ap)
-    ap.add_argument("--markdown", action="store_true", help="Also print markdown tables to stdout.")
+    ap.add_argument(
+        "--markdown", action="store_true", help="Also print markdown tables to stdout."
+    )
     args = ap.parse_args()
 
     rows = [

@@ -164,7 +164,7 @@ def plot_label_prevalence(snap: dict, out: Path) -> bool:
             prev,
             color=colors,
             xerr=xerr,
-            error_kw=dict(ecolor="#333333", capsize=3, lw=1),
+            error_kw={"ecolor": "#333333", "capsize": 3, "lw": 1},
         )
         ax.set_yticks(list(y))
         ax.set_yticklabels(names, fontsize=8)

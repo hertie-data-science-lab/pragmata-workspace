@@ -31,8 +31,16 @@ import workspace as ws
 # Per-query metadata carried straight through from the querygen spec, so the audit can
 # break retrieval down by any of them without a second join.
 QUERY_META = (
-    "domain", "language", "role", "topic", "intent",
-    "task", "difficulty", "format", "spec_stem", "retried",
+    "domain",
+    "language",
+    "role",
+    "topic",
+    "intent",
+    "task",
+    "difficulty",
+    "format",
+    "spec_stem",
+    "retried",
 )
 
 COLUMNS = [
@@ -100,7 +108,10 @@ def main() -> int:
         rows.extend(file_rows)
         totals["queries"] += n_queries
         totals["empty"] += n_empty
-        print(f"  {programme}: {n_queries} queries, {len(file_rows)} rows", file=sys.stderr)
+        print(
+            f"  {programme}: {n_queries} queries, {len(file_rows)} rows",
+            file=sys.stderr,
+        )
 
     target = ec.out_dir(args.out_dir) / "retrieval_manifest.csv"
     ws.write_csv(
@@ -116,18 +127,26 @@ def main() -> int:
             n_queries_without_chunks=totals["empty"],
             grain="query x retrieved chunk",
             caveats=[
-                "One row per retrieved chunk. A query whose retrieval returned nothing "
-                "keeps one row with empty doc_id and n_retrieved_chunks=0, so per-query "
-                "denominators stay correct.",
-                "A doc_id appears once per retrieved chunk, so counting doc frequency "
-                "means counting rows, and counting distinct documents means "
-                "deduplicating on (query_id, doc_id).",
-                "Source is the curated set - what reached Argilla after the removals "
-                "recorded in reproducibility/ - so it joins to the annotations.",
-                "Joining to the annotation exports: they carry no query_id, only "
-                "record_uuid, so join on chunk_id (verified: all 590 annotated chunks "
-                "appear here) or on the query text (all 464 distinct annotated queries "
-                "map to a query_id). Join to corpus_catalog.csv on doc_id.",
+                (
+                    "One row per retrieved chunk. A query whose retrieval returned nothing "
+                    "keeps one row with empty doc_id and n_retrieved_chunks=0, so per-query "
+                    "denominators stay correct."
+                ),
+                (
+                    "A doc_id appears once per retrieved chunk, so counting doc frequency "
+                    "means counting rows, and counting distinct documents means "
+                    "deduplicating on (query_id, doc_id)."
+                ),
+                (
+                    "Source is the curated set - what reached Argilla after the removals "
+                    "recorded in reproducibility/ - so it joins to the annotations."
+                ),
+                (
+                    "Joining to the annotation exports: they carry no query_id, only "
+                    "record_uuid, so join on chunk_id (verified: all 590 annotated chunks "
+                    "appear here) or on the query text (all 464 distinct annotated queries "
+                    "map to a query_id). Join to corpus_catalog.csv on doc_id."
+                ),
             ],
         ),
     )
