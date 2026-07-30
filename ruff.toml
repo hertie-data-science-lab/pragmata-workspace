@@ -1,0 +1,5 @@
+[lint.per-file-ignores]
+# Every script in scripts/ inserts scripts/lib on sys.path before importing the workspace
+# lib, and the annotation scripts call ws.load_env() before importing pragmata so the
+# PRAGMATA_SRC pin applies. Both are imports after code, by design.
+"scripts/**" = ["E402"]

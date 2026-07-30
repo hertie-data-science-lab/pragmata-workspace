@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import workspace as ws  # noqa: E402
+import workspace as ws
 
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 

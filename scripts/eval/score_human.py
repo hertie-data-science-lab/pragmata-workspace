@@ -52,8 +52,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
-import eval_common as ec  # noqa: E402
-import workspace as ws  # noqa: E402
+import eval_common as ec
+import workspace as ws
 
 # Which label(s) each metric is computed from, so the right alpha can be attached.
 # Derived from pragmata's core/eval/metrics.py formulas and the *_METRIC_LABELS maps

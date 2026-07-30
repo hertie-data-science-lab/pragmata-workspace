@@ -25,8 +25,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
-import eval_common as ec  # noqa: E402
-import workspace as ws  # noqa: E402
+import eval_common as ec
+import workspace as ws
 
 # Per-query metadata carried straight through from the querygen spec, so the audit can
 # break retrieval down by any of them without a second join.

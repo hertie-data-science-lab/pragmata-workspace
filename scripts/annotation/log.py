@@ -82,19 +82,19 @@ ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.p
 
 # The data was imported by the pinned pragmata (partition_scope topology), so it must be
 # read back through the same tree. ws.load_env() applies the pin; unset → installed.
-import pragmata  # noqa: E402
-from pragmata.api.annotation_export import export_annotations  # noqa: E402
-from pragmata.api.annotation_iaa import compute_iaa  # noqa: E402
-from pragmata.core.annotation.argilla_task_definitions import dataset_name  # noqa: E402
-from pragmata.core.annotation.client import resolve_argilla_client  # noqa: E402
-from pragmata.core.annotation.export_fetcher import build_user_lookup  # noqa: E402
-from pragmata.core.schemas.annotation_export import (  # noqa: E402
+import pragmata
+from pragmata.api.annotation_export import export_annotations
+from pragmata.api.annotation_iaa import compute_iaa
+from pragmata.core.annotation.argilla_task_definitions import dataset_name
+from pragmata.core.annotation.client import resolve_argilla_client
+from pragmata.core.annotation.export_fetcher import build_user_lookup
+from pragmata.core.schemas.annotation_export import (
     GenerationAnnotation,
     GroundingAnnotation,
     RetrievalAnnotation,
 )
-from pragmata.core.schemas.annotation_task import Task  # noqa: E402
-from pragmata.core.settings.annotation_settings import AnnotationSettings  # noqa: E402
+from pragmata.core.schemas.annotation_task import Task
+from pragmata.core.settings.annotation_settings import AnnotationSettings
 
 # Defensive config sanitizer, keyed off the *active* pragmata's schema: drop any
 # top-level config key the loaded AnnotationSettings doesn't accept (extra="forbid").
