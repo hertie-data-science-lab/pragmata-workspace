@@ -148,7 +148,10 @@ repro-pin: ## Pin paths into a new bundle reproducibility/<today>-<NAME>/ (NAME=
 repro-verify: ## Verify bundle pins per file - OK/MISMATCH/ABSENT (PIN=<bundle-dir>, default all)
 	$(PY) scripts/repro/bundle.py verify $(PIN)
 
-repro-reproduce: ## Replay a lineage bundle onto the composed end state (PIN= required; MODE=structure|responses, BACKUP=, APPLY=1). No APPLY = preview
+# PIN names the bundle you are replaying toward and is what the kind: check applies to; it
+# does not select how much of the chain is composed. Lineage replay always composes every
+# lineage bundle's keep-lists in date order, because a prefix of the chain was never live.
+repro-reproduce: ## Replay the lineage onto its composed end state (PIN= required; MODE=structure|responses, BACKUP=, APPLY=1). No APPLY = preview
 	@test -n "$(PIN)" || { echo "usage: make repro-reproduce PIN=<bundle-dir> [MODE=structure|responses] [BACKUP=<dir>] [APPLY=1]"; exit 2; }
 	$(PY) scripts/repro/bundle.py reproduce "$(PIN)" $(if $(MODE),--mode $(MODE),) $(if $(BACKUP),--backup $(BACKUP),) $(if $(APPLY),--apply,)
 

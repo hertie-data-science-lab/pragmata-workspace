@@ -8,7 +8,12 @@ contract; this script is its whole tooling.
 
   bundle.py pin NAME PATH...     create today's bundle and pin the given files/trees
   bundle.py verify [BUNDLE]      check pins per file: OK / MISMATCH / ABSENT
-  bundle.py reproduce BUNDLE     replay a lineage bundle's operation
+  bundle.py reproduce BUNDLE     replay the lineage onto its composed end state
+
+`reproduce` always composes the whole lineage chain in date order — a lineage bundle is
+only meaningful in sequence, so replaying a prefix of the chain would land on a state
+that was never live. BUNDLE names the bundle you are replaying toward, and is what the
+`kind:` check is applied to; it does not select how much of the chain is composed.
 
 Exit codes for `verify`: 0 all OK, 2 any mismatch, 3 absent only. A mismatch outranks an
 absence: missing bytes can be fetched, changed bytes mean the pin no longer holds.
@@ -104,8 +109,12 @@ def read_pins(bundle: Path) -> list[tuple[str, str]]:
 def expand(paths: list[str]) -> list[Path]:
     """Every file under the given paths (trees walked), sorted, repo-relative.
 
-    Refuses anything outside the repo: pins are repo-root-relative by contract, so an
-    outside path could never be re-verified from a fresh checkout.
+    A pin is a repo-relative path plus a hash, so bytes that live outside the repo must
+    never get pinned under an in-repo name — they would verify OK in a checkout that
+    cannot hold them. Every file is therefore resolved, not just the argument: a symlink
+    met while walking a tree escapes an argument-only check. An outside argument is
+    fatal; an outside file inside a tree is skipped with a warning, since the rest of
+    that tree is still worth pinning.
     """
     found: set[Path] = set()
     for arg in paths:
@@ -114,7 +123,16 @@ def expand(paths: list[str]) -> list[Path]:
             raise SystemExit(f"no such path: {arg}")
         if not p.is_relative_to(ws.ROOT):
             raise SystemExit(f"outside the repo, cannot be pinned: {arg}")
-        found.update(q for q in ([p] if p.is_file() else p.rglob("*")) if q.is_file())
+        for q in [p] if p.is_file() else sorted(p.rglob("*")):
+            if not q.is_file():
+                continue
+            if not q.resolve().is_relative_to(ws.ROOT):
+                print(
+                    f"skipped, leaves the repo: {q.relative_to(ws.ROOT)}",
+                    file=sys.stderr,
+                )
+                continue
+            found.add(q)
     return sorted(q.relative_to(ws.ROOT) for q in found)
 
 
@@ -304,8 +322,13 @@ def main() -> int:
     p.add_argument("bundle", nargs="?", help="bundle dir name; default every bundle")
     p.set_defaults(fn=cmd_verify)
 
-    p = sub.add_parser("reproduce", help="replay a lineage bundle's operation")
-    p.add_argument("bundle", help="bundle dir name")
+    p = sub.add_parser(
+        "reproduce", help="replay the lineage onto its composed end state"
+    )
+    p.add_argument(
+        "bundle",
+        help="bundle dir name to replay toward; the whole lineage chain is composed either way",
+    )
     p.add_argument(
         "--mode",
         choices=("structure", "responses"),
