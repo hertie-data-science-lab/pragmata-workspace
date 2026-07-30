@@ -9,7 +9,7 @@
 #   make pipeline TO=bot               # querygen + bot
 #   make pipeline FROM=combine         # combine + setup + import
 #   make pipeline ONLY=bot FILTER=gesundheit JOBS=8
-#   make plan TO=bot                   # preview a slice without running
+#   bash scripts/pipeline.sh --dry-run # preview a slice without running
 #
 # Single stages (call the stage scripts directly):
 #   make querygen SPECS=demokratie-und-zusammenhalt,europas-zukunft
@@ -31,10 +31,10 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
                  $(if $(JOBS),--jobs $(JOBS),)
 
 .DEFAULT_GOAL := help
-.PHONY: help pipeline plan querygen bot combine setup import probe log export report report-tables report-pdf plots daily backup reproduce-curation eval-push eval-pull eval-verify
+.PHONY: help pipeline querygen bot combine setup import log export report report-tables report-pdf plots daily backup reproduce-curation eval-push eval-pull eval-verify
 
 help: ## Show this help
-	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-18s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 
 pipeline: ## Run a pipeline slice (FROM= TO= ONLY= FILTER= JOBS=); no args = full
 	bash scripts/pipeline.sh $(PIPELINE_ARGS)
