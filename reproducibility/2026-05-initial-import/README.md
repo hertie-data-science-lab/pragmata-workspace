@@ -31,8 +31,12 @@ Fetch, then verify from the repo root:
 ```
 # fetch the pinned corpus, verify, then import the full set (fans every query into all 3 tasks)
 sha256sum -c reproducibility/2026-05-initial-import/checksums.sha256
-for d in configs/annotation/domains/*.yaml; do make import DOMAIN=$(basename $d .yaml); done
+for d in configs/annotation/domains/*.yaml; do make annotation-import DOMAIN=$(basename $d .yaml); done
 ```
+
+> The make targets were renamed after this bundle was frozen (`import` ->
+> `annotation-import`); the recipe above is the current, runnable form. The artifacts,
+> checksums and pins are unchanged.
 
 This rebuilds the full imported instance. To then reduce it to the curated set, continue
 with stage 2 (`make reproduce-curation`).

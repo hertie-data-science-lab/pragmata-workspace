@@ -36,20 +36,22 @@ Data, logs, reports and Argilla backups are **not** committed - see
 runnable directly), taking `VAR=value` overrides.
 
 ```
-# Pipeline stages  (querygen -> bot -> combine -> setup -> import)
+# Dataset build pipeline  (ends at the Argilla import)
 make pipeline                  # run a slice: FROM= TO= ONLY= FILTER= JOBS=  (no args = full run)
-make querygen                  # generate synthetic queries          (SPECS=a,b to filter)
-make bot                       # run publikationsbot over the queries (SPEC=x to filter)
-make combine                   # pool runs + intersperse edgecases   (DOMAINS="a b")
-make setup                     # provision Argilla workspaces + users (DOMAIN= required)
-make import                    # import one domain's combined JSONL  (DOMAIN= required)
 make plan                      # preview a slice without running it  (same vars as pipeline)
+make querygen-run              # generate synthetic queries          (SPECS=a,b to filter)
+make bot-run                   # query publikationsbot for answers   (SPEC=x to filter)
+make bot-probe                 # one-query bot smoke test, writes no JSONL
+make combine-run               # assemble the import-ready dataset   (DOMAINS="a b")
+make annotation-setup          # provision Argilla workspaces + users (DOMAIN= required)
+make annotation-import         # load one domain's dataset into Argilla (DOMAIN= required)
 
 # Annotation ops
 make annotation-export         # export annotations to per-task CSVs (DOMAIN= to filter)
 make annotation-log            # append a snapshot to logs/annotation/log.jsonl
 make annotation-daily          # nightly logging: export -> log.jsonl
-make annotation-backup         # status-preserving Argilla backup    (ARGS="restore <dir>")
+make annotation-backup         # status-preserving Argilla backup (dump)
+make annotation-restore        # restore a backup   (DIR= required; previews unless APPLY=1)
 
 # Annotation reporting  (-> reports/annotation/<date>/)
 make annotation-report         # tables + plots, and repoint _latest
