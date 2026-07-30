@@ -307,19 +307,14 @@ def consolidated_prevalence(frame: pd.DataFrame, task: str, label: str) -> tuple
 def latest_snapshot(nth: int = 1) -> dict:
     """The Nth-from-last snapshot in logs/annotation/log.jsonl (1 = last).
 
-    Reading and the compatibility guards live in ws.read_snapshots / ws.check_snapshot,
-    so these reports, the annotation report tables and the plots all accept and refuse
-    exactly the same snapshots.
+    Reading and the compatibility guards live in ws.select_snapshot, so these reports, the
+    annotation report tables and the plots all accept and refuse exactly the same
+    snapshots, and only the selected line is parsed.
     """
-    snapshots = ws.read_snapshots()
     if nth < 1:
-        # snapshots[-0] is snapshots[0], the oldest - the opposite of "latest".
+        # -0 is 0, the oldest snapshot - the opposite of "latest".
         raise SystemExit(f"--snapshot counts back from the last and must be >= 1, got {nth}.")
-    if nth > len(snapshots):
-        raise SystemExit(f"only {len(snapshots)} snapshots available, asked for {nth} from last.")
-    snapshot = snapshots[-nth]
-    ws.check_snapshot(snapshot, where=f"{nth} from last")
-    return snapshot
+    return ws.select_snapshot(line=-nth)
 
 
 def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:

@@ -57,45 +57,63 @@ RUNS_DIR = DATA_DIR / "querygen" / "runs"  # querygen tool (pragmata sibling)
 OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 
 # Shape of one logs/annotation/log.jsonl snapshot. Lives here because log.py writes it and
-# report_tables.py reads it, and a duplicated constant would drift. Bump on an incompatible
-# change; report_tables.py refuses anything older rather than rendering a partial report.
+# the reporting scripts read it, and a duplicated constant would drift. Bump on an
+# incompatible change; check_snapshot then refuses anything older.
 #   2: agreement is a single pooled α per (task, label) under `pooled_agreement`; the
 #      per-domain and total n_items-weighted `mean_alpha` blocks are gone.
 SNAPSHOT_SCHEMA_VERSION = 2
 
+SNAPSHOT_LOG = LOGS_DIR / "log.jsonl"
+
 
 def read_snapshots(path: Path | None = None) -> list[dict]:
-    """Every snapshot in logs/annotation/log.jsonl, oldest first.
+    """Every snapshot in the log, oldest first — for callers that need the history.
 
-    One reader for all three consumers (report tables, plots, the eval report scripts),
-    so the file's location and its one-object-per-line shape are stated once.
+    One snapshot per line. Prefer select_snapshot() when only one is wanted: this parses
+    all of them.
     """
-    path = path or LOGS_DIR / "log.jsonl"
+    path = path or SNAPSHOT_LOG
     if not path.exists():
         raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
-    snapshots = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    snapshots = read_jsonl(path)
     if not snapshots:
         raise SystemExit(f"no snapshots in {path}")
     return snapshots
 
 
-def check_snapshot(snapshot: dict, *, where: str = "") -> None:
+def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
+    """One checked snapshot by 0-based index, negative counting from the end.
+
+    Splits the log but parses only the selected line: the file is tens of MB and the
+    reporting scripts need a single snapshot out of it.
+    """
+    path = path or SNAPSHOT_LOG
+    if not path.exists():
+        raise SystemExit(f"no snapshot log at {path} - run `make annotation-log` first.")
+    lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+    if not lines:
+        raise SystemExit(f"no snapshots in {path}")
+    try:
+        snapshot = json.loads(lines[line])
+    except IndexError:
+        raise SystemExit(f"line {line} out of range ({len(lines)} snapshots)") from None
+    check_snapshot(snapshot)
+    return snapshot
+
+
+def check_snapshot(snapshot: dict) -> None:
     """Refuse a snapshot the current reporting code cannot render faithfully.
 
-    Two guards, because both failure modes are silent rather than loud:
-      - schema_version: agreement moved from per-domain n_items-weighted means of alpha
-        to a single pooled alpha per (task, label). Rendering a v1 snapshot would drop
-        the entire agreement section and still look like a complete report.
-      - pooled gap statistics: added to log.py additively, without a version bump (one
-        would strand every existing entry). An older snapshot renders blank cadence
-        columns, which reads as "no cadence data" rather than "wrong snapshot".
+    Both failure modes are silent rather than loud: a v1 snapshot loses the whole
+    agreement section (pooled alpha replaced per-domain weighted means), and one predating
+    the pooled gap statistics renders blank cadence columns. The gap fields were added
+    without a version bump, which would have stranded every existing entry.
     """
     at = snapshot.get("run_at", "unknown date")
-    label = f" ({where})" if where else ""
     got = snapshot.get("schema_version", 1)
     if got < SNAPSHOT_SCHEMA_VERSION:
         raise SystemExit(
-            f"snapshot {at}{label} is schema v{got}; this code needs "
+            f"snapshot {at} is schema v{got}; this code needs "
             f"v{SNAPSHOT_SCHEMA_VERSION}.\n"
             "Agreement moved from per-domain weighted means of alpha to a single pooled "
             "alpha (one reliability matrix per task x label over all domains), so the two "
@@ -105,7 +123,7 @@ def check_snapshot(snapshot: dict, *, where: str = "") -> None:
     timing = (((snapshot.get("total") or {}).get("timing") or {}).get("per_annotator")) or {}
     if "pooled_mean_gap_s" not in timing:
         raise SystemExit(
-            f"snapshot {at}{label} predates the pooled gap statistics, so the cadence "
+            f"snapshot {at} predates the pooled gap statistics, so the cadence "
             f"columns would come out blank. Re-run `make annotation-log` and try again."
         )
 

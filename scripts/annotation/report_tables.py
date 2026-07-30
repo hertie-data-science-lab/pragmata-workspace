@@ -875,15 +875,9 @@ def main() -> None:
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-time display)
 
-    snapshots = ws.read_snapshots(args.jsonl)
-    try:
-        snap = snapshots[args.line]
-    except IndexError:
-        sys.exit(f"line {args.line} out of range ({len(snapshots)} snapshots)")
-    # log.jsonl is append-only and --line renders any of it, so this code is routinely
-    # handed pre-pooling snapshots. ws.check_snapshot refuses them rather than emitting a
-    # report that looks complete but has lost its headline metric.
-    ws.check_snapshot(snap, where=f"line {args.line}")
+    # log.jsonl is append-only and --line renders any of it, so select_snapshot's guards
+    # refuse a pre-pooling snapshot rather than emitting a report that looks complete.
+    snap = ws.select_snapshot(args.jsonl, args.line)
 
     md = render(snap)
     if args.stdout:
@@ -897,9 +891,7 @@ def main() -> None:
         out = ws.report_dir(snap["run_at"]) / "report.md"
         ws.link_latest(out.parent)
     out.write_text(md)
-    # The written path is the script's only stdout output (diagnostics, if any, go to
-    # stderr), so a caller can capture it directly instead of parsing prose.
-    print(out)
+    print(out)  # the only stdout output, so a caller can capture the path directly
 
 
 if __name__ == "__main__":
