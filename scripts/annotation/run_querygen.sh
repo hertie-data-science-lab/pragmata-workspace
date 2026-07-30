@@ -19,34 +19,33 @@ MERGE="scripts/annotation/merge_yaml.py"
 SPECS_DIR="configs/annotation/querygen_specs"
 RUNTIME="$SPECS_DIR/_runtime.yaml"
 
-# --- spec selection: comma-list, or every spec ---
+# --- spec selection: comma-list, or every spec. Stems throughout; the path is only
+#     built where a file is actually read. ---
+stems=()
 if [[ -n "${1:-}" ]]; then
-  specs=()
   while IFS= read -r stem; do
     if [[ -f "$SPECS_DIR/${stem}.yaml" ]]; then
-      specs+=("$SPECS_DIR/${stem}.yaml")
+      stems+=("$stem")
     else
       warn "no spec at $SPECS_DIR/${stem}.yaml, skipping"
     fi
   done < <(split_csv "$1")
-  [[ ${#specs[@]} -gt 0 ]] || fatal "no valid specs after filter" 6
+  [[ ${#stems[@]} -gt 0 ]] || fatal "no valid specs after filter" 6
 else
-  specs=()
-  while IFS= read -r stem; do specs+=("$SPECS_DIR/${stem}.yaml"); done \
-    < <(config_stems "$SPECS_DIR")
-  [[ ${#specs[@]} -gt 0 ]] || fatal "no specs under $SPECS_DIR/" 6
+  mapfile -t stems < <(config_stems "$SPECS_DIR")
+  [[ ${#stems[@]} -gt 0 ]] || fatal "no specs under $SPECS_DIR/" 6
 fi
 
 merged="$(mktemp --suffix=.yaml)"
 trap 'rm -f "$merged"' EXIT
-log "Running ${#specs[@]} spec(s) through querygen..."
+log "Running ${#stems[@]} spec(s) through querygen..."
 
 failures=()
-for spec in "${specs[@]}"; do
-  stem="$(basename "$spec" .yaml)"
+for stem in "${stems[@]}"; do
   if [[ "$stem" == *_edgecase ]]; then n="$N_EDGECASE"; else n="$N_BASELINE"; fi
   section "querygen: $stem (N=$n)"
 
+  spec="$SPECS_DIR/${stem}.yaml"
   if ! "$PY" "$MERGE" "$RUNTIME" "$spec" > "$merged"; then
     warn "  failed to merge $RUNTIME + $spec"; failures+=("$stem (merge)"); continue
   fi
@@ -59,8 +58,8 @@ done
 
 section "Summary"
 if (( ${#failures[@]} > 0 )); then
-  log "FAILED (${#failures[@]}/${#specs[@]}):"
+  log "FAILED (${#failures[@]}/${#stems[@]}):"
   printf '  - %s\n' "${failures[@]}" >&2
   exit 1
 fi
-log "All ${#specs[@]} spec(s) completed."
+log "All ${#stems[@]} spec(s) completed."

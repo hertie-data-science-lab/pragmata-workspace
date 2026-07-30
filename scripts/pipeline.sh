@@ -152,13 +152,13 @@ preflight() {
   check_disk
   if in_slice querygen-run; then
     require_env OPENAI_API_KEY OPENAI_BASE_URL
-    local stem; stem="$(config_stems configs/annotation/querygen_specs | head -1)"
-    [[ -n "$stem" ]] || fatal "no specs under configs/annotation/querygen_specs/" 4
-    local sample="configs/annotation/querygen_specs/${stem}.yaml"
-    "$PY" scripts/annotation/merge_yaml.py configs/annotation/querygen_specs/_runtime.yaml "$sample" \
+    local specs_dir="configs/annotation/querygen_specs" stem
+    stem="$(config_stems "$specs_dir" | head -1)"
+    [[ -n "$stem" ]] || fatal "no specs under $specs_dir/" 4
+    "$PY" scripts/annotation/merge_yaml.py "$specs_dir/_runtime.yaml" "$specs_dir/${stem}.yaml" \
       | "$PY" -c "import sys,yaml; from pragmata.core.settings.querygen_settings import QueryGenRunSettings; QueryGenRunSettings.resolve(config=yaml.safe_load(sys.stdin))" \
         >/dev/null 2>&1 \
-      || fatal "_runtime.yaml + $(basename "$sample") failed QueryGenRunSettings validation" 4
+      || fatal "_runtime.yaml + ${stem}.yaml failed QueryGenRunSettings validation" 4
     log "  config: querygen schema validates"
   fi
   if in_slice bot-run; then
