@@ -128,7 +128,7 @@ DEFAULT_POLICY = "calib-complete"
 
 # Where the pooled, filtered CSVs handed to `eval score --path` are staged. Deliberately
 # NOT under data/eval/: that is pragmata's own eval tool tree (see data/README.md), and
-# the ownership invariant in scripts/eval/README.md is that a tool tree holds only what
+# the ownership invariant in docs/eval.md is that a tool tree holds only what
 # that tool produced. These are workspace-produced inputs TO the tool, so they get a
 # workspace-owned sibling; pragmata still writes its reports to data/eval/scores/.
 FILTERED_ROOT = ws.DATA_DIR / "eval-inputs"

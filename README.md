@@ -9,7 +9,8 @@ itself. It does **not** hold data or outputs (those stay local and gitignored, s
 ```mermaid
 flowchart LR
   qg[querygen] --> bot[publikationsbot] --> comb[combine] --> imp["setup + import"] --> arg[(Argilla datasets)]
-  arg -. planned .-> ev[pragmata eval]
+  arg -->|export| ev["eval deliverables (score + report)"]
+  arg -. planned .-> tr["pragmata eval train/predict"]
 ```
 
 ## Setup
@@ -61,6 +62,11 @@ make annotation-report-tables  # tables only -> report.md
 make annotation-report-pdf     # tables -> report.pdf                (needs pandoc + xelatex)
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
+# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/eval.md)
+make eval-report               # annotation_operations, annotation_label_summary, retrieval_manifest
+make eval-score                # eval_metric_estimates.csv, via `pragmata eval score`
+make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
+
 # Data transport  (see docs/eval-data-transport.md)
 make transfer-push             # push a tree to the Blob             (SRC= source, PREFIX= dest; both required)
 make transfer-pull             # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
@@ -78,8 +84,8 @@ make help                      # list every target
 
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
-- [Eval pipeline](docs/eval.md) - sibling pipeline; data transport has shipped, the
-  train/predict/score stages are still to build.
+- [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
+  pseudonymisation, and the refresh runbook; train/predict are still to build.
 - [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
@@ -92,7 +98,7 @@ make help                      # list every target
 .env.example           template for .env (copy to .env and fill in)
 configs/               committed configs & specs (settings.conf, annotation/, eval/ stub)
 reproducibility/       committed lineage records (one dated bundle per operation)
-scripts/               committed pipeline code (pipeline.sh, daily.sh, annotation/, lib/, eval/ stub)
+scripts/               committed pipeline code (pipeline.sh, daily.sh, annotation/, eval/, lib/, transfer/)
 data/  logs/  reports/ pipeline I/O and outputs (gitignored except README + .gitkeep)
 argilla_backup/        status-preserving Argilla dumps (gitignored, local/external)
 tmp/                   one-off local scratch (gitignored)

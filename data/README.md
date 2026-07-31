@@ -12,7 +12,7 @@ data/
 ├── annotation/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
 │   └── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
-│                        annotator_id is pseudonymised on export; see scripts/eval/README.md
+│                        annotator_id is pseudonymised on export; see docs/eval.md
 │                        one dir per domain config and nothing else: this tree is published
 │                        by transfer-push and consumers read exports/*/ as the domain list
 ├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
