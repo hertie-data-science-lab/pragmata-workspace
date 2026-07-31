@@ -32,7 +32,8 @@ committed `.example` templates (dummy values) showing the expected shape - copy 
 
 ## Data & secrets
 
-Not version-controlled (gitignored): `.venv/`, `.env`,
+Not version-controlled (gitignored): `.venv/`, `.uv/` (uv's in-tree interpreter and wheel
+cache - see the Makefile), `.env`,
 `configs/annotation/users.secrets.json`, `configs/annotation/users.json`, `data/`, `logs/`,
 `reports/`, `argilla_backup/`, `tmp/`, `*.log`. Everything tracked is scripts, configs,
 specs, and the `reproducibility/` bundle.

@@ -68,7 +68,7 @@ guide; update this inventory when a resource or endpoint changes.
 
 | Component | Details |
 | --- | --- |
-| **CPU annotation VM** | OS: Ubuntu 22.04 LTS • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `uv sync` • **TODO (BSt)**: Azure tenant, subscription, resource group, VM name, access method |
+| **CPU annotation VM** | OS: Ubuntu 22.04 LTS • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `make setup` • **TODO (BSt)**: Azure tenant, subscription, resource group, VM name, access method |
 | **Azure OpenAI** | Key + base URL in `.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`); base-URL format `https://<resource>.openai.azure.com/openai/v1/` • **TODO (BSt)**: tenant, subscription, resource group, resource name, model deployment name, key-secret location |
 | **Publikationsbot** | Service URL in `.env` (`PUBLIKATIONSBOT_URL`); auth = Azure access token via `az` CLI • **TODO (BSt)**: hosting resource, access process, approved number of parallel requests |
 | **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • **TODO (BSt)**: tenant, subscription, resource group, host, persistent-storage location, backup location |
@@ -120,12 +120,20 @@ The split is deliberate - see [Eval pipeline](eval.md#the-three-pins).
 
 One command, from `pragmata-workspace`:
 
-    uv sync
+    make setup
 
 This creates `.venv/` from the committed `pyproject.toml` and `uv.lock`, installing all
 126 packages at exactly the versions the shipped report numbers were produced with -
 including `pragmata` itself, from git at its pinned SHA. Python is uv-managed: the version
 is fixed by `.python-version` (3.12.13) and does not have to be installed beforehand.
+
+The target wraps `uv sync --frozen` and additionally points uv's interpreter and wheel
+cache at `.uv/` inside the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. On a
+single-user VM that makes no practical difference, so prefer it anyway for consistency; on
+a checkout shared between users over POSIX ACLs it is what makes `.venv` usable by all of
+them, because uv writes both of those per-user paths mode 700/711 and a `.venv` built
+against them resolves to files only their owner can read. The Makefile carries the full
+reasoning; the paths are overridable from the environment.
 
 Two prerequisites, both worth checking before the first run:
 

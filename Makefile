@@ -47,6 +47,25 @@
 SHELL := /bin/bash
 PY := .venv/bin/python
 
+# uv's interpreter and wheel cache live in-tree rather than under ~/.local/share/uv
+# and ~/.cache/uv, so that a checkout shared between users (the GPU server, where
+# access is granted by POSIX ACL) does not depend on any one home directory:
+#
+#   - ~/.local/share/uv is mode 700, so a .venv built against a uv-managed
+#     interpreter there resolves to a python nobody else can execute.
+#   - ~/.cache/uv extracts wheels as mode 711 — no group or other read. uv hardlinks
+#     those into .venv, and link-mode=copy preserves the mode too, so .venv inherits
+#     the unreadable bits either way.
+#
+# Extracted in-tree instead, both pick up the directory's default ACL (mode 771,
+# mask rwx) and every user with ACL access can read them. Absolute paths because a
+# relative uv cache-dir is resolved against the *current* directory, which would
+# scatter caches through the tree. Override in the environment on a single-user
+# machine to reuse a normal shared cache; the defaults just have to be safe here.
+UV_PYTHON_INSTALL_DIR ?= $(CURDIR)/.uv/python
+UV_CACHE_DIR ?= $(CURDIR)/.uv/cache
+export UV_PYTHON_INSTALL_DIR UV_CACHE_DIR
+
 # Eval report output args. The scripts resolve the dated output dir themselves and drop
 # the data dictionary beside the CSVs (ws.write_csv); OUT= redirects for an off-date or
 # scratch run.
@@ -67,7 +86,13 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-report-plots \
         eval-report eval-score eval-catalog \
         transfer-push transfer-pull transfer-verify \
-        repro-pin repro-verify repro-reproduce help
+        repro-pin repro-verify repro-reproduce setup help
+
+# --- setup ---
+
+setup: ## Create/refresh .venv from uv.lock, on the in-tree interpreter every user can read
+	uv sync --frozen
+	@$(PY) --version
 
 # --- orchestrator ---
 
