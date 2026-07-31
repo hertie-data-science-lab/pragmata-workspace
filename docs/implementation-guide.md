@@ -30,13 +30,18 @@ The process is:
                   ↓
     report deliverables scored on the CPU VM
                   ↓
-    (planned) evaluator training on the GPU VM
+    evaluator training + prediction on the GPU VM
+                  ↓
+    report assembled (separate private repository)
 
 The workspace implements question generation through annotation export, the transfer of
 files between the annotation and evaluation machines, and the scoring of human labels into
-the report deliverables. Evaluator **training and prediction** (`pragmata eval
-train|predict`) are package interfaces without a tested project-specific process yet - see
-[section 10](#10-run-the-evaluation).
+the report deliverables. Evaluator **training and prediction** are implemented in `pragmata`
+(`pragmata eval train-evaluator|predict-labels`, backed by `tlmtc`); what does not exist yet
+is a **tested project-side process on the GPU VM** - the commit, environment, configuration
+files and accepted commands - see [section 10](#10-run-the-evaluation). Assembling the final
+report from the scored deliverables and the evaluator's predictions happens in a separate
+private repository and is out of scope here.
 
 ## 2. How the system is arranged
 
@@ -48,8 +53,8 @@ The documented setup uses two virtual machines:
 The CPU VM runs the dataset-generation and annotation pipeline (Azure OpenAI,
 Publikationsbot, Argilla), exports and pseudonymises the annotations, scores the human
 labels into the report CSVs, and pushes exports to Azure Blob Storage. The GPU VM downloads
-the exports from Blob, will run evaluator training, and returns predictions and checkpoints
-through the same container.
+the exports from Blob, runs evaluator training and prediction, and returns predictions and
+checkpoints through the same container.
 
 The two VMs cannot connect directly. Code moves through GitHub (both boxes at the same
 commit); data moves through Azure Blob Storage over HTTPS. See
@@ -173,15 +178,67 @@ The pipeline uses fixed output paths:
     data/publikationsbot/<specification>.jsonl
     data/publikationsbot/<domain>_combined.jsonl
 
-The Publikationsbot client resumes existing output files by skipping query IDs already
-written, and the combine stage includes matching `_batch` files from earlier runs - so
-existing output can be reused or mixed into a new dataset. The repository does not provide
-a reset command.
+These paths are **not** per-run, and the stages are deliberately resumable: the
+Publikationsbot client skips query IDs already present in its output file, and the combine
+stage absorbs matching `_batch` files from earlier runs. That is what makes an interrupted
+run cheap to continue - and what silently mixes two runs together if the tree is left in
+place. The repository provides no reset command.
 
-**TODO (BSt):** document and use one approved clean-run procedure (new workspace directory
-per run, or archive-and-clear selected output directories), the archive location for the
-previous run, and the naming convention for the new one. Do not delete an earlier run until
-its data, configuration, logs and checksums have been archived.
+**Archive, then clear.** Use this procedure. A per-run output directory (a `RUN_ID` in the
+paths) would be tidier but requires changing the fixed paths in code; archive-and-clear is a
+procedure only, so it is the one documented here.
+
+1. **Pin the outgoing run** while its files are still in place, so the archive is verifiable:
+
+       make repro-pin KIND=freeze NAME=dataset-run PATHS="data/querygen data/publikationsbot"
+
+   This writes `reproducibility/<today>-dataset-run/` - a `pins.sha256` listing every
+   artefact by SHA-256, plus a README stub to complete. `KIND=freeze` marks it a
+   self-contained record of one run rather than a lineage step that gets replayed (the
+   default is `lineage`). The bundle is committed; the data it pins is not. See
+   [`reproducibility/`](../reproducibility/README.md).
+
+2. **Copy the run out** to the archive location, preserving the repo-relative paths, and keep
+   together the four things a rerun needs: `data/querygen/runs/`, `data/publikationsbot/`
+   (including the `.errors.jsonl` and `.no_retrieval.jsonl` files), `logs/annotation/`, and
+   the non-secret configuration (`configs/`) plus the two git commits from §3.1.
+
+3. **Verify the copy** before touching the originals. `pins.sha256` is plain `sha256sum`
+   format over repo-relative paths, so from the archive root:
+
+       sha256sum -c <workspace>/reproducibility/<today>-dataset-run/pins.sha256
+
+   Every line must read `OK`. (`make repro-verify PIN=<bundle>` checks the *working tree*, so
+   it confirms the originals, not the copy - useful as the before/after pair.)
+
+4. **Clear only then**, and only the generated outputs. Keep the directories and their
+   committed `.gitkeep` files:
+
+       rm -rf data/querygen/runs
+       find data/publikationsbot -type f ! -name .gitkeep -delete
+
+   Leave `data/annotation/exports-frozen/` alone: freezes are the pinned inputs behind
+   published numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)).
+
+5. **Decide on the planning carry-over.** `data/querygen/<spec_fingerprint>.json` is not run
+   output - it is the previous run's planning summary for that spec (its redundancy patterns
+   and diversification targets), read back and fed into the next run's planning prompt. Left
+   in place, the new run deliberately steers *away* from the questions the old one asked;
+   removed, the new run plans from the spec alone. For a clean run whose output should be
+   comparable with the previous one, archive these files with the run (they are inside the
+   pinned `data/querygen` tree from step 1) and then delete them:
+
+       rm -f data/querygen/*.json
+
+6. **Confirm the tree is clean** before starting: `ls data/querygen/runs` should fail,
+   `data/publikationsbot/` should hold only `.gitkeep`, and `make plan` should list the full
+   stage sequence for every domain in scope.
+
+Do not delete an earlier run until its data, configuration, logs and checksums have been
+archived and the archive has been verified.
+
+**TODO (BSt):** the archive location (the same one as [section 11](#11-return-and-archive-the-results))
+and the run-naming convention used with it.
 
 ## 5. Test the deployment
 
@@ -247,17 +304,54 @@ Run query generation, Publikationsbot and combine without importing into Argilla
 
 The final candidate dataset per domain is `data/publikationsbot/<domain>_combined.jsonl`.
 
-Before import:
+### 6.1 The schema is defined and machine-checked
+
+`pragmata` defines the import contract as a pydantic model, `QueryResponsePair`
+(`src/pragmata/core/schemas/annotation_import.py`). One record is one query-response pair:
+
+| Field | Rule |
+| --- | --- |
+| `query` | non-empty string |
+| `answer` | non-empty string |
+| `chunks` | at least one chunk; `chunk_id` unique within the record |
+| `chunks[].chunk_id`, `chunks[].doc_id` | non-empty strings |
+| `chunks[].chunk_rank` | integer ≥ 1 (1-based retrieval position) |
+| `chunks[].text` | non-empty string |
+| `context_set` | non-empty string |
+| `language` | optional ISO code (e.g. `"de"`); may be null |
+
+The model forbids unknown fields, which is why `scripts/annotation/import.sh` projects each
+line down to exactly those five keys with `jq` before calling `pragmata annotation import` -
+`run_bot.py` writes provenance extras that would otherwise be rejected.
+
+**Invalid records are skipped, and the skip happens after the valid ones are already in
+Argilla.** The import validates every record, imports the ones that pass, and only then
+reports failures: `Validation errors: <n>` on stderr and exit code 1. There is no dry run and
+no all-or-nothing mode, so a partial import is the failure mode to expect. Two consequences:
+
+- The acceptance check is `Total records:` in the import output equalling the offered line
+  count, with the command exiting 0:
+
+      wc -l data/publikationsbot/<domain>_combined.jsonl      # records offered
+
+- A non-zero exit means some records are in and some are not. Fix the rejected records and
+  re-import the whole file: record IDs are content hashes and the import is an idempotent
+  upsert, so the already-imported records are re-written in place rather than duplicated.
+
+### 6.2 Review before import
 
 1. confirm that every pipeline stage succeeded;
 2. review the error and no-retrieval files;
 3. check the record count for each domain;
-4. confirm that each record contains `query`, `answer`, `chunks`, `context_set` and
-   `language`;
+4. confirm the records satisfy `QueryResponsePair` (§6.1) - schema-invalid records are dropped
+   silently at import, so `Validation errors: 0` is the acceptance signal, not the absence of
+   a crash;
 5. inspect a sample of questions, answers and publication passages; and
-6. confirm that the files contain only records from the current run.
+6. confirm that the files contain only records from the current run (§4).
 
-**TODO (BSt):** the minimum conditions for approving a candidate dataset for import.
+**TODO (BSt):** the *editorial* acceptance thresholds, which the schema cannot express: the
+target record count per domain, the tolerable share of no-retrieval and error records, and
+who signs off on the sampled questions, answers and passages.
 
 ## 7. Import the candidate dataset into Argilla
 
@@ -305,10 +399,38 @@ Monitoring during annotation ([Annotation pipeline](annotation.md#logging--repor
     make annotation-report     # render tables + plots for the latest snapshot
     make annotation-daily      # the nightly cron body: export -> log
 
-**TODO (BSt):** when the annotations count as ready for evaluation (required completion
-level; treatment of calibration, discarded and disputed records).
+### 8.1 When annotation counts as done
 
-Export the annotations:
+Argilla itself holds the threshold, and `pragmata` reads it live. There is no completion
+target in `configs/` - `min_submitted` lives in each dataset's Argilla settings
+(`dataset.settings.distribution`), because for a status report what the server enforces is the
+source of truth. Read it with:
+
+    .venv/bin/pragmata annotation status                    # all tasks, all workspaces
+    .venv/bin/pragmata annotation status --by-dataset       # per dataset
+
+Two conditions, both required:
+
+- **`overlap_satisfied`** (operational) - every chunk has at least `min_submitted` submitted
+  responses, per its own dataset's setting: typically 1 for production, 3 for calibration.
+  This is what makes Krippendorff's α computable, and it is the sense in which Argilla itself
+  calls a record "completed".
+- **`panel_complete`** (metric-facing, strict) - for retrieval, all K chunks of a query panel
+  have at least one **submitted** response. Discards are abstentions, not judgements, so they
+  do not count toward completeness. A panel can therefore be `panel_complete` while still
+  overlap-unsatisfied (say 1 of 3 calibration votes in), and vice versa.
+
+Grounding and generation are one annotation item per record, so they have no panels - the
+overlap condition alone applies. `--tag-partial-panels` stamps `needs_completion` on the
+unresolved chunks of partial panels so annotators can filter to them in the UI; it is the only
+write this command makes.
+
+**TODO (BSt):** the one case the rule above cannot settle - a panel that can never reach
+`panel_complete` because a chunk has only discards. Decide whether such panels are re-issued
+to another annotator, excluded from the metric denominator, or accepted as incomplete, and
+record that decision here before the export is frozen.
+
+### 8.2 Export the annotations
 
     make annotation-export                      # all domains
     make annotation-export DOMAIN=gesundheit    # one domain
@@ -340,7 +462,7 @@ detail: [Eval data transport](eval-data-transport.md).
 ## 10. Run the evaluation
 
 **Scoring human labels has shipped and runs on the CPU VM.** Three targets produce the
-report deliverables into `reports/eval/<date>/`, each CSV with a provenance sidecar and the
+report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the
 data dictionary beside it:
 
     make eval-report     # annotation_operations, annotation_label_summary, retrieval_manifest
@@ -351,22 +473,37 @@ They read pinned inputs, never the live export tree; the pin model, the vocabula
 refresh procedure are in [Eval pipeline](eval.md), and every column of every CSV is defined
 in the [data dictionary](eval-data-dictionary.md).
 
-**Evaluator training and prediction are not built yet.** The `pragmata` package defines the
-command shapes (`pragmata eval train-evaluator|predict-labels|score`), and the GPU box
-consumes staged input by explicit path, e.g.:
+**Evaluator training and prediction are implemented in `pragmata` and run on the GPU VM.**
+`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` (default
+proxy `jhu-clsp/mmBERT-small`, target `jhu-clsp/mmBERT-base`) and writes a run directory, a
+model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen
+training run to an unlabelled CSV and writes probabilities and predictions. Both live behind
+the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock
+- the GPU box installs its own environment. They consume staged input by explicit path, e.g.:
 
     pragmata eval train-evaluator \
       --labeled-data-path data/transfer/exports/<domain>/<task>.csv \
       --task <retrieval|grounding|generation> \
       --config <evaluation-config>
 
+    pragmata eval predict-labels \
+      --unlabeled-data-path <unlabelled-csv> \
+      --evaluator-run-id <run-id-from-training> \
+      --task <retrieval|grounding|generation>
+
+**What is missing is the project-side procedure, not the code.**
+
 **TODO (joint):** the tested GPU-side process - the pragmata commit used on the GPU VM, the
 environment installation command, the evaluation configuration files, the mapping from each
 export to the three task inputs, the per-task training commands, the prediction and scoring
 commands, expected output directories, and the conditions for accepting an evaluation
 result. `scripts/eval/score_synthetic_predictions.py` is the reserved name for scoring the
-evaluator's predictions once they exist. The full process is not reproducible until these
-values have been completed and tested against a real export.
+evaluator's predictions once they exist. Until these values are filled in and run against a
+real export, this step is not reproducible from the documentation alone even though every
+command it needs exists.
+
+The final report is assembled from these outputs in a separate private repository, outside
+the scope of this guide.
 
 ## 11. Return and archive the results
 
@@ -392,7 +529,9 @@ scores, and checkpoints. The dated bundles under
 [`reproducibility/`](../reproducibility/README.md) are the committed half of this record -
 each pins its artefacts by SHA-256 and `make repro-verify` re-checks them.
 
-**TODO (BSt):** the permanent storage location and the run-directory naming convention.
+**TODO (BSt):** the permanent storage location and the run-directory naming convention. This
+is the same location and convention [section 4](#4-start-a-clean-dataset-run) archives the
+previous run into - record it once, here.
 
 ## 12. When the rerun is complete
 
@@ -401,18 +540,20 @@ The rerun is complete when:
 1. all resources in the deployment inventory have been identified;
 2. both VMs and all external services are accessible;
 3. the exact code versions and environment installation commands are recorded;
-4. the run starts with clean local output directories;
+4. the previous run is archived and verified, and the output directories are clean (§4);
 5. the small generation test succeeds;
-6. the candidate dataset is generated and approved;
+6. the candidate dataset imports with zero validation errors and is editorially approved
+   (§6);
 7. the records are imported into the intended Argilla destination;
-8. annotation is completed and exported (pseudonymised);
+8. annotation is complete by the §8.1 rule - overlap satisfied and panels complete - and
+   exported (pseudonymised);
 9. the export is transferred and verified on the GPU VM;
 10. evaluator training, prediction and scoring are completed;
 11. predictions and checkpoints are returned; and
 12. the full run is archived and its bundle pinned.
 
-The remaining documentation gaps, all marked **TODO** above: CPU and GPU VM provisioning,
-the Azure resource names, the GitHub SSH key the repositories are cloned with, shared
-Argilla deployment and operation, the clean-run procedure, the candidate-dataset and
-annotation acceptance rules, the GPU-side evaluation process, and the permanent archive
-location.
+The remaining documentation gaps, all marked **TODO** above: CPU and GPU VM provisioning, the
+Azure resource names, the GitHub SSH key the repositories are cloned with, shared Argilla
+deployment and operation, the archive location and run-naming convention (§4 and §11), the
+editorial acceptance thresholds for a candidate dataset (§6), the treatment of panels that
+only ever received discards (§8.1), and the tested GPU-side evaluation process (§10).

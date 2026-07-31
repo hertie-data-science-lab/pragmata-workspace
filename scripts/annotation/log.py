@@ -11,7 +11,7 @@ Reads the live Argilla annotation state (across all domains/workspaces/tasks)
 and emits three progress metrics, rolled up task -> domain -> total:
 
   1. Counts — three distinct quantities, split production vs calibration:
-       • submitted_responses (work units; a record done by 3 people = 3),
+       • submitted_responses (work done; a record done by 3 people = 3),
        • completed_records   (records that met their min_submitted threshold),
        • total_records       (imported; the denominator).
      Record counts come from Argilla ``dataset.progress()``; response counts
@@ -125,7 +125,7 @@ MIN_RECORDS = int(os.environ.get("LOG_MIN_RECORDS_FOR_TIMING", "5"))
 IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "1000"))
 # Fixed so the bootstrap CIs on alpha are reproducible: the same snapshot re-derived from
 # the same export yields the same interval. pragmata threads this straight into
-# numpy's default_rng. Recorded in every snapshot, and in the report sidecars.
+# numpy's default_rng. Recorded in every snapshot, and in the report .provenance.json files.
 IAA_SEED = int(os.environ.get("LOG_IAA_SEED", "0"))
 
 JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
@@ -483,11 +483,11 @@ def label_stats(
 
 
 def read_export_meta(export_dir: Path) -> dict:
-    """Constraint + completeness aggregates from the export's meta sidecar.
+    """Constraint + completeness aggregates from the export's meta file.
 
-    The sidecar (``annotation_export.meta.json``) is written next to the CSVs by every
+    That file (``annotation_export.meta.json``) is written next to the CSVs by every
     export, so this works on both the throwaway and ``--use-export`` paths. Degrades to
-    ``None`` blocks if the sidecar is missing or unreadable. Both aggregates are
+    ``None`` blocks if it is missing or unreadable. Both aggregates are
     domain-level: ``constraint_summary`` is per-constraint_id across tasks; completeness
     is the retrieval panel-completeness summary.
     """
@@ -575,7 +575,7 @@ def add_completeness(acc: dict, c: dict | None) -> None:
 def build_completeness(acc: dict) -> dict | None:
     if acc["n_panels"] == 0:
         return None
-    # by_k_bucket kept as raw {n_panels, n_complete} — matches the sidecar shape; the
+    # by_k_bucket kept as raw {n_panels, n_complete} — matches the meta-file shape; the
     # renderer recomputes per-bucket fractions (_bucket_frac).
     return {
         "n_panels": acc["n_panels"],
@@ -586,7 +586,7 @@ def build_completeness(acc: dict) -> dict | None:
 
 
 # Three distinct quantities, all reported:
-#   submitted_responses — response-level work units (a record done by 3 people = 3)
+#   submitted_responses — response-level work count (a record done by 3 people = 3)
 #   total_records       — records imported into the dataset (the denominator)
 #   completed_records   — records that reached their min_submitted threshold (Argilla "completed")
 # (pending_records = total - completed.) Record counts come from Argilla's
@@ -860,7 +860,7 @@ def process_domain(
 
     # Label-value statistics from the export CSVs (class balance, discards, per-annotator
     # bias). Degrades independently of IAA. Constraint + completeness aggregates come from
-    # the export's meta sidecar (domain-level, reused not recomputed).
+    # the export's meta file (domain-level, reused not recomputed).
     label_by_task: dict[Task, dict] = {}
     label_raw_by_task: dict[Task, dict] = {}
     label_error: str | None = None
@@ -946,9 +946,9 @@ def pooled_agreement(
 
     Implemented by concatenating each task's per-domain export CSVs into one synthetic
     export and handing that to pragmata's ``compute_iaa``, so the α implementation, the
-    calibration filter and the unit/coder pivot are exactly the per-domain ones. Units are
+    calibration filter and the unit/coder pivot are exactly the per-domain ones. Items are
     globally unique (``record_uuid``, content-addressed; ``record_uuid:chunk_id`` for
-    retrieval), so concatenation cannot merge units across domains.
+    retrieval), so concatenation cannot merge items across domains.
 
     The pooled export is written under ``scratch_base`` — never into
     ``data/annotation/exports/``, which is published by transfer-push and whose subdirectories
@@ -1101,7 +1101,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
         "schema_version": ws.SNAPSHOT_SCHEMA_VERSION,
         "session_gap_threshold_s": int(SESSION_GAP_S),
         # The bootstrap parameters behind every alpha CI in this snapshot, so a report
-        # sidecar can carry them without re-reading the config.
+        # snapshot can carry them without re-reading the config.
         "iaa": {"n_resamples": IAA_RESAMPLES, "seed": IAA_SEED},
         "pooled_agreement": pooled,
         "total": {

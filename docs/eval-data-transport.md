@@ -62,7 +62,7 @@ prints a one-line **snapshot pin** (a single hash for the whole tree) for a futu
 reproducibility bundle. Every `pull` re-runs `sha256sum -c` on the receiving end and fails
 loudly on any mismatch, so a truncated or corrupted transfer can never pass silently.
 
-## The staging seam
+## The staging boundary
 
 `sync.sh` **reads** pragmata's own tool trees (`data/annotation/`, `data/eval/`) in place and
 **writes only** under `data/transfer/` on the receiving box - never inside a tool's output
@@ -142,7 +142,7 @@ make transfer-pull PREFIX=checkpoints          # → data/transfer/checkpoints/ 
 ## Data sensitivity
 
 Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, pseudonymised on
-every export since 2026-07-30 (see [Annotator identities](eval.md#annotator-identities)).
+every export (see [Annotator identities](eval.md#annotator-identities)).
 As a second line of defence, `push` itself refuses any tree whose `annotator_id` values or
 `iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot
 leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
@@ -152,10 +152,3 @@ free-text `notes` and `discard_notes` columns are annotator-authored and unrevie
 ship into the private, IP-allowlisted container; the annotator roster
 (`configs/annotation/users.json`) never leaves the CPU box, and the GPU box never needs
 it - eval consumes label columns, not identities.
-
-## Not here yet
-
-**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are a separate
-effort in the pragmata repo and are not built yet - the walkthrough's step 2 onward
-describes that future flow. Scoring human labels has shipped and runs entirely on the CPU box; see
-[Eval pipeline](eval.md).

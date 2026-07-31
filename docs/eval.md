@@ -1,15 +1,18 @@
 # Eval pipeline
 
 The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Two of its
-three parts have shipped: **data transport** ([Eval data transport](eval-data-transport.md))
-and **scoring human labels** (this page). **Training and prediction** (`pragmata eval
-train-evaluator|predict-labels`) are not built yet - see [Not built yet](#not-built-yet).
+three parts are wired up in this workspace: **data transport**
+([Eval data transport](eval-data-transport.md)) and **scoring human labels** (this page).
+**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are implemented
+in `pragmata` and run on the GPU box, but have no workspace-side glue - see
+[No workspace glue yet](#no-workspace-glue-yet).
 
 ## Deliverables
 
 Three targets produce the report deliverables into `reports/eval/<date>/` (`OUT=` to
-redirect). Every CSV ships with a `.provenance.json` sidecar, and the
-[data dictionary](eval-data-dictionary.md) is copied beside the CSVs whose sidecars pin it:
+redirect). Every CSV ships with a `.provenance.json` file, and the
+[data dictionary](eval-data-dictionary.md) is copied beside the CSVs whose
+`.provenance.json` pins it:
 
 | Target | Script | Output |
 |---|---|---|
@@ -21,14 +24,14 @@ redirect). Every CSV ships with a `.provenance.json` sidecar, and the
 `scripts/eval/` also holds `vectorstore_inventory.py` (aggregate corpus counts, to stdout)
 and `eval_common.py` (shared vocabulary and filters, not runnable).
 
-**Vocabulary.** `response`, `record`, `unit`, `panel` and `query group` are defined in the
+**Vocabulary.** `response`, `record`, `item`, `panel` and `query group` are defined in the
 [data dictionary](eval-data-dictionary.md), together with every column of every CSV.
 `eval_common.py` is the executable half of that document; the two are kept in step. Do not
 redefine the terms anywhere else.
 
-**Sidecars record identity, not explanation**: script, workspace SHA, pragmata pin, hashed
-inputs, parameters and seeds, snapshot identity, and the dictionary's hash. What a number
-means lives in the dictionary the hash pins.
+**A `.provenance.json` records identity, not explanation**: script, workspace SHA,
+pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's
+hash. What a number means lives in the dictionary the hash pins.
 
 ## The three pins
 
@@ -86,12 +89,12 @@ explicit path only; nothing is inferred from prior tool outputs. See
 
 ## Cutting a new freeze
 
-The order matters: sidecars record the workspace commit they were generated at, and the
-reproducibility bundle pins the sidecars by hash, so code changes and re-runs must not
-interleave. The sequence that works:
+The order matters: each `.provenance.json` records the workspace commit it was generated
+at, and the reproducibility bundle pins them by hash, so code changes and re-runs must
+not interleave. The sequence that works:
 
 1. **Finish and commit all code changes first.** Never rewrite history (`reset`, `amend`)
-   after generating sidecars - they would name a commit that no longer exists.
+   after generating the provenance files - they would name a commit that no longer exists.
 2. **Take the export and snapshot**: `make annotation-export` (pseudonymises as it goes),
    then `make annotation-log`; note the new snapshot's `run_at`.
 3. **Freeze the export tree.** The `exports-frozen/` parent is write-protected:
@@ -100,7 +103,7 @@ interleave. The sequence that works:
 4. **Move the pins**: update `FREEZE_DATE` and `CANONICAL_SNAPSHOT_RUN_AT` in
    `eval_common.py`, commit.
 5. **Regenerate everything on the clean tree**: `make eval-report eval-score eval-catalog`.
-   A re-run rewrites the sidecars, so this must happen after the last code commit.
+   A re-run rewrites them, so this must happen after the last code commit.
 6. **Re-pin the bundle.** `repro-pin` refuses a pre-existing bundle dir and `pins.sha256`
    is generated, never hand-edited - so delete the old bundle dir, re-pin, restore the
    hand-written bundle README, and commit.
@@ -111,12 +114,14 @@ interleave. The sequence that works:
 If the eval pragmata pin moves (e.g. upstream PRs land in modified form), the numbers must
 be **re-derived** under the new pin, not assumed to carry over.
 
-## Not built yet
+## No workspace glue yet
 
-`pragmata eval train-evaluator|predict-labels` (the `tlmtc` extra) run on the GPU box and
-are a separate effort in the pragmata repo. When they land, they mirror the annotation
-pipeline
-(`scripts/eval/` ↔ `scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and
-write to `data/eval/`. `score_synthetic_predictions.py` is the reserved name for scoring
-the evaluator model's predictions - the twin of `score_human_annotations.py` - and is
-deliberately not stubbed.
+`pragmata eval train-evaluator|predict-labels` are implemented in the pragmata repo, behind
+the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), and run on the GPU box against staged
+export CSVs. What does not exist is the workspace side: no make targets, no `configs/eval/`,
+no tested procedure - see
+[implementation guide §10](implementation-guide.md#10-run-the-evaluation) for the open list.
+When that glue lands it mirrors the annotation pipeline (`scripts/eval/` ↔
+`scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and writes to `data/eval/`.
+`score_synthetic_predictions.py` is the reserved name for scoring the evaluator model's
+predictions - the twin of `score_human_annotations.py` - and is deliberately not stubbed.

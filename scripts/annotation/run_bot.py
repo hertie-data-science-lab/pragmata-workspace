@@ -555,7 +555,7 @@ def process_spec(
                     message=f"chunks={len(chunks)}, answer_len={len(answer)}",
                     attempt_count=attempts,
                 )
-                # Sidecar: when bot produced an answer but no chunks, preserve
+                # Side output: when bot produced an answer but no chunks, preserve
                 # the answer text for later analysis of retrieval-gap behaviour.
                 if answer and not chunks:
                     _log_no_retrieval(

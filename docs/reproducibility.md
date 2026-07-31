@@ -11,7 +11,7 @@
 | `2026-07-01-annotation-curation/` | lineage | The curation, 21,346 → 4,244 records: `curation_record.md`, the per-dataset keep-lists, `apply_log.jsonl`. |
 | `2026-07-02-generation-descope/` | lineage, **retired** | Would have taken one dataset to 80 records. Declared 2026-07-02, never applied, retired 2026-07-30 once its premise expired (the annotators completed all 20 records it would have dropped). Excluded from replay. |
 | `2026-07-29-eval-report-freeze/` | freeze, **superseded** | The first canonical annotation export for the BSt report. Superseded by `2026-07-30-eval-report/`; retained as an archived record and still verifies. Its export tree predates pseudonymisation, so it holds real annotator names and stays local. |
-| `2026-07-30-eval-report/` | freeze | The canonical data behind every human-annotation and fairness number in the BSt report: the pseudonymised export and the report CSVs with their sidecars and data dictionary. Never replayed. |
+| `2026-07-30-eval-report/` | freeze | The canonical data behind every human-annotation and fairness number in the BSt report: the pseudonymised export and the report CSVs with their `.provenance.json` files and data dictionary. Never replayed. |
 
 `kind: lineage` bundles are replayed in date order to rebuild the live Argilla instance;
 `kind: freeze` bundles are self-contained records of a single run. A `status: retired` header

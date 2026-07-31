@@ -17,21 +17,45 @@ the dev container app's secret via `az`, and the connection is read-only.
 ## Author gender: what the columns mean, and what they cannot mean
 
 There is no gender field in the corpus. The only signal is a first name run through
-`gender-guesser`, a dictionary lookup. Every author recorded on a document is
-classified, then three columns are derived from that:
+`gender-guesser` 0.4.0, a dictionary lookup. Each column comes in a pair: `_raw` is what
+`gender-guesser` returned, `_collapsed` is what WE decided that means.
 
-  `first_author_gender`      classification of verf1 (pers1 as fallback)
-  `author_gender`            majority across resolved authors; ties -> "mixed"
-  `female_present`           True if any resolved author classified female
+One pair per AUTHOR SLOT, aligned to the metadata's verf1..verf3 (pers1 standing in for
+verf1 when no verf* field exists):
 
-`*_raw` columns keep `gender-guesser`'s own six-way verdict (female, mostly_female,
-andy, unknown, mostly_male, male) rather than collapsing it, so coverage is visible
-instead of `andy` and `unknown` being merged into one bucket. `n_authors` and
-`n_authors_resolved` say how much of each row the claim rests on.
+  `author1_gender_raw` / `author1_gender_collapsed`
+  `author2_gender_raw` / `author2_gender_collapsed`
+  `author3_gender_raw` / `author3_gender_collapsed`
+  `author_gender_collapsed`   majority across the document's authors; ties -> "mixed"
 
-Both gender columns use the same three-way encoding for the unresolved cases —
-`unknown` (no author recorded, or no name the dictionary knows) and `institutional` — so
-a cut on one column transfers to the other, and neither is ever blank.
+Per slot rather than one ";"-joined list, because a list has to be compacted: skip an
+unparseable name and every later author shifts left, so "what did author 2 get?" stops
+being answerable. Blank in a slot pair means no author is recorded there - distinct from
+`unknown`, which means an author IS recorded and the dictionary could not classify them.
+
+The collapse rule, applied identically in every `_collapsed` column:
+
+  female, mostly_female  -> female
+  male, mostly_male      -> male
+  andy, unknown          -> unknown: an author, unclassified, excluded from any majority
+  name recorded, unparseable  -> institutional
+  no name in this slot        -> blank
+
+The pair exists because the rule is a decision, not a fact: `_raw` keeps `andy`
+(ambiguous) distinct from `unknown` (absent from the dictionary) so coverage stays
+visible, while `_collapsed` is the one authored verdict every consumer should use rather
+than re-deriving their own and disagreeing with the report.
+
+Nothing here restates anything else. Three columns were dropped as pure restatements of
+the per-slot verdicts, recomputable in one line each if wanted:
+
+  n_authors_resolved  = count of slots whose _raw is in {female, mostly_female, male,
+                        mostly_male}
+  female_present      = any slot whose _raw is in {female, mostly_female}
+  author_genders_raw  = ";".join of the non-blank _raw slots
+
+`n_authors` is NOT one of those: it counts the names RECORDED, including any that fail the
+"Last, First" parse and so leave their slot's `_raw` blank.
 
 Three limits that belong in any published figure:
 
@@ -41,6 +65,18 @@ Three limits that belong in any published figure:
      measure of how anyone identifies.
   3. Institutional authors have no personal name at all and are flagged
      `is_institutional`, not counted as unknown people.
+
+## What is taken from the store, and what is not
+
+The store keeps 22 metadata keys per chunk; this catalog rolls up 13 of them to document
+grain. `title`/`subtitle`/`doi`/`catalog_url` (`hst`, `hst_zu`, `doi`,
+`url_bibliothekskatalog`) exist so an audited row can be identified and looked up - the
+catalogue URL is a BSt-internal permalink. Deliberately not taken: `url_doi` (it is
+`https://doi.org/` + `doi`), `mediengrp` (the constant `"G"` on all 544,692 chunks),
+`mediennr` (a second document id), `filename`/`filepath_internal`/`source` (internal
+paths), and the per-chunk `headline` - a heading has no document-grain meaning, and the
+retrieval manifest cannot join to it (its `chunk_id` is the pipeline's own
+`<doc_id>-c1`, not a key this store holds).
 
 Run (needs an active `az login` in the BSt tenant):
     ./corpus_catalog.py                     # write the catalog CSV
@@ -60,7 +96,7 @@ from pathlib import Path
 # read-only connection, and never echoes the credential in an error. Imported rather than
 # copied so that handling lives in one place. `uv run --script` isolates installed
 # packages, not local imports, so the dependency-free workspace lib is importable here
-# too, giving this script the same dated output dir and provenance sidecar contract as its
+# too, giving this script the same dated output dir and .provenance.json contract as its
 # four siblings. eval_common is NOT imported: it needs pandas, which this script has no
 # reason to install.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -80,6 +116,8 @@ AUTHOR_FIELDS = ("verf1", "verf2", "verf3")
 # (andy, unknown) stays unresolved rather than being folded into one of these.
 FEMALE = {"female", "mostly_female"}
 MALE = {"male", "mostly_male"}
+# The verdicts that count as resolved — everything else (andy, unknown) does not.
+RESOLVED = FEMALE | MALE
 
 
 def first_name(raw: str | None) -> str | None:
@@ -99,6 +137,12 @@ def first_name(raw: str | None) -> str | None:
 
 COLUMNS = [
     "doc_id",
+    # Bibliographic identity, verbatim from the store apart from the title's non-filing
+    # markers: without a title the audit is a table of opaque doc_ids nobody can check.
+    "title",
+    "subtitle",
+    "doi",
+    "catalog_url",
     "pub_year",
     "publisher",
     "place",
@@ -106,15 +150,29 @@ COLUMNS = [
     "extent_pages",
     "n_chunks",
     # Author gender — see the module docstring for what these can and cannot mean.
+    # Every column here is independent: each _raw holds gender-guesser's own verdict and
+    # each _collapsed holds OUR decision about it. Nothing is a restatement of another
+    # column, so no consumer has to guess which of two spellings of one number to trust.
     "n_authors",
-    "n_authors_resolved",
     "is_institutional",
-    "first_author_gender",
-    "first_author_gender_raw",
-    "author_gender",
-    "female_present",
-    "author_genders_raw",
+    "author1_gender_raw",
+    "author1_gender_collapsed",
+    "author2_gender_raw",
+    "author2_gender_collapsed",
+    "author3_gender_raw",
+    "author3_gender_collapsed",
+    "author_gender_collapsed",
 ]
+
+
+def clean_title(raw: str | None) -> str:
+    """Library title with its non-filing markers removed.
+
+    The catalogue wraps the leading article in ¬…¬ so sorting can skip it
+    ("¬The¬ Future of EU Cohesion"). The markers are a sorting instruction, not part of
+    the title, and nothing here sorts by title - so they go, and the rest is verbatim.
+    """
+    return (raw or "").replace("\u00ac", "").strip()
 
 
 def parse_year(raw: str | None) -> str:
@@ -146,24 +204,27 @@ def parse_pages(raw: str | None) -> str:
     return str(max(numbers)) if numbers else ""
 
 
-def classify(detector, names: list[str | None]) -> tuple[list[str], list[str]]:
-    """(raw six-way verdicts, collapsed verdicts) for a document's recorded authors.
+def classify_slot(detector, name: str | None) -> tuple[str, str]:
+    """(raw six-way verdict, collapsed verdict) for ONE author slot.
 
-    Only authors with a parseable given name are classified; institutional entries are
-    excluded rather than counted as unknown people.
+    Per slot rather than per document so the columns stay aligned to verf1..verf3. A
+    compacted list would shift every later author left whenever an earlier name fails to
+    parse, making "author 2" unanswerable. Three states, kept distinguishable:
+
+      no name recorded in this slot   ("", "")
+      name recorded, unparseable      ("", "institutional")
+      name recorded, parseable        (verdict, female | male | unknown)
     """
-    raw: list[str] = []
-    collapsed: list[str] = []
-    for name in names:
-        given = first_name(name)
-        if given is None:
-            continue
-        verdict = detector.get_gender(given)
-        raw.append(verdict)
-        collapsed.append(
-            "female" if verdict in FEMALE else "male" if verdict in MALE else "unknown"
-        )
-    return raw, collapsed
+    if not name:
+        return "", ""
+    given = first_name(name)
+    if given is None:
+        return "", "institutional"
+    verdict = detector.get_gender(given)
+    collapsed = (
+        "female" if verdict in FEMALE else "male" if verdict in MALE else "unknown"
+    )
+    return verdict, collapsed
 
 
 def majority(collapsed: list[str]) -> str:
@@ -189,6 +250,10 @@ def fetch_documents(cur) -> list[dict]:
         """
         SELECT e.cmetadata->>'doc_id'        AS doc_id,
                count(*)                      AS n_chunks,
+               max(e.cmetadata->>'hst')      AS hst,
+               max(e.cmetadata->>'hst_zu')   AS hst_zu,
+               max(e.cmetadata->>'doi')      AS doi,
+               max(e.cmetadata->>'url_bibliothekskatalog') AS catalog_url,
                max(e.cmetadata->>'jahr')     AS jahr,
                max(e.cmetadata->>'verl')     AS verl,
                max(e.cmetadata->>'ort')      AS ort,
@@ -248,38 +313,21 @@ def build_rows(documents: list[dict]) -> list[dict]:
         # pers1 is the display form; it stands in only when no verf* field is present,
         # so a document with structured authors is never double-counted.
         if not any(recorded):
-            recorded = [doc.get("pers1")]
-        raw, collapsed = classify(detector, recorded)
+            recorded = [doc.get("pers1"), None, None]
+        slots = [classify_slot(detector, name) for name in recorded]
         n_recorded = sum(1 for name in recorded if name)
-
-        def unresolved(n_recorded: int = n_recorded) -> str:
-            """Gender when no author could be classified: institutional, or absent.
-
-            Shared by first_author_gender and author_gender so both the institutional
-            case and the no-author case are encoded identically in the two columns. A
-            document with no recorded author is "unknown", never blank: a blank cell
-            reads as a missing value in the file rather than as a known absence.
-            """
-            return "institutional" if n_recorded else "unknown"
-
-        # Classify the FIRST recorded author on its own rather than taking raw[0].
-        # classify() skips authors whose names don't parse, so `raw` is compacted and no
-        # longer aligned with verf1..verf3 - raw[0] is "the first author that parsed",
-        # which for an institutional verf1 beside a named verf2 would attribute the
-        # co-author's gender to the first-author column.
-        first_pair = classify(detector, recorded[:1])
-        if first_pair[0]:
-            first_raw, first_collapsed = first_pair[0][0], first_pair[1][0]
-        else:
-            # verf1 present but unparseable means institutional; absent means no author.
-            first_raw, first_collapsed = (
-                "",
-                "institutional" if recorded and recorded[0] else unresolved(),
-            )
+        # Authors whose name PARSED, at any verdict. The document-level majority rests on
+        # these: a name the dictionary does not know is still a person (-> "unknown"),
+        # whereas no parseable name at all is institutional.
+        parsed = [collapsed for raw, collapsed in slots if raw]
 
         rows.append(
             {
                 "doc_id": doc["doc_id"],
+                "title": clean_title(doc.get("hst")),
+                "subtitle": clean_title(doc.get("hst_zu")),
+                "doi": (doc.get("doi") or "").strip(),
+                "catalog_url": (doc.get("catalog_url") or "").strip(),
                 "pub_year": parse_year(doc.get("jahr")),
                 "publisher": (doc.get("verl") or "").strip(),
                 "place": (doc.get("ort") or "").strip(),
@@ -287,13 +335,18 @@ def build_rows(documents: list[dict]) -> list[dict]:
                 "extent_pages": parse_pages(doc.get("umf")),
                 "n_chunks": doc["n_chunks"],
                 "n_authors": n_recorded,
-                "n_authors_resolved": sum(1 for g in collapsed if g != "unknown"),
-                "is_institutional": n_recorded > 0 and not raw,
-                "first_author_gender": first_collapsed,
-                "first_author_gender_raw": first_raw,
-                "author_gender": majority(collapsed) if raw else unresolved(),
-                "female_present": "female" in collapsed,
-                "author_genders_raw": ";".join(raw),
+                "is_institutional": n_recorded > 0 and not parsed,
+                "author1_gender_raw": slots[0][0],
+                "author1_gender_collapsed": slots[0][1],
+                "author2_gender_raw": slots[1][0],
+                "author2_gender_collapsed": slots[1][1],
+                "author3_gender_raw": slots[2][0],
+                "author3_gender_collapsed": slots[2][1],
+                "author_gender_collapsed": (
+                    majority(parsed)
+                    if parsed
+                    else ("institutional" if n_recorded else "unknown")
+                ),
             }
         )
     return rows
@@ -320,7 +373,13 @@ def main() -> int:
         conn.close()
     rows = build_rows(documents)
 
-    resolved = sum(1 for r in rows if r["n_authors_resolved"])
+    # Counted here rather than read off a column: n_authors_resolved was dropped as a
+    # pure restatement of the per-slot verdicts, and this summary is its one use.
+    resolved = sum(
+        1
+        for r in rows
+        if any(r[f"author{i}_gender_raw"] in RESOLVED for i in (1, 2, 3))
+    )
     institutional = sum(1 for r in rows if r["is_institutional"])
     n_chunks_total = sum(r["n_chunks"] for r in rows)
     ws.write_csv(
@@ -348,7 +407,7 @@ def main() -> int:
         file=sys.stderr,
     )
     # Guarded: an empty result is possible (a stale MAIN_COLLECTION name) and the CSV
-    # and sidecar are already written by this point, so the run should end with a usable
+    # and .provenance.json are already written by this point, so the run should end with a usable
     # message rather than a ZeroDivisionError traceback over a valid artifact.
     share = f" ({resolved / len(rows):.1%})" if rows else ""
     print(

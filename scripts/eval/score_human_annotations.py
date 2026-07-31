@@ -24,7 +24,7 @@ control, and the pooled filtered CSV is handed over by path. Two filters:
      --all-panels maps to --allow-incomplete-panels instead
 
 Calibration items stay in: pragmata's majority consolidation
-coalesces their multi-annotator rows into one value per unit, exactly as it does when
+coalesces their multi-annotator rows into one value per item, exactly as it does when
 training. --exclude-calibration drops wholly-calibration queries for comparison runs
 (query grain, because a retrieval record is one chunk and panels are routinely mixed —
 see ec.drop_calibration_queries).

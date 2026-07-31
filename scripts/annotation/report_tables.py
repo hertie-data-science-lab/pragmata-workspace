@@ -357,7 +357,7 @@ def iaa_by_label(pooled: dict) -> str:
             "Label",
             "α (pooled)",
             "% agree",
-            "Units†",
+            "Items†",
             "Ratings",
             "Minority",
             "Prev.*",
@@ -375,7 +375,7 @@ def iaa_per_label(domains: dict) -> str:
     averaging these values is what that replaced. Read them knowing a domain whose label
     never varies shows α = 1.000 off a De of 0.
 
-    Units = calibration-overlap units, Ann = annotators in that overlap (both per domain/task).
+    Items = calibration-overlap items, Ann = annotators in that overlap (both per domain/task).
     Prev. here is over *all submitted* rows for the domain (class balance), unlike the pooled
     by-label table where it is over the calibration rows α is computed on.
     """
@@ -409,7 +409,7 @@ def iaa_per_label(domains: dict) -> str:
     if not rows:
         return ""
     return _html_table(
-        ["Domain", "Task", "Label", "α", "% agree", "Prev.*", "Units†", "Ann."], rows
+        ["Domain", "Task", "Label", "α", "% agree", "Prev.*", "Items†", "Ann."], rows
     )
 
 
@@ -729,12 +729,14 @@ def render(snap: dict) -> str:
     parts = [
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         (
-            "<small>**Counting units** (full definitions in "
+            "<small>**Counting items** (full definitions in "
             "`docs/eval-data-dictionary.md`):\n"
             "- a **response** is one annotator's submission on one record,\n"
             "- a **record** is one annotatable thing — a chunk for retrieval, a query for "
             "grounding and generation — and is *completed* once it has met its required "
             "annotator count,\n"
+            "- an **item** is one record's responses consolidated to a single value per "
+            "label: 1:1 with annotated records, and the grain eval ingests,\n"
             "- a **panel** is a query's k chunk-records for retrieval (complete only once "
             "every chunk has a submitted response),\n"
             "- a **query group** is one query-answer pair across all three tasks: its "
@@ -790,7 +792,7 @@ def render(snap: dict) -> str:
         ]
     if (
         by_label
-    ):  # Prev.* and Units† first appear in this table; their notes live with it
+    ):  # Prev.* and Items† first appear in this table; their notes live with it
         label_notes = "\n\n".join(
             [
                 _note(
@@ -802,7 +804,7 @@ def render(snap: dict) -> str:
                     "yield meaningful agreement."
                 ),
                 _note(
-                    "**†Units**: the number of calibration-overlap units Krippendorff's α is "
+                    "**†Items**: the number of calibration-overlap items Krippendorff's α is "
                     "computed on (records annotated by ≥2 people in the calibration split), with **Ann.** "
                     "the annotators in that overlap. α is **not** computed over the submitted/completed "
                     "production counts in the progress tables - those measure coverage, not agreement."

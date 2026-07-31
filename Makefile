@@ -32,7 +32,7 @@
 #   make repro-reproduce PIN=2026-07-01-annotation-curation
 # See reproducibility/README.md for the bundle contract.
 #
-# Eval deliverables (reports/eval/<date>/, one CSV + provenance sidecar each):
+# Eval deliverables (reports/eval/<date>/, one CSV + its .provenance.json each):
 #   make eval-report                       # the two annotation tables + the retrieval manifest
 #   make eval-score                        # the corpus metric estimates
 #   make eval-catalog                      # the corpus catalog for the fairness audit

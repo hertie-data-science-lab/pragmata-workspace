@@ -16,7 +16,7 @@ programmes at the start). We curated down to a set the fixed per-programme annot
 pool can realistically complete, optimised for complete cross-task training
 **triples** plus a full inter-annotator-agreement (IAA) calibration set.
 
-The unit that matters is the **query** ("record"): one publikationsbot query fans
+The grain that matters is the **query** ("record"): one publikationsbot query fans
 out into three tasks - a **retrieval** panel of *k* chunks, one **grounding** record,
 one **generation** record. A usable training example is a query complete in all
 three (a "triple").

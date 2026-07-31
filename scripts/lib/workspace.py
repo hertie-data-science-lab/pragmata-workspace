@@ -336,16 +336,17 @@ def domains() -> list[str]:
     )
 
 
-# --- provenance: every report CSV ships with a sidecar saying how it was made ----
+# --- provenance: every report CSV ships with a .provenance.json saying how it was made ---
 #
 # Report numbers get lifted into figures and then into a published document, so a
 # bare CSV is not enough — each one needs to name the code and inputs it came from.
 # This mirrors the manifest convention in scripts/transfer/sync.sh (sorted per-file
 # sha256) and the dated bundles under reproducibility/.
 #
-# The sidecar records IDENTITY only: code, inputs, parameters, snapshot, dictionary.
+# The .provenance.json records IDENTITY only: code, inputs, parameters, snapshot, dictionary.
 # What a column means and how to read it belongs in the hand-authored data dictionary,
-# which every sidecar pins by hash — one authored explanation, not a copy per artifact —
+# which every .provenance.json pins by hash — one authored explanation, not a copy per
+# artifact —
 # so a CSV can always be paired with the wording that was current when it was written.
 DATA_DICTIONARY = ROOT / "docs" / "eval-data-dictionary.md"
 
@@ -411,7 +412,7 @@ def provenance(
     inputs = inputs or []
     if not DATA_DICTIONARY.exists():
         raise SystemExit(
-            f"no data dictionary at {DATA_DICTIONARY} — every eval sidecar pins it, and "
+            f"no data dictionary at {DATA_DICTIONARY} — every eval .provenance.json pins it, and "
             "write_csv copies it next to the CSVs."
         )
     record = {
@@ -454,11 +455,11 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
         writer.writeheader()
         for row in rows:
             writer.writerow({c: row.get(c, "") for c in columns})
-    sidecar = path.with_suffix(path.suffix + ".provenance.json")
-    sidecar.write_text(
+    provenance_path = path.with_suffix(path.suffix + ".provenance.json")
+    provenance_path.write_text(
         json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    # The dictionary travels WITH the CSVs whose sidecars pin it: a bare CSV in a
+    # The dictionary travels WITH the CSVs whose .provenance.json pins it: a bare CSV in a
     # handover folder is unreadable without the wording the pin refers to. Done here,
     # in the layer that already knows the output directory, so a direct script run and
     # a make run behave identically and no second clock resolves "today's dir".
