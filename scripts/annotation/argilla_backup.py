@@ -1,29 +1,21 @@
 #!/usr/bin/env python
 """Status-preserving backup + restore of the live Argilla instance.
 
-dump   (default) -- snapshot EVERY dataset to disk. Read-only against the
-       server. For each dataset writes:
-         <ws>__<name>/settings.json      (rg.Settings, via to_json)
-         <ws>__<name>/records_full.json  (records WITH response status)
-       plus a top-level manifest.json. Unlike the SDK's to_disk, the record
-       serialization keeps each response's `status` (submitted/draft/
-       discarded) -- so annotations restore faithfully (to_disk drops it).
+Workflow and when to reach for it: `docs/annotation.md` (Backup & restore).
 
-restore <dir> [--workspace WS ...] [--dataset NAME ...] [--record-id ID ...]
-       [--record-id-file FILE ...] [--only {metadata,suggestions,responses} ...]
-       [--apply] -- restore the full snapshot (fields, metadata, suggestions,
-       responses) back into Argilla, creating missing datasets/workspaces and
-       writing onto existing ones alike. Narrow scope with
-       --workspace/--dataset/--record-id/--record-id-file (repeatable, AND'd
-       together; default: everything in the manifest); pass --only to restore
-       just some attributes (fields are always included). Always prints a
-       preview of what would change first; nothing is written unless --apply.
-       Dataset directories are resolved under the manifest's own directory, so
-       a dump restores from wherever it was fetched to.
+    dump (default)   snapshot every dataset to disk, read-only against the server:
+                     `<ws>__<name>/settings.json` + `<ws>__<name>/records_full.json`
+                     per dataset, plus a top-level `manifest.json`
+    restore <dir>    write a snapshot back — fields, metadata, suggestions, responses —
+                     creating missing datasets/workspaces and writing onto existing ones
+                     alike. Scope with --workspace/--dataset/--record-id/--record-id-file
+                     (repeatable, AND'd) and --only; previews unless --apply
 
-       Uses Settings.from_json + the Dataset(workspace=) constructor, NOT
-       from_disk -- from_disk silently ignores a Workspace object and falls
-       back to the default workspace.
+Two SDK behaviours it deliberately routes around. The record serialization keeps each
+response's `status` (submitted/draft/discarded), which `to_disk` drops — without it
+annotations do not restore faithfully. And restore uses `Settings.from_json` plus the
+`Dataset(workspace=)` constructor rather than `from_disk`, which silently ignores a
+Workspace object and falls back to the default workspace.
 """
 
 from __future__ import annotations

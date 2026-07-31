@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
 """Rewrite annotator identities in an export tree to stable UUIDs.
 
+Why the export must not carry names, and what this guarantees: `docs/eval.md` (Annotator
+identities).
+
 `pragmata annotation export` writes the Argilla *username* into `annotator_id`, and the
-usernames on this instance are `firstname.lastname` — real identities. The export tree is
-pushed to Blob and read on another organisation's box, and the eval stage consumes label
-columns, not identities, so the names have no business travelling.
+usernames on this instance are `firstname.lastname`. This runs immediately after every
+export (see `export.sh`) and replaces each with that user's Argilla user id, on both
+surfaces that carry identities: `annotator_id` in `retrieval.csv` / `grounding.csv` /
+`generation.csv`, and `annotator_a` / `annotator_b` under `pairwise_kappa` in
+`iaa/report.json`. Argilla user ids never change, so the mapping is stable across exports
+and cross-snapshot comparisons still work; it is derived at runtime, never written down,
+and is not reversible from the export alone.
 
-This runs immediately after every export (see `export.sh`) and replaces each username
-with that user's Argilla user id. Two surfaces carry identities:
-
-  * `annotator_id` in `retrieval.csv` / `grounding.csv` / `generation.csv`
-  * `annotator_a` / `annotator_b` under `pairwise_kappa` in `iaa/report.json`
-
-Argilla user ids are assigned once and never change, so the mapping is stable across
-exports: the same annotator is the same UUID in every snapshot, and cross-snapshot
-comparisons still work. The mapping is derived at runtime from the live instance and
-never written down. It is not reversible from the export alone.
-
-Forward-only: it rewrites what an export produced from now on. Already-frozen trees keep
-whatever they were frozen with.
-
-Idempotent — a value that is already a UUID is left alone — and strict: a username with
-no matching Argilla user aborts the run rather than passing through, because passing
-through would leave a real name inside a tree labelled pseudonymous.
+Forward-only: already-frozen trees keep whatever they were frozen with. Idempotent (a
+value that is already a UUID is left alone) and strict — a username with no matching
+Argilla user aborts the run, because passing it through would leave a real name inside a
+tree labelled pseudonymous.
 
 Usage:
   scripts/annotation/pseudonymize_export.py             # every domain in the export tree

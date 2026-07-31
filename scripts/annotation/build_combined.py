@@ -1,51 +1,25 @@
 #!/usr/bin/env python3
-"""
-scripts/annotation/build_combined.py — pool successive querygen runs and intersperse edgecases.
+"""Pool successive querygen runs per domain and intersperse edgecases.
 
-For each requested domain, reads every JSONL output produced by run_bot.py
-across successive runs:
+Reads every `run_bot.py` JSONL for a domain — `<domain>.jsonl` plus `_batch*` — as the
+baseline pool, and the matching `_edgecase*` files as the edgecase pool, deduplicating
+each on the literal query string (first occurrence wins). Cross-run duplicates happen even
+with planning memory: the planning summary biases toward diversification but does not
+enforce deduplication against prior runs.
 
-  Baseline pool:
-    data/publikationsbot/<domain>.jsonl
-    data/publikationsbot/<domain>_batch*.jsonl    (e.g. _batch2, _batch3)
+Writes `<domain>_pooled.jsonl`, `<domain>_edgecase_pooled.jsonl` and
+`<domain>_combined.jsonl` (interspersed). Edgecases land at seeded-random positions inside
+the first WINDOW_FRAC of the run, after a baseline-only LEAD warm-up, so annotators meet
+the edge distribution early; the per-domain seed makes re-runs identical. Each record's
+`query_id` already encodes its partition, so the split survives pooling.
 
-  Edgecase pool:
-    data/publikationsbot/<domain>_edgecase.jsonl
-    data/publikationsbot/<domain>_edgecase_batch*.jsonl
-
-Within each pool, deduplicates on the literal query string (first occurrence
-wins). Cross-run duplicates can happen even with planning memory, because
-the planning summary biases toward diversification but does not enforce
-strict deduplication against prior runs.
-
-Writes three files per domain:
-
-  data/publikationsbot/<domain>_pooled.jsonl           (deduped baseline pool)
-  data/publikationsbot/<domain>_edgecase_pooled.jsonl  (deduped edgecase pool)
-  data/publikationsbot/<domain>_combined.jsonl         (interspersed order)
-
-Interspersion rules:
-  - First LEAD records are baseline only (no edgecase in the warm-up).
-  - Edgecases land in random positions within [LEAD, max(LEAD + n_edge, N * WINDOW_FRAC)).
-  - With WINDOW_FRAC = 1/3, every edgecase appears within the first third of
-    the run, so annotators encounter the edge distribution early.
-  - Edgecase positions are drawn uniformly at random via a per-domain seeded
-    RNG (reproducible across re-runs).
-
-Provenance: each record's `query_id` field already carries
-`<domain>_qN` (baseline) or `<domain>_edgecase_qN` (edgecase), so the
-source partition survives at build time.
-
-Calibration: edgecases are kept out of the calibration set at import time
-(not here) by importing the pooled baseline first — the partition manifest
-fills its `calibration_max_records` cap from baseline records, leaving zero
-calibration slots for the subsequent edgecase import. See
-scripts/annotation/import.sh.
+Edgecases are kept out of the calibration set at import time, not here: importing the
+pooled baseline first fills the partition manifest's `calibration_max_records` cap from
+baseline records, leaving no calibration slots for the edgecase import. See `import.sh`.
 
 Usage:
-  scripts/annotation/build_combined.py                                    # all domains (configs/annotation/domains/)
-  scripts/annotation/build_combined.py demokratie-und-zusammenhalt        # one
-  scripts/annotation/build_combined.py demokratie-und-zusammenhalt europas-zukunft  # subset
+  scripts/annotation/build_combined.py                              # all domains
+  scripts/annotation/build_combined.py demokratie-und-zusammenhalt  # one, or a subset
 """
 
 from __future__ import annotations

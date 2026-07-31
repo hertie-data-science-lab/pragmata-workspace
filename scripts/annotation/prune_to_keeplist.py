@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 """Prune live Argilla down to the curated keep-lists (reproduction primitive).
 
-For each `keep_lists/<workspace>__<dataset>.ids`, delete every live record in that
-dataset whose id is NOT in the keep-list. This is the deterministic "reduce to the
-exact curated set" step used by `make repro-reproduce`, after either:
-  - importing the curated corpus (structure only), or
-  - restoring the pre-prune backup (exact, incl. responses).
+The deterministic "reduce to the exact curated set" step used by `make repro-reproduce`
+(see `docs/reproducibility.md`), after either importing the curated corpus (structure only)
+or restoring the pre-prune backup (exact, incl. responses).
 
-Deletes only; it does not add missing records (build the superset first, via import
-or restore). Absolute keep-lists (not drop-lists) → independent of how the datasets
-were built, so this converges to the exact end state from any superset. Read-only
-unless --apply.
+For each `keep_lists/<workspace>__<dataset>.ids`, deletes every live record in that dataset
+whose id is not in the keep-list. Deletes only — it does not add missing records, so build
+the superset first. The lists are absolute keep-lists rather than drop-lists, which makes
+this independent of how the datasets were built: it converges on the exact end state from
+any superset. Read-only unless --apply.
 
 Usage:
   prune_to_keeplist.py --keep-lists <dir> [--workspace WS ...] [--apply]

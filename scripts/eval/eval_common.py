@@ -1,12 +1,9 @@
 """Shared vocabulary for the eval-stage report scripts.
 
-The report CSVs are a contract with the report author, so the things that decide a
-number — which rows count, what an item is, which population a statistic describes — are
-defined once here rather than re-derived per script.
-
-The prose definitions of response / record / item / panel / query group, and every
-column of every CSV, live in ``docs/eval-data-dictionary.md``. This module is the
-executable half of that document; keep the two in step.
+The executable half of ``docs/eval-data-dictionary.md``, which defines response / record /
+item / panel / query group and every column of every CSV in prose. The things that decide
+a number — which rows count, what an item is, which population a statistic describes — are
+defined once here rather than re-derived per script. Keep the two in step.
 
 Import with the same preamble the annotation scripts use::
 

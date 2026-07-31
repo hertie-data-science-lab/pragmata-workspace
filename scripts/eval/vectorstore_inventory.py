@@ -6,15 +6,13 @@
 # ///
 """Inventory the publikationsbot vector store (Postgres + pgvector).
 
-Answers two questions against the live DB, cross-checked from independent sources:
-  1. How many publications does the bot have?    -> total + per-collection doc counts
-  2. What are ALL the metadata fields?           -> union of jsonb keys, with glossary
+Answers two questions against the live DB: how many publications the bot has (total and
+per-collection doc counts), and what all the metadata fields are (union of jsonb keys,
+with a glossary). Also the home of the DSN/connection helpers `corpus_catalog.py` imports.
 
-The connection string is NOT stored here. It is pulled at runtime from the dev
-container app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares
-the app's resource group, so `az containerapp secret show` works without a VNet).
-
-Also the home of the DSN/connection helpers corpus_catalog.py imports.
+The connection string is NOT stored here: it is pulled at runtime from the dev container
+app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares the app's resource
+group, so `az containerapp secret show` works without a VNet).
 
 Run (needs an active `az login` in the tenant):
     ./vectorstore_inventory.py               # counts + all metadata fields
