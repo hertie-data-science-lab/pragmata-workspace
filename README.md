@@ -10,7 +10,7 @@ itself. It does **not** hold data or outputs (those stay local and gitignored, s
 flowchart LR
   qg[querygen] --> bot[publikationsbot] --> comb[combine] --> imp["setup + import"] --> arg[(Argilla datasets)]
   arg -->|export| ev["eval deliverables (score + report)"]
-  arg -. planned .-> tr["pragmata eval train/predict"]
+  arg -. planned .-> tr["evaluator training + prediction"]
 ```
 
 ## Setup

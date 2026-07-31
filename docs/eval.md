@@ -3,7 +3,7 @@
 The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Two of its
 three parts have shipped: **data transport** ([Eval data transport](eval-data-transport.md))
 and **scoring human labels** (this page). **Training and prediction** (`pragmata eval
-train|predict`) are not built yet - see [Not built yet](#not-built-yet).
+train-evaluator|predict-labels`) are not built yet - see [Not built yet](#not-built-yet).
 
 ## Deliverables
 
@@ -106,8 +106,9 @@ be **re-derived** under the new pin, not assumed to carry over.
 
 ## Not built yet
 
-`pragmata eval train|predict` (the `tlmtc` extra) run on the GPU box and are a separate
-effort in the pragmata repo. When they land, they mirror the annotation pipeline
+`pragmata eval train-evaluator|predict-labels` (the `tlmtc` extra) run on the GPU box and
+are a separate effort in the pragmata repo. When they land, they mirror the annotation
+pipeline
 (`scripts/eval/` ↔ `scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and
 write to `data/eval/`. `score_synthetic_predictions.py` is the reserved name for scoring
 the evaluator model's predictions - the twin of `score_human_annotations.py` - and is

@@ -154,7 +154,7 @@ it - eval consumes label columns, not identities.
 
 ## Not here yet
 
-**Training and prediction** (`pragmata eval train|predict`) are a separate effort in the
-pragmata repo and are not built yet - the walkthrough's step 2 onward describes that future
-flow. Scoring human labels has shipped and runs entirely on the CPU box; see
+**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are a separate
+effort in the pragmata repo and are not built yet - the walkthrough's step 2 onward
+describes that future flow. Scoring human labels has shipped and runs entirely on the CPU box; see
 [Eval pipeline](eval.md).
