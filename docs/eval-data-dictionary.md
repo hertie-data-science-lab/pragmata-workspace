@@ -236,8 +236,8 @@ coalesces their extra responses into one item, exactly as it does when passing d
 >   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
 >   file itself into the output directory beside the CSVs whose `.provenance.json` carries that pin. The
 >   eval scripts refuse to run if it is missing.
-> - **Pinned by the committed record.** `reproducibility/2026-07-30-eval-report/pins.sha256`
->   pins the copy that travelled with the 2026-07-30 CSVs, at the hash this file had then -
+> - **Pinned by the committed record.** `reproducibility/<date>-eval-report/pins.sha256`
+>   pins the copy that travelled with that date's CSVs, at the hash this file had then -
 >   binding the delivered numbers to that exact wording. (The pin resolves under `reports/`,
 >   which is not in git, so it reads `ABSENT` until the tree is fetched.)
 > - **Implemented in code.** `scripts/eval/eval_common.py` is the executable half of the

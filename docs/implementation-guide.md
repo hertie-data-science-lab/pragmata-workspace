@@ -113,7 +113,7 @@ Record the exact commits - not branch names:
 
 The pins behind the shipped deliverables are recorded in the reproducibility bundles (see
 [`reproducibility/`](../reproducibility/README.md)); the eval one is named in
-[`reproducibility/2026-07-30-eval-report/`](../reproducibility/2026-07-30-eval-report/).
+[`reproducibility/2026-07-31-eval-report/`](../reproducibility/2026-07-31-eval-report/).
 The split is deliberate - see [Eval pipeline](eval.md#the-three-pins).
 
 ### 3.2 Create the Python environment
