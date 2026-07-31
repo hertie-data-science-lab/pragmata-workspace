@@ -155,9 +155,7 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 **Caveats.**
 
-- **The source is the curated corpus, a superset of what was annotated.** It is *not*
-  post-removal: curation selected a subset for import into Argilla, so most rows here belong
-  to queries nobody annotated - 464 of 1143 queries are annotated.
+- **The source is the curated corpus, a superset of what was annotated** - 464 of 1143 queries are annotated.
 - **`panel_started` and `n_chunks_annotated` are the only columns here derived from
   annotation state**; every other column comes from the curated corpus. They exist because
   the join that would reproduce them is not available from this bundle: the exports carry no
