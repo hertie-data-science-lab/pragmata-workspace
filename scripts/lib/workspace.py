@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib.metadata
 import json
 import os
 import subprocess
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -201,10 +201,11 @@ def username_to_user_id(client=None) -> dict[str, str]:
 def eval_pragmata() -> SimpleNamespace:
     """Resolve the eval-side pragmata pin: source tree, its repo, and the CLI to run it.
 
-    The annotation pipeline pins ``PRAGMATA_SRC`` at a frozen demo checkout that has
-    no eval module at all, so eval needs its own pin. Kept separate (rather than
-    moving the shared pin forward) so the live Argilla instance's annotation and
-    export behaviour stays frozen while eval tracks upstream.
+    The installed pragmata is git-pinned in ``pyproject.toml`` to a frozen demo commit
+    that has no eval module at all, so eval needs its own pin. Kept separate (rather
+    than moving the shared pin forward) so the live Argilla instance's annotation and
+    export behaviour stays frozen while eval tracks upstream. It cannot join
+    ``pyproject.toml``: two commits of one package cannot be installed side by side.
 
     One venv runs both: the CLI is the workspace venv's own ``pragmata``, invoked with
     the pin on ``PYTHONPATH``, which shadows whatever the venv installed. The only thing
@@ -245,21 +246,35 @@ def load_dotenv(path: Path) -> None:
             os.environ[key] = val.strip()
 
 
-def load_env() -> None:
-    """Load configs/settings.conf then .env, then apply the PRAGMATA_SRC pin.
+def pragmata_pin() -> dict:
+    """The annotation pragmata pin: git URL and commit of the installed package.
 
-    The Makefile's Python targets never go through common.sh, so the pin was silently
-    ignored when they ran standalone. Applying it here covers every Python entrypoint.
+    pragmata is a git dependency pinned to an exact SHA in pyproject.toml, so the
+    authoritative record of what is installed is the wheel's own ``direct_url.json``
+    (PEP 610) rather than anything the environment claims. Returns empty strings if
+    pragmata was installed some other way - a caller writing provenance should notice.
+    """
+    try:
+        raw = importlib.metadata.distribution("pragmata").read_text("direct_url.json")
+    except importlib.metadata.PackageNotFoundError:
+        raw = None
+    info = json.loads(raw) if raw else {}
+    return {
+        "url": info.get("url", ""),
+        "sha": info.get("vcs_info", {}).get("commit_id", ""),
+    }
+
+
+def load_env() -> None:
+    """Load configs/settings.conf then .env.
+
+    The annotation pragmata is a pinned git dependency installed into the venv, so
+    there is nothing to shadow onto sys.path - importing it resolves the pin. Eval is
+    the exception: it needs a different pragmata commit, which cannot be installed
+    alongside this one, so ``eval_pragmata()`` shadows it per-call instead.
     """
     load_dotenv(SETTINGS)
     load_dotenv(ROOT / ".env")
-    src = os.environ.get("PRAGMATA_SRC")
-    if src:
-        # Front, not merely present: an installed pragmata may already be on sys.path and
-        # the point of the pin is to shadow it. No PYTHONPATH export - no Python
-        # entrypoint here spawns a pragmata subprocess off the inherited environment
-        # (score_human builds its own env for the separate eval pin).
-        sys.path.insert(0, src)
 
 
 def local_dt(run_at: str) -> datetime:

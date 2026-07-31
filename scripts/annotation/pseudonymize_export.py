@@ -41,7 +41,7 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.path
+ws.load_env()  # configs/settings.conf + .env (pragmata itself is the pinned install)
 
 TASK_FILES = ("retrieval.csv", "grounding.csv", "generation.csv")
 IAA_REPORT = Path("iaa") / "report.json"

@@ -1,7 +1,7 @@
 [lint.per-file-ignores]
 # E402: every script in scripts/ inserts scripts/lib on sys.path before importing the
 # workspace lib, and the annotation scripts call ws.load_env() before importing pragmata
-# so the PRAGMATA_SRC pin applies. Both are imports after code, by design.
+# so .env is loaded first. Both are imports after code, by design.
 #
 # BLE001: these are glue scripts around a live service. Catching bare Exception around a
 # per-item network call, logging it and carrying on is the deliberate resilience pattern -

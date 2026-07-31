@@ -96,7 +96,8 @@ Azure VM:
 
 1. **The `az` CLI.** It is a cross-platform HTTPS client, not an Azure-VM feature. Because we
    authenticate with a SAS token there is **no `az login`** and no Azure identity on the box.
-   Install via `pip install azure-cli` (into a venv, no root needed) or the OS package.
+   Install via the OS package, or `pip install azure-cli` into a venv of its own (no root
+   needed). Not into the workspace `.venv` - that one is reproduced from `uv.lock`.
 2. **A `.env`** (copy `.env.example`) with the three `EVAL_BLOB_*` keys - see
    [Required keys](configuration.md). The real values come from the storage owner (BSt); they
    live only in the gitignored `.env`, never in git.

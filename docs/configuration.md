@@ -2,8 +2,9 @@
 
 - **Secrets** live in `.env` (gitignored) - copy `.env.example` and fill in. Required keys:
   `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup); `OPENAI_API_KEY`,
-  `OPENAI_BASE_URL` (querygen); `PUBLIKATIONSBOT_URL` (bot); `PRAGMATA_SRC` (path to the
-  `pragmata` checkout); `EVAL_BLOB_ACCOUNT`, `EVAL_BLOB_CONTAINER`, `EVAL_BLOB_SAS` (eval data
+  `OPENAI_BASE_URL` (querygen); `PUBLIKATIONSBOT_URL` (bot); `PRAGMATA_EVAL_SRC` (path to the
+  eval-pin `pragmata` checkout - the annotation pragmata needs no key, it is git-pinned in
+  `pyproject.toml`); `EVAL_BLOB_ACCOUNT`, `EVAL_BLOB_CONTAINER`, `EVAL_BLOB_SAS` (eval data
   transport only - see [Eval data transport](eval-data-transport.md)). For Azure, set
   `OPENAI_API_KEY` to your Azure key and
   `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
@@ -11,6 +12,10 @@
   ad-hoc `pragmata`/`make` commands typed directly, install [direnv](https://direnv.net) and
   add its hook to your shell rc (e.g. `eval "$(direnv hook bash)"`), then run `direnv allow`
   here - the committed `.envrc` auto-loads `.env` on `cd`.
+- **Python dependencies** live in `pyproject.toml` + `uv.lock` - committed. `uv sync`
+  reproduces the environment exactly, including pragmata itself (git-pinned to an exact
+  SHA). The lock carries a `constraint-dependencies` freeze of the versions that produced
+  the shipped report numbers; see the comment there before upgrading anything.
 - **Operational tunables** live in `configs/settings.conf` (queries-per-spec, bot
   concurrency, throttle, disk thresholds) - committed.
 - **querygen runtime** (model, reasoning effort, batching) lives in

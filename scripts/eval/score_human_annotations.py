@@ -186,9 +186,10 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
 def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
     """Invoke `pragmata eval score` on a filtered CSV; return the report JSON path.
 
-    Runs from the eval pin's own venv with its src on PYTHONPATH: the shared
-    PRAGMATA_SRC pin is a frozen demo checkout with no eval module, and the eval
-    module needs pandera, which the workspace venv lacks.
+    Runs the workspace venv's own CLI with the eval pin's src on PYTHONPATH, which
+    shadows the installed annotation pragmata - a frozen demo commit with no eval
+    module. One venv serves both: pandera, the only thing the eval module needs
+    beyond the annotation side, is a workspace dependency in pyproject.toml.
     """
     import os
 
