@@ -14,9 +14,10 @@ For each ``data/querygen/runs/<stem>/synthetic_queries.csv``:
 
 Output record schema (one JSON object per line). The first 5 fields satisfy
 pragmata's ``QueryResponsePair`` schema; the rest are extras that preserve
-provenance and are stripped at annotation-import time:
+provenance and are stripped at annotation-import time - at BOTH levels, since
+each chunk also carries two extras beyond pragmata's ``Chunk`` schema:
 
-    query, answer, chunks[{chunk_id, doc_id, chunk_rank, title, text}],
+    query, answer, chunks[{chunk_id, doc_id, chunk_rank, text, + title, score}],
     context_set, language,
     [extras] query_id, domain, role, topic, intent, task, difficulty, format,
              spec_stem
@@ -210,12 +211,19 @@ def normalize_chunks(raw_docs: list[dict]) -> list[dict]:
     Each Document represents one retrieved publication; page_content includes
     both an LLM-generated <summary> and the actual retrieved <chunks>.
 
-    Mapping (one Document -> one Chunk in pragmata's schema):
+    Mapping (one Document -> one Chunk in pragmata's schema, plus two workspace extras):
       doc_id     <- metadata.id (numeric publication id) or url as fallback
       chunk_id   <- f"{doc_id}-c1" (if/when we split per <chunk> later, -c2/-c3)
       chunk_rank <- metadata.ref (1-based retrieval rank)
       text       <- kwargs.page_content (full summary+chunks markup, gives
                     annotators max context)
+      title      <- metadata.title  (workspace extra)
+      score      <- metadata.score  (workspace extra)
+
+    `title` and `score` are NOT part of pragmata's Chunk schema, which is extra="forbid":
+    import.sh projects every chunk down to the four fields above before importing. They
+    are kept here because the retrieval manifest reads this file, and the retriever's own
+    relevance score cannot be recovered later - the bot response is not retained.
     """
     out: list[dict] = []
     for i, doc in enumerate(raw_docs, start=1):
@@ -240,6 +248,9 @@ def normalize_chunks(raw_docs: list[dict]) -> list[dict]:
                 # bot's native main title (= vectorstore `hst`); shown inline in the
                 # context_set header. Subtitle (hst_zu) is not in the bot response.
                 "title": meta.get("title"),
+                # The retriever's own relevance value. Kept because `chunk_rank` is
+                # ordinal and cannot say whether rank 5 was a close call or an also-ran.
+                "score": meta.get("score"),
                 "text": text,
             }
         )
