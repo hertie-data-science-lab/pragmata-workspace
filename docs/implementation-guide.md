@@ -74,21 +74,28 @@ guide; update this inventory when a resource or endpoint changes.
 
 ### 3.1 Record the code versions
 
-The CPU VM requires both repositories side by side:
+The CPU VM needs `pragmata-workspace` plus **two checkouts of `pragmata` at different
+commits** - the annotation pipeline and the eval stage are pinned independently, so they
+cannot share one working tree. Directory names are yours to choose; `.env` is what binds
+them, so pick names that say which pin they hold:
 
     <working-directory>/
-    ├── pragmata/              # PRAGMATA_SRC pin (annotation pipeline)
-    ├── pragmata-guard/        # PRAGMATA_EVAL_SRC pin (eval stage), if pinned separately
+    ├── pragmata-annotation/   # a pragmata checkout - PRAGMATA_SRC pin (annotation pipeline)
+    ├── pragmata-eval/         # a pragmata checkout - PRAGMATA_EVAL_SRC pin (eval stage)
     └── pragmata-workspace/
 
 Clone them:
 
-    git clone https://github.com/bertelsmannstift/pragmata.git
+    git clone https://github.com/bertelsmannstift/pragmata.git pragmata-annotation
+    git clone https://github.com/bertelsmannstift/pragmata.git pragmata-eval
     git clone https://github.com/hertie-data-science-lab/pragmata-workspace.git
 
-Check out the agreed versions and record the exact commits - not branch names:
+Check out the agreed version in each, then point `.env` at the `src/` directory of each
+(`PRAGMATA_SRC=<working-directory>/pragmata-annotation/src`, likewise `PRAGMATA_EVAL_SRC`).
+Record the exact commits - not branch names:
 
-    git -C pragmata rev-parse HEAD
+    git -C pragmata-annotation rev-parse HEAD
+    git -C pragmata-eval rev-parse HEAD
     git -C pragmata-workspace rev-parse HEAD
 
 The pins actually used for the shipped deliverables are recorded in the reproducibility
@@ -104,11 +111,13 @@ The workspace expects `pragmata-workspace/.venv/bin/python` and
 
     cd pragmata-workspace
     python3.12 -m venv .venv
-    .venv/bin/pip install "<path-to-pragmata-checkout>[annotation]" "pandera[pandas]>=0.31,<1.0"
+    .venv/bin/pip install "../pragmata-annotation[annotation]" "pandera[pandas]>=0.31,<1.0"
 
 `pandera` is the one extra the eval scoring stage needs beyond the annotation install; the
-same single venv runs both stages ([why](eval.md#the-three-pins)). The scripts also expect
-`/bin/bash`, `make`, `jq` and the Azure CLI on the PATH.
+same single venv runs both stages ([why](eval.md#the-three-pins)). Only one checkout is
+installed - the pins take effect by shadowing it on `PYTHONPATH`, so which of the two you
+install from does not matter, and installing both would just overwrite one with the other.
+The scripts also expect `/bin/bash`, `make`, `jq` and the Azure CLI on the PATH.
 
 ### 3.3 Create the local configuration
 
