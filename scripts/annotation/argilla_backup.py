@@ -31,7 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -203,9 +203,7 @@ def _diff_record(live: dict | None, backup: dict) -> dict:
 
 def _parse_snapshot_ts(created_utc: str) -> datetime | None:
     try:
-        return datetime.strptime(created_utc, "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=timezone.utc
-        )
+        return datetime.strptime(created_utc, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return None
 
@@ -215,7 +213,7 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     (the server's own convention) so it's comparable to our aware snapshot_ts."""
     if dt is None:
         return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 # --- dump (read-only) ----------------------------------------------------------
@@ -223,7 +221,7 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 
 def cmd_dump() -> None:
     client = ws.argilla_client()
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     root = BACKUP_ROOT / ts
     root.mkdir(parents=True, exist_ok=False)
     print(f"backup root: {root}")
