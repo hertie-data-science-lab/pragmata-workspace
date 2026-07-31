@@ -304,7 +304,7 @@ Run query generation, Publikationsbot and combine without importing into Argilla
 
 The final candidate dataset per domain is `data/publikationsbot/<domain>_combined.jsonl`.
 
-### 6.1 The schema is defined and machine-checked
+### 6.1 The import contract
 
 `pragmata` defines the import contract as a pydantic model, `QueryResponsePair`
 (`src/pragmata/core/schemas/annotation_import.py`). One record is one query-response pair:
@@ -313,16 +313,25 @@ The final candidate dataset per domain is `data/publikationsbot/<domain>_combine
 | --- | --- |
 | `query` | non-empty string |
 | `answer` | non-empty string |
-| `chunks` | at least one chunk; `chunk_id` unique within the record |
+| `chunks` | at least one chunk |
 | `chunks[].chunk_id`, `chunks[].doc_id` | non-empty strings |
 | `chunks[].chunk_rank` | integer ≥ 1 (1-based retrieval position) |
 | `chunks[].text` | non-empty string |
 | `context_set` | non-empty string |
-| `language` | optional ISO code (e.g. `"de"`); may be null |
+| `language` | optional; may be null. Any string is accepted - the ISO form (e.g. `"de"`) is a convention, not a validation |
 
-The model forbids unknown fields, which is why `scripts/annotation/import.sh` projects each
-line down to exactly those five keys with `jq` before calling `pragmata annotation import` -
-`run_bot.py` writes provenance extras that would otherwise be rejected.
+The model forbids unknown fields at **both** levels - the record's five keys and each chunk's
+four - which is why `scripts/annotation/import.sh` projects both with `jq` before calling
+`pragmata annotation import`: `run_bot.py` writes provenance extras (per record, and `title` /
+`score` per chunk) that would otherwise be rejected.
+
+**Two properties the pipeline maintains but the schema does not check**, on the pinned commit
+the import actually runs (`94e8219`): `chunk_id` is unique within a record, and `language`
+holds an ISO code. `run_bot.py` derives `chunk_id` as `<doc_id>-c1`, one per retrieved
+document, so duplicates cannot arise from the current pipeline - but a hand-built or
+third-party file with repeated `chunk_id`s imports without complaint and collapses to one
+retrieval item. Upstream `pragmata` has since added a uniqueness validator; it is not in this
+pin.
 
 **Invalid records are skipped, and the skip happens after the valid ones are already in
 Argilla.** The import validates every record, imports the ones that pass, and only then
@@ -343,9 +352,10 @@ no all-or-nothing mode, so a partial import is the failure mode to expect. Two c
 1. confirm that every pipeline stage succeeded;
 2. review the error and no-retrieval files;
 3. check the record count for each domain;
-4. confirm the records satisfy `QueryResponsePair` (§6.1) - schema-invalid records are dropped
-   silently at import, so `Validation errors: 0` is the acceptance signal, not the absence of
-   a crash;
+4. confirm the records satisfy `QueryResponsePair` (§6.1). The import prints no
+   confirmation on success - `Validation errors: <n>` appears on stderr *only* when there are
+   failures - so the acceptance signal is the pair from §6.1: `Total records:` equal to the
+   offered line count, and exit 0;
 5. inspect a sample of questions, answers and publication passages; and
 6. confirm that the files contain only records from the current run (§4).
 

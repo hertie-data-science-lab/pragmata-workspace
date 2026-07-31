@@ -118,8 +118,8 @@ be **re-derived** under the new pin, not assumed to carry over.
 
 `pragmata eval train-evaluator|predict-labels` are implemented in the pragmata repo, behind
 the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), and run on the GPU box against staged
-export CSVs. What does not exist is the workspace side: no make targets, no `configs/eval/`,
-no tested procedure - see
+export CSVs. What does not exist is the workspace side: no make targets, no eval configs
+(`configs/eval/` holds only a stub README), no tested procedure - see
 [implementation guide §10](implementation-guide.md#10-run-the-evaluation) for the open list.
 When that glue lands it mirrors the annotation pipeline (`scripts/eval/` ↔
 `scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and writes to `data/eval/`.
