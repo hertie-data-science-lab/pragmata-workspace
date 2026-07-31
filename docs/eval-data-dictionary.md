@@ -218,17 +218,13 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 - **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
 - `author_gender_collapsed = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify.
-- **Three columns were dropped as pure restatements of the per-slot verdicts**, each a
-  one-liner if you need it: `n_authors_resolved` (count of slots whose `_raw` is in {`female`,
-  `mostly_female`, `male`, `mostly_male`}), `female_present` (any slot whose `_raw` is in
-  {`female`, `mostly_female`}), and `author_genders_raw` (`";".join` of the non-blank `_raw`
-  slots - but read the next caveat before rebuilding it).
-- **Going per-slot fixed a real misattribution.** The dropped `author_genders_raw` held only
-  the authors whose names parsed, so a hole shifted every later author left. Two documents
-  (`52109` "Ireland Report", `53806` "Gesundheitsförderung und Prävention gemeinsam
-  gestalten!") record `verf1` and `verf3` with no `verf2`, so their string's second position
-  was `verf3`'s verdict presented as the second author's. The slot columns cannot do that;
-  anything rebuilding the joined string inherits the flaw.
+- **Do not collapse the slots into a single list.** Two documents (`52109`, `53806`) record
+  `verf1` and `verf3` with no `verf2`; a list of only the classified authors closes that hole
+  and presents `verf3`'s verdict as the second author's. Cut by slot, or count across slots -
+  never by list position.
+- Aggregate counts are one line off the slots: authors classified is the count of slots whose
+  `_raw` is in {`female`, `mostly_female`, `male`, `mostly_male`}, and "any female author" is
+  whether any slot's `_raw` is in {`female`, `mostly_female`}.
 - "Majority" is over *recorded* authors: the metadata holds at most three, so a
   twelve-author volume is judged on three.
 - The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.
