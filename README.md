@@ -10,7 +10,7 @@ itself. It does **not** hold data or outputs (those stay local and gitignored, s
 flowchart LR
   qg[querygen] --> bot[publikationsbot] --> comb[combine] --> imp["setup + import"] --> arg[(Argilla datasets)]
   arg -->|export| ev["eval deliverables (score + report)"]
-  arg -. planned .-> tr["pragmata eval train/predict"]
+  arg -. planned .-> tr["evaluator training + prediction"]
 ```
 
 ## Setup
@@ -82,6 +82,8 @@ make help                      # list every target
 
 ## Documentation
 
+- [Implementation guide](docs/implementation-guide.md) - the end-to-end handover walkthrough:
+  produce, annotate and evaluate a new dataset from a fresh machine.
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
 - [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
