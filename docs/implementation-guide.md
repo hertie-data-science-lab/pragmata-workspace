@@ -119,10 +119,17 @@ One command, from `pragmata-workspace`:
 
 This creates `.venv/` from the committed `pyproject.toml` and `uv.lock`, installing all
 126 packages at exactly the versions the shipped report numbers were produced with -
-including `pragmata` itself, from git at its pinned SHA. It needs
-[uv](https://docs.astral.sh/uv/) and read access to `bertelsmannstift/pragmata` over SSH.
-Python is uv-managed: the version is fixed by `.python-version` (3.12.13) and does not
-have to be installed beforehand.
+including `pragmata` itself, from git at its pinned SHA. Python is uv-managed: the version
+is fixed by `.python-version` (3.12.13) and does not have to be installed beforehand.
+
+Two prerequisites, both worth checking before the first run:
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) on the PATH.
+- **A GitHub SSH key with read access to `bertelsmannstift/pragmata`.** The annotation pin
+  is a `git+ssh://` dependency, so a machine without a configured key cannot `uv sync` at
+  all - it fails rather than falling back. Verify with `ssh -T git@github.com`, which
+  should greet you by username. **TODO (BSt):** which key/account the operator uses, and
+  how it is provisioned on a new VM.
 
 Do not `pip install` into this environment. The lock is what makes a re-run reproducible -
 `numpy` and `scipy` sit under the inter-annotator-agreement bootstrap, so an unplanned
@@ -405,6 +412,7 @@ The rerun is complete when:
 12. the full run is archived and its bundle pinned.
 
 The remaining documentation gaps, all marked **TODO** above: CPU and GPU VM provisioning,
-the Azure resource names, shared Argilla deployment and operation, the clean-run procedure,
-the candidate-dataset and annotation acceptance rules, the GPU-side evaluation process, and
-the permanent archive location.
+the Azure resource names, the GitHub SSH key the repositories are cloned with, shared
+Argilla deployment and operation, the clean-run procedure, the candidate-dataset and
+annotation acceptance rules, the GPU-side evaluation process, and the permanent archive
+location.

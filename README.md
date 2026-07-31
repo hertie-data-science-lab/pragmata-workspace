@@ -21,8 +21,10 @@ Clone, then:
    creates `.venv/` from `pyproject.toml` + `uv.lock`, exactly, on the Python fixed by
    `.python-version` (uv fetches it; no system Python needed). This installs pragmata
    itself: it is a git dependency pinned to the commit that built the live Argilla
-   instance, so there is no checkout to point at and no version to choose. Needs read
-   access to the `bertelsmannstift/pragmata` repo over SSH.
+   instance, so there is no checkout to point at and no version to choose.
+   **Requires a GitHub SSH key with read access to `bertelsmannstift/pragmata`** - the pin
+   is a `git+ssh://` dependency, so on a machine with no key configured `uv sync` fails
+   outright rather than degrading. Check with `ssh -T git@github.com` first.
 2. `cp .env.example .env` and fill in the keys (Argilla, LLM, publikationsbot, and
    `PRAGMATA_EVAL_SRC` - the eval stage runs a *different* pragmata commit, which cannot
    be installed alongside the pinned one). See [Configuration](docs/configuration.md).
