@@ -5,7 +5,7 @@
 How to produce, annotate and evaluate a new **pRAGmata dataset**, end to end. This is the
 handover counterpart to the per-topic docs: it walks the whole path once and links out for
 detail rather than duplicating it. Fields marked **TODO (BSt)** need values that exist only
-on the operator side and cannot be derived from the repositories.
+on the operator side and cannot be derived from the repositories or from the annotation VM.
 
 Two repositories are used:
 
@@ -62,18 +62,21 @@ commit); data moves through Azure Blob Storage over HTTPS. See
 
 ## 2.1 Deployment inventory
 
-Complete this table with the resources used by the project. These details are required for
-a rerun but are not available in the repositories. Do not duplicate the values later in the
-guide; update this inventory when a resource or endpoint changes.
+The resources used by the project. **This repository is public**, so the concrete
+identifiers - tenant and subscription IDs, VM and storage-account names, the SAS expiry -
+are kept in `docs/deployment-inventory.local.md`, which is deliberately not committed. That
+file is the inventory; the table below records what each component is, what has been
+identified, and what only BSt can supply. Do not duplicate values later in the guide;
+update both when a resource or endpoint changes.
 
 | Component | Details |
 | --- | --- |
-| **CPU annotation VM** | OS: Ubuntu 22.04 LTS • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `make setup` • **TODO (BSt)**: Azure tenant, subscription, resource group, VM name, access method |
-| **Azure OpenAI** | Key + base URL in `.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`); base-URL format `https://<resource>.openai.azure.com/openai/v1/` • **TODO (BSt)**: tenant, subscription, resource group, resource name, model deployment name, key-secret location |
-| **Publikationsbot** | Service URL in `.env` (`PUBLIKATIONSBOT_URL`); auth = Azure access token via `az` CLI • **TODO (BSt)**: hosting resource, access process, approved number of parallel requests |
-| **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • **TODO (BSt)**: tenant, subscription, resource group, host, persistent-storage location, backup location |
-| **Azure Blob Storage** | Account/container/SAS in `.env` (`EVAL_BLOB_*`); container is private and IP-allowlisted; SAS is data-plane only, no `az login` • **TODO (BSt)**: subscription, resource group, SAS expiry and renewal process, IP-allowlist process |
-| **GPU evaluation VM** | **TODO (Hertie)**: host, hosting environment, access method, OS, GPU and CUDA version, working directory |
+| **CPU annotation VM** | Ubuntu 22.04 LTS, 4 vCPU, Sweden Central, in the Bertelsmann Stiftung tenant • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `make setup` • Access: SSH key auth as `azureuser`, password auth disabled • Tenant, subscription, resource group and VM name: recorded in the local inventory • **TODO (BSt)**: the ingress path that publishes port 22 (the VM's NICs carry no public IP and no Bastion is visible in its subscription), who administers the VM, and how a replacement is provisioned |
+| **Azure OpenAI** | Key + base URL in `.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`); base-URL format `https://<resource>.openai.azure.com/openai/v1/` • Same tenant, subscription and resource group as the CPU VM; resource and deployment names in the local inventory, the deployment matching the model named in `querygen_specs/_runtime.yaml` • The resource is shared with other projects, so leave deployments other than ours alone • **TODO (BSt)**: where the canonical copy of the key lives and who rotates it - the only copy on the VM is `.env`, and no Key Vault is visible to the operator account |
+| **Publikationsbot** | Service URL in `.env` (`PUBLIKATIONSBOT_URL`); the production endpoint is an Azure Container App • Auth = an Azure AD bearer for **Microsoft Graph**, fetched with `az account get-access-token --resource https://graph.microsoft.com` and refreshed on 401 (`scripts/annotation/run_bot.py`), so the operator needs `az login` in the tenant and an account the service authorises • Parallelism in use: `N_PARALLEL_BOTS=4` (`configs/settings.conf`) • **TODO (BSt)**: the hosting resource - the production app is not in the subscription the CPU VM can see - the process for granting an operator access to it, and whether 4 parallel requests is the approved rate |
+| **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • **Co-located on the CPU annotation VM**, not separately hosted: Docker Compose (project `annotation`) from the `pragmata` checkout's `deploy/annotation/docker-compose.dev.yml`, serving port 6900, with Postgres, Redis and Elasticsearch beside it • State: named Docker volumes on the VM's OS disk • Backups: `argilla_backup/<UTC-timestamp>/` in the workspace, from `make annotation-backup` • **TODO (BSt)**: the intended off-box backup destination - volumes and backups share one OS disk today, so losing the VM loses the annotation database |
+| **Azure Blob Storage** | Account/container/SAS in `.env` (`EVAL_BLOB_*`); container is private and IP-allowlisted; SAS is data-plane only, no `az login` • The SAS is container-scoped, HTTPS-only, `racwdl`, and **expires mid-2027** (exact date in the local inventory) - the transport stops working that day unless it is renewed • **TODO (BSt)**: subscription and resource group (the account sits outside the subscription the VM can see, so it cannot be resolved from the VM), who renews the SAS and where that is recorded, and the IP-allowlist change process |
+| **GPU evaluation VM** | **TODO (Hertie)**: host, hosting environment, access method, OS, GPU and CUDA version, working directory. Nothing about it is derivable from the CPU VM - the two boxes never connect |
 
 ## 3. Prepare the repositories and configuration
 
@@ -141,8 +144,11 @@ Two prerequisites, both worth checking before the first run:
 - **A GitHub SSH key with read access to `bertelsmannstift/pragmata`.** The annotation pin
   is a `git+ssh://` dependency, so a machine without a configured key cannot `uv sync` at
   all - it fails rather than falling back. Verify with `ssh -T git@github.com`, which
-  should greet you by username. **TODO (BSt):** which key/account the operator uses, and
-  how it is provisioned on a new VM.
+  should greet you by username. On the current VM that key is an Ed25519 key in
+  `~/.ssh/` belonging to **one named individual's personal GitHub account** (recorded in the
+  local inventory). **TODO (BSt):** whether a rerun uses a BSt service account or a
+  repository deploy key instead, and how that key reaches a new VM - the present arrangement
+  breaks as soon as that individual's access lapses.
 
 Do not `pip install` into this environment. The lock is what makes a re-run reproducible -
 `numpy` and `scipy` sit under the inter-annotator-agreement bootstrap, so an unplanned
@@ -245,8 +251,15 @@ procedure only, so it is the one documented here.
 Do not delete an earlier run until its data, configuration, logs and checksums have been
 archived and the archive has been verified.
 
-**TODO (BSt):** the archive location (the same one as [section 11](#11-return-and-archive-the-results))
-and the run-naming convention used with it.
+Half of this is settled by what exists. Annotation exports and evaluation outputs are
+archived in the Blob container - freezes as `exports-frozen/<date>/`, training runs as
+`checkpoints/<run-id>/` - and the committed pins live in `reproducibility/<date>-<name>/`.
+
+**TODO (BSt):** the archive location for the **dataset-run inputs**, which have none: the
+container holds no querygen, Publikationsbot or Argilla-backup trees, and the
+`argilla_backup/` directories on the VM are local recovery points, not archives. Name the
+location and its run-directory convention here (the same one as
+[section 11](#11-return-and-archive-the-results)).
 
 ## 5. Test the deployment
 
@@ -369,7 +382,10 @@ no all-or-nothing mode, so a partial import is the failure mode to expect. Two c
 
 **TODO (BSt):** the *editorial* acceptance thresholds, which the schema cannot express: the
 target record count per domain, the tolerable share of no-retrieval and error records, and
-who signs off on the sampled questions, answers and passages.
+who signs off on the sampled questions, answers and passages. Nothing in the repositories or
+on the VM can supply these; for a descriptive baseline to set them against, use the shipped
+run's own figures in `reports/eval/<date>/annotation_operations.csv` and
+`retrieval_manifest.csv`.
 
 ## 7. Import the candidate dataset into Argilla
 
@@ -443,10 +459,24 @@ overlap condition alone applies. `--tag-partial-panels` stamps `needs_completion
 unresolved chunks of partial panels so annotators can filter to them in the UI; it is the only
 write this command makes.
 
-**TODO (BSt):** the one case the rule above cannot settle - a panel that can never reach
-`panel_complete` because a chunk has only discards. Decide whether such panels are re-issued
-to another annotator, excluded from the metric denominator, or accepted as incomplete, and
-record that decision here before the export is frozen.
+### 8.1.1 Panels that only ever received discards
+
+The rule above cannot settle one case: a panel that can never reach `panel_complete` because
+a chunk holds only discarded responses. Two facts narrow it to a confirmation rather than a
+design decision.
+
+**It has not yet happened.** Across the frozen export behind the shipped numbers (8
+programmes) there is **one** discarded retrieval row in 1925, and **no** chunk record whose
+only responses are discards.
+
+**The pipeline already has a default: accepted as incomplete, kept in the denominator.**
+`panel_totals()` in `scripts/eval/eval_common.py` reads `n_panels` from the export's own
+`completeness_summary` rather than counting CSV rows, precisely so that panels nobody
+completed stay in the denominator - the shipped figures are 181 complete panels of 551.
+Nothing excludes a panel for want of a submitted response, and nothing re-issues it.
+
+**TODO (BSt):** ratify that default, or specify re-issue or exclusion instead - which would
+change the published completeness figures and must therefore be decided before a freeze.
 
 ### 8.2 Export the annotations
 
@@ -511,6 +541,23 @@ the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this w
 
 **What is missing is the project-side procedure, not the code.**
 
+**Precedent exists, but it is not the procedure.** The Blob container's `checkpoints/`
+prefix holds 12 completed training runs from 2026-07-13 to 07-22, each with a
+`train_run_meta.json`. They pin down the shape a configuration has to reproduce: `tlmtc`
+0.4.0 and 0.4.2, `sequence_length` 1024, `input_mode: paired_text`, transfer learning with
+PEFT adapters, per-label threshold 0.5, no HPO, and the per-task label sets (3 for
+retrieval; 5 for generation - `proper_action`, `response_on_topic`, `helpful`, `incomplete`,
+`unsafe_content`). All 12 used `answerdotai/ModernBERT-base` as both proxy and target,
+overriding the pin's defaults (`jhu-clsp/mmBERT-base` / `mmBERT-small`), so a rerun that
+takes the defaults will not reproduce them.
+
+Equally, what those runs are not: there is **no grounding run at all**; every run naming an
+export names the single programme `demokratie-und-zusammenhalt` and three record no export
+id, so their input cannot be traced; all 12 predate the pseudonymised freeze the shipped
+report rests on; none records a pragmata commit, an environment or a command; and the
+container has **no `predictions/` prefix**, so predictions have never been returned and
+[section 11](#11-return-and-archive-the-results)'s round trip is untested end to end.
+
 **TODO (joint):** the tested GPU-side process - the pragmata commit used on the GPU VM, the
 environment installation command, the evaluation configuration files, the mapping from each
 export to the three task inputs, the per-task training commands, the prediction and scoring
@@ -547,9 +594,15 @@ scores, and checkpoints. The dated bundles under
 [`reproducibility/`](../reproducibility/README.md) are the committed half of this record -
 each pins its artefacts by SHA-256 and `make repro-verify` re-checks them.
 
-**TODO (BSt):** the permanent storage location and the run-directory naming convention. This
-is the same location and convention [section 4](#4-start-a-clean-dataset-run) archives the
-previous run into - record it once, here.
+What the Blob container already archives, and under what convention: `exports/`,
+`exports-frozen/<date>/`, `checkpoints/<run-id>/` (a 32-hex training run id), `reports/` and
+`analysis/iaa-summary/`.
+
+**TODO (BSt):** the permanent storage location and run-directory naming convention for
+everything the container does not hold - the dataset-run inputs, the Argilla backup and the
+evaluation configurations. This is the same location and convention
+[section 4](#4-start-a-clean-dataset-run) archives the previous run into - record it once,
+here.
 
 ## 12. When the rerun is complete
 
@@ -570,8 +623,23 @@ The rerun is complete when:
 11. predictions and checkpoints are returned; and
 12. the full run is archived and its bundle pinned.
 
-The remaining documentation gaps, all marked **TODO** above: CPU and GPU VM provisioning, the
-Azure resource names, the GitHub SSH key the repositories are cloned with, shared Argilla
-deployment and operation, the archive location and run-naming convention (§4 and §11), the
-editorial acceptance thresholds for a candidate dataset (§6), the treatment of panels that
-only ever received discards (§8.1), and the tested GPU-side evaluation process (§10).
+The remaining documentation gaps, all marked **TODO** above. The Azure resources are now
+identified and recorded in the uncommitted `docs/deployment-inventory.local.md`; what is
+still outstanding is:
+
+- how the CPU VM is reached and re-provisioned, and where the Azure OpenAI key is held
+  (§2.1);
+- the Publikationsbot production hosting resource, its access-grant process and its approved
+  request rate (§2.1);
+- an off-box Argilla backup destination (§2.1);
+- the Blob subscription and resource group, SAS renewal ownership before the mid-2027
+  expiry, and the IP-allowlist process (§2.1);
+- GPU VM provisioning (§2.1, Hertie);
+- the GitHub account or deploy key a rerun clones with (§3.2);
+- the archive location and run-naming convention for the dataset-run inputs, the Argilla
+  backup and the evaluation configurations (§4 and §11);
+- the editorial acceptance thresholds for a candidate dataset (§6);
+- ratification of the default treatment of panels that only ever received discards
+  (§8.1.1); and
+- the tested GPU-side evaluation process, including a first returned `predictions/` tree
+  (§10).
