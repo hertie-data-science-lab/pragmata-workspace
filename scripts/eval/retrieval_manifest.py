@@ -22,6 +22,10 @@ One chunk per document, always. The bot returns one passage per hit and the pipe
 never splits it, so `chunk_id` is synthesised as `<doc_id>-c1` (run_bot.py) and is 1:1
 with `doc_id` by construction, not by data.
 
+`score` is the retriever's own relevance value, carried through from the bot response.
+It is blank for records produced by a run that did not capture it, and cannot be
+back-filled: the bot response is not retained anywhere.
+
 The querygen spec's own `task` field (a description of what the query asks for) is
 emitted as `query_task`: `task` in every other eval CSV means retrieval / grounding /
 generation, and the two collided.
@@ -63,6 +67,10 @@ COLUMNS = [
     "doc_id",
     "chunk_id",
     "rank",
+    # The retriever's own relevance value, where the run that produced the data captured
+    # it. `rank` is ordinal and cannot say whether rank 5 was a close call; the bot
+    # response is not retained, so a run that dropped the score cannot be back-filled.
+    "score",
     "n_retrieved_chunks",
     # Annotation coverage, at QUERY grain and repeated across the query's rows: whether
     # this query's retrieval panel was STARTED (>=1 chunk got a submitted response - not
@@ -124,6 +132,9 @@ def rows_for(
                     "doc_id": chunk.get("doc_id", ""),
                     "chunk_id": chunk.get("chunk_id", ""),
                     "rank": chunk.get("chunk_rank", ""),
+                    # "" rather than 0 when absent: a missing score and a score of zero
+                    # are different claims about what the retriever returned.
+                    "score": "" if chunk.get("score") is None else chunk["score"],
                     "n_retrieved_chunks": len(chunks),
                 }
             )

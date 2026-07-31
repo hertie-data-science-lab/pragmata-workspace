@@ -146,6 +146,7 @@ coalesces their extra responses into one item, exactly as it does when passing d
 | `doc_id` | Source document of this chunk. Joins to `corpus_catalog.csv`. |
 | `chunk_id` | The retrieved chunk - **synthesised as `<doc_id>-c1`**. The bot returns one passage per document and the pipeline never splits it, so this is 1:1 with `doc_id` by construction, not by data. |
 | `rank` | Retrieval rank within this query, 1-based. |
+| `score` | The retriever's own relevance value for this chunk, as the bot reported it. Blank where the run that produced the data did not capture it - the bot response is not retained, so it cannot be filled in afterwards. Use it where `rank` is too coarse: rank alone cannot say whether position 5 was a close call or an also-ran. |
 | `n_retrieved_chunks` | Chunks this query retrieved (query grain, repeated across its rows). |
 | `panel_started` | Query grain, **retrieval only**: at least one chunk of this query's retrieval panel received a submitted response. *Started*, not complete - contrast `n_panels_complete` in `annotation_operations.csv`. |
 | `n_chunks_annotated` | Query grain: how many of the query's chunks got a submitted response. |
