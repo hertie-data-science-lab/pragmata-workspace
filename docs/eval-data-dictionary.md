@@ -146,36 +146,29 @@ coalesces their extra responses into one item, exactly as it does when passing d
 | `doc_id` | Source document of this chunk. Joins to `corpus_catalog.csv`. |
 | `chunk_id` | The retrieved chunk - **synthesised as `<doc_id>-c1`**. The bot returns one passage per document and the pipeline never splits it, so this is 1:1 with `doc_id` by construction, not by data. |
 | `rank` | Retrieval rank within this query, 1-based. |
-| `score` | The retriever's own relevance value for this chunk, as the bot reported it. Blank where the run that produced the data did not capture it - the bot response is not retained, so it cannot be filled in afterwards. Use it where `rank` is too coarse: rank alone cannot say whether position 5 was a close call or an also-ran. |
+| `score` | The retriever's own relevance value for this chunk, as the bot reported it. Blank where the run that produced the data did not capture it - the bot response is not retained, so it cannot be filled in afterwards. |
 | `n_retrieved_chunks` | Chunks this query retrieved (query grain, repeated across its rows). |
-| `panel_started` | Query grain, **retrieval only**: at least one chunk of this query's retrieval panel received a submitted response. *Started*, not complete - contrast `n_panels_complete` in `annotation_operations.csv`. |
-| `n_chunks_annotated` | Query grain: how many of the query's chunks got a submitted response. |
+| `panel_started` | Query grain repeated across its rows, **retrieval only**: at least one chunk of this query's retrieval panel received a submitted response. *Started*, not complete - contrast `n_panels_complete` in `annotation_operations.csv`. |
+| `n_chunks_annotated` | Query grain, repeated across its rows: how many of the query's chunks got a submitted response. |
 | `language`, `role`, `topic`, `intent`, `difficulty`, `format`, `spec_stem`, `retried` | Per-query metadata from the querygen spec, carried through unchanged. |
-| `query_task` | The querygen spec's own `task` - a description of what the query asks for (e.g. "extract evidence refuting a claim"). Renamed from `task` because `task` everywhere else in this bundle means retrieval / grounding / generation. |
+| `query_task` | The querygen spec's own `task` - a description of what the query asks for (e.g. "extract evidence refuting a claim"). |
 
 **Caveats.**
 
-- **The source is the curated corpus, a superset of what was annotated** - 464 of 1143 queries are annotated.
-- **`panel_started` and `n_chunks_annotated` are the only columns here derived from
-  annotation state**; every other column comes from the curated corpus. They exist because
-  the join that would reproduce them is not available from this bundle: the exports carry no
-  `query_id`, and this file carries no query text.
-- **`panel_started` is retrieval-scoped and is not a general "was this query annotated"
-  flag.** It says the query's *retrieval panel* got a response. Grounding and generation were
-  annotated on their own records and cover more queries than retrieval does (447 grounding
-  and 713 generation items, against 464 retrieval-started queries), so filtering a grounding
-  or generation question on this column silently drops annotated data. Use it for retrieval
-  cuts only; for the other tasks, go to the export.
+- The source is the curated corpus, a superset of what was annotated - 464 of 1143 queries are annotated.
+- `panel_started` and `n_chunks_annotated` are the only columns here derived from
+  annotation state; every other column comes from the curated corpus. They exist because the join that would reproduce them is not available from this bundle: the exports carry no
+  `query_id`, and this file carries no query text. (TODO-DEFERRED - fix this in pragmata)
 - **Row fan-out is per retrieved passage, one per document.** Because `chunk_id` is
   `<doc_id>-c1`, document *frequency* means counting rows and distinct *documents* means
   deduplicating on `(query_id, doc_id)` - identical to deduplicating on `(query_id,
-  chunk_id)`. **Never join on `doc_id`/`chunk_id` alone**: 739 of the 1092 retrieved
+  chunk_id)`. Avoid joining on `doc_id`/`chunk_id` alone: 739 of the 1092 retrieved
   documents are returned for more than one query (one for 72 of them), so a document-only
   join multiplies rows across unrelated queries.
-- **Joining to the annotation exports.** They carry no `query_id`, only `record_uuid`. Join
+- Joining to the annotation exports. They carry no `query_id`, only `record_uuid` (TODO-DEFERRED - fix this in pragmata). Join
   on the **query text**, which is verified 1:1 with `query_id` (1143 texts, 1143 ids, both
   directions), or on `(query_id, chunk_id)` once the query is resolved. Join to
-  `corpus_catalog.csv` on `doc_id`.
+  `corpus_catalog.csv` on `doc_id`. 
 
 ## `corpus_catalog.csv`
 
