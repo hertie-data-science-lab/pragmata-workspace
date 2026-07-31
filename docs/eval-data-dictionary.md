@@ -215,18 +215,42 @@ base population. **Grain:** one row per `doc_id`.
 | `extent` | The raw extent string, kept so the page parse is auditable. |
 | `extent_pages` | Largest number found in `extent`; blank when it holds no page count. |
 | `n_chunks` | Chunks this document contributes to the vector store. |
-| `n_authors` | Authors *recorded* on the document (at most three). |
-| `n_authors_resolved` | Of those, how many the name dictionary classified. Derivable from `author_genders_raw`. |
+| `n_authors` | Authors *recorded* on the document (at most three), including any whose name fails the `"Last, First"` parse and so never reaches `author_genders_raw`. |
 | `is_institutional` | The document has recorded authors but no personal names. |
-| `first_author_gender` | `female` / `male` / `unknown` / `institutional` for the first recorded author. |
-| `author_gender` | Majority across resolved authors; `mixed` on a tie, else as above. |
-| `female_present` | Any resolved author classified female. Derivable from `author_genders_raw`. |
-| `first_author_gender_raw`, `author_genders_raw` | `gender-guesser`'s own six-way verdicts, uncollapsed. |
+| `first_author_gender_raw` | `gender-guesser`'s six-way verdict on the first recorded author (`verf1`, `pers1` as fallback): `female` / `mostly_female` / `andy` / `unknown` / `mostly_male` / `male`, or blank where `verf1` is institutional. |
+| `first_author_gender_collapsed` | That verdict under our rule (below): `female` / `male` / `unknown` / `institutional`. |
+| `author_genders_raw` | The six-way verdict per parseable author, `;`-joined, in `verf1..verf3` order. |
+| `author_gender_collapsed` | Majority across resolved authors under the same rule; `mixed` on a tie, `institutional` / `unknown` where none resolved. |
+
+**Every column above is independent** - no column restates another, so there is never a
+question of which of two spellings of one number to trust. Gender comes in pairs by design:
+`_raw` is what `gender-guesser` returned, `_collapsed` is the decision we made about it.
+
+**The collapse rule**, applied identically in both `_collapsed` columns:
+
+| `gender-guesser` verdict | Collapses to |
+|---|---|
+| `female`, `mostly_female` | `female` |
+| `male`, `mostly_male` | `male` |
+| `andy` (ambiguous), `unknown` (not in the dictionary) | unresolved - excluded from any majority |
+| no parseable author, but a name recorded | `institutional` |
+| no author recorded at all | `unknown` |
+
+Use `_collapsed` rather than re-deriving it: it is the published verdict, and a consumer
+who chooses a different tie rule will disagree with the report on the same corpus.
+
+Two columns were **dropped** for being pure restatements of `author_genders_raw`. Recompute
+them from it in one line each if you need them:
+
+| Dropped column | Recompute as |
+|---|---|
+| `n_authors_resolved` | count of entries in {`female`, `mostly_female`, `male`, `mostly_male`} |
+| `female_present` | any entry in {`female`, `mostly_female`} |
 
 **Caveats.**
 
-- **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `*_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
-- `author_gender = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify. 
+- **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
+- `author_gender_collapsed = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify. 
 - "Majority" is over *recorded* authors: the metadata holds at most three, so a
   twelve-author volume is judged on three.
 - The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.

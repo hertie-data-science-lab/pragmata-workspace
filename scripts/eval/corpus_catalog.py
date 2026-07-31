@@ -17,21 +17,38 @@ the dev container app's secret via `az`, and the connection is read-only.
 ## Author gender: what the columns mean, and what they cannot mean
 
 There is no gender field in the corpus. The only signal is a first name run through
-`gender-guesser`, a dictionary lookup. Every author recorded on a document is
-classified, then three columns are derived from that:
+`gender-guesser` 0.4.0, a dictionary lookup. Each column comes in a pair: `_raw` is what
+`gender-guesser` returned, `_collapsed` is what WE decided that means.
 
-  `first_author_gender`      classification of verf1 (pers1 as fallback)
-  `author_gender`            majority across resolved authors; ties -> "mixed"
-  `female_present`           True if any resolved author classified female
+  `first_author_gender_raw`        gender-guesser's verdict on verf1 (pers1 as fallback)
+  `first_author_gender_collapsed`  that verdict under our rule, below
+  `author_genders_raw`            the verdict per parseable author, ";"-joined, in
+                                  verf1..verf3 order
+  `author_gender_collapsed`       majority across resolved authors; ties -> "mixed"
 
-`*_raw` columns keep `gender-guesser`'s own six-way verdict (female, mostly_female,
-andy, unknown, mostly_male, male) rather than collapsing it, so coverage is visible
-instead of `andy` and `unknown` being merged into one bucket. `n_authors` and
-`n_authors_resolved` say how much of each row the claim rests on.
+The collapse rule, applied identically in both `_collapsed` columns:
 
-Both gender columns use the same three-way encoding for the unresolved cases —
-`unknown` (no author recorded, or no name the dictionary knows) and `institutional` — so
-a cut on one column transfers to the other, and neither is ever blank.
+  female, mostly_female  -> female
+  male, mostly_male      -> male
+  andy, unknown          -> unresolved, and so excluded from any majority
+  no parseable author    -> "institutional" if a name was recorded, else "unknown"
+
+The pair exists because the rule is a decision, not a fact: `_raw` keeps `andy`
+(ambiguous) distinct from `unknown` (absent from the dictionary) so coverage stays
+visible, while `_collapsed` is the one authored verdict every consumer should use rather
+than re-deriving their own and disagreeing with the report.
+
+Nothing here restates anything else. Two columns were dropped for being pure
+restatements of `author_genders_raw`, recomputable in one line each if wanted:
+
+  n_authors_resolved  = count of entries in {female, mostly_female, male, mostly_male}
+  female_present      = any entry in {female, mostly_female}
+
+`n_authors` is NOT one of those: it counts the names RECORDED, including any that fail
+the "Last, First" parse and so never reach `author_genders_raw`. Nor is
+`first_author_gender_raw`, which classifies verf1 directly rather than taking the first
+entry of the compacted raw list — see the comment at the `first_pair` call for the case
+that distinguishes them.
 
 Three limits that belong in any published figure:
 
@@ -92,6 +109,8 @@ AUTHOR_FIELDS = ("verf1", "verf2", "verf3")
 # (andy, unknown) stays unresolved rather than being folded into one of these.
 FEMALE = {"female", "mostly_female"}
 MALE = {"male", "mostly_male"}
+# The verdicts that count as resolved — everything else (andy, unknown) does not.
+RESOLVED = FEMALE | MALE
 
 
 def first_name(raw: str | None) -> str | None:
@@ -124,14 +143,15 @@ COLUMNS = [
     "extent_pages",
     "n_chunks",
     # Author gender — see the module docstring for what these can and cannot mean.
+    # Every column here is independent: each _raw holds gender-guesser's own verdict and
+    # each _collapsed holds OUR decision about it. Nothing is a restatement of another
+    # column, so no consumer has to guess which of two spellings of one number to trust.
     "n_authors",
-    "n_authors_resolved",
     "is_institutional",
-    "first_author_gender",
     "first_author_gender_raw",
-    "author_gender",
-    "female_present",
+    "first_author_gender_collapsed",
     "author_genders_raw",
+    "author_gender_collapsed",
 ]
 
 
@@ -323,13 +343,11 @@ def build_rows(documents: list[dict]) -> list[dict]:
                 "extent_pages": parse_pages(doc.get("umf")),
                 "n_chunks": doc["n_chunks"],
                 "n_authors": n_recorded,
-                "n_authors_resolved": sum(1 for g in collapsed if g != "unknown"),
                 "is_institutional": n_recorded > 0 and not raw,
-                "first_author_gender": first_collapsed,
                 "first_author_gender_raw": first_raw,
-                "author_gender": majority(collapsed) if raw else unresolved(),
-                "female_present": "female" in collapsed,
+                "first_author_gender_collapsed": first_collapsed,
                 "author_genders_raw": ";".join(raw),
+                "author_gender_collapsed": majority(collapsed) if raw else unresolved(),
             }
         )
     return rows
@@ -356,7 +374,13 @@ def main() -> int:
         conn.close()
     rows = build_rows(documents)
 
-    resolved = sum(1 for r in rows if r["n_authors_resolved"])
+    # Counted here rather than read off a column: n_authors_resolved was dropped as a
+    # pure restatement of author_genders_raw, and this is that restatement's one use.
+    resolved = sum(
+        1
+        for r in rows
+        if any(v in RESOLVED for v in r["author_genders_raw"].split(";"))
+    )
     institutional = sum(1 for r in rows if r["is_institutional"])
     n_chunks_total = sum(r["n_chunks"] for r in rows)
     ws.write_csv(
