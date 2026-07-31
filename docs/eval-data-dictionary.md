@@ -2,27 +2,9 @@
 
 > **This file is injected into the metric-production pipeline as a schema contract; do not edit w/o editing corresponding pipeline code.** 
 
-> Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the wording that was current when it was written.
+> Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
-> 3 points depend on this md by path and by hash:
->
-> - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
->   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
->   file itself into the output directory beside the CSVs whose `.provenance.json` carries that pin. The
->   eval scripts refuse to run if it is missing.
-> - **Pinned by the committed record.** `reproducibility/2026-07-30-eval-report/pins.sha256`
->   pins the copy that travelled with the 2026-07-30 CSVs, at the hash this file had then -
->   binding the delivered numbers to that exact wording. (The pin resolves under `reports/`,
->   which is not in git, so it reads `ABSENT` until the tree is fetched.)
-> - **Implemented in code.** `scripts/eval/eval_common.py` is the executable half of the
->   vocabulary defined here (`response`, `record`, `item`, `panel`, `query group`) and is kept
->   in step with it. Referenced from `docs/eval.md`, `docs/implementation-guide.md`,
->   `docs/reproducibility.md`, the `Makefile` header, and the annotation report's footnotes.
->
-> **Re: editing.** Any byte change moves the SHA-256, and the `*.provenance.json` files already
-> shipped to BSt no longer match it; renaming this file breaks the pinned path as well. Change it as part
-> of regenerating `reports/eval/<date>/` and re-pinning the bundle, never on its own.
-
+> 3 points in the pipeline depend on this md by path and by hash - see the [Appendix](#appendix).
 
 ## Vocabulary
 
@@ -261,3 +243,25 @@ them from it in one line each if you need them:
   a section heading has no document-grain meaning, and `retrieval_manifest.csv` cannot join
   to it either, because its `chunk_id` is the pipeline's own `<doc_id>-c1` rather than a key
   this store holds.
+
+
+## Appendix
+
+> 3 points in the pipeline depend on this md by path and by hash:
+>
+> - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
+>   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
+>   file itself into the output directory beside the CSVs whose `.provenance.json` carries that pin. The
+>   eval scripts refuse to run if it is missing.
+> - **Pinned by the committed record.** `reproducibility/2026-07-30-eval-report/pins.sha256`
+>   pins the copy that travelled with the 2026-07-30 CSVs, at the hash this file had then -
+>   binding the delivered numbers to that exact wording. (The pin resolves under `reports/`,
+>   which is not in git, so it reads `ABSENT` until the tree is fetched.)
+> - **Implemented in code.** `scripts/eval/eval_common.py` is the executable half of the
+>   vocabulary defined here (`response`, `record`, `item`, `panel`, `query group`) and is kept
+>   in step with it. Referenced from `docs/eval.md`, `docs/implementation-guide.md`,
+>   `docs/reproducibility.md`, the `Makefile` header, and the annotation report's footnotes.
+>
+> **Re: editing.** Any byte change moves the SHA-256, and the `*.provenance.json` files already
+> shipped to BSt no longer match it; renaming this file breaks the pinned path as well. Change it as part
+> of regenerating `reports/eval/<date>/` and re-pinning the bundle, never on its own.
