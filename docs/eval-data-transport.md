@@ -40,6 +40,12 @@ Each is a top-level prefix in the container, pinned by its own `MANIFEST.sha256`
 | `predictions/` | GPU → CPU | per-row model predictions from an eval run |
 | `checkpoints/` | GPU → CPU | trained evaluator checkpoints - **pull these off before the GPU box is torn down** (everything else is reproducible from pinned inputs + code; checkpoints are expensive to regenerate) |
 
+Two further prefixes are in the container, pushed the same way but outside the CPU↔GPU loop:
+`exports-frozen/<date>/` (the pinned export tree behind published numbers) and
+`reports/eval/<date>/` (the report deliverables). `analysis/` holds an earlier ad-hoc
+IAA summary. A `push` names its own prefix, so nothing here is a fixed set - `sync.sh`
+accepts any.
+
 ## Commands
 
 `scripts/transfer/sync.sh` is the pipe; the `make` targets wrap it with sensible defaults:

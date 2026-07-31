@@ -1,6 +1,6 @@
 # pragmata-workspace
 
-Operational glue for running the [pragmata](https://github.com/) annotation pipeline against
+Operational glue for running the [pragmata](https://github.com/bertelsmannstift/pragmata) annotation pipeline against
 the BSt (Bertelsmann Stiftung) publikationsbot. Holds **scripts, configs, and specs** that
 are specific to the BSt operational setup and deliberately do not belong in `pragmata`
 itself. It does **not** hold data or outputs (those stay local and gitignored, see
