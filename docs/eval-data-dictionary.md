@@ -4,7 +4,7 @@
 
 > Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
-> 3 points in the pipeline depend on this md by path and by hash - see the [Appendix](#appendix).
+> 3 points in the pipeline depend on this md by path and by hash - see the [Appendix](#appendix---implications-for-editing-this-doc-pipeline-deps).
 
 ## Vocabulary
 
@@ -236,8 +236,8 @@ coalesces their extra responses into one item, exactly as it does when passing d
   this store holds.
 
 
-## Appendix
->Implications for editing this doc (pipeline deps); 3 points in the pipeline depend on this md by path and by hash:
+## Appendix - Implications for editing this doc (pipeline deps)
+>3 points in the pipeline depend on this md by path and by hash:
 >
 > - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
 >   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
