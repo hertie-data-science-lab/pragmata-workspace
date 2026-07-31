@@ -1,9 +1,11 @@
 # Eval pipeline
 
 The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Two of its
-three parts have shipped: **data transport** ([Eval data transport](eval-data-transport.md))
-and **scoring human labels** (this page). **Training and prediction** (`pragmata eval
-train-evaluator|predict-labels`) are not built yet - see [Not built yet](#not-built-yet).
+three parts are wired up in this workspace: **data transport**
+([Eval data transport](eval-data-transport.md)) and **scoring human labels** (this page).
+**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are implemented
+in `pragmata` and run on the GPU box, but have no workspace-side glue - see
+[No workspace glue yet](#no-workspace-glue-yet).
 
 ## Deliverables
 
@@ -111,12 +113,14 @@ interleave. The sequence that works:
 If the eval pragmata pin moves (e.g. upstream PRs land in modified form), the numbers must
 be **re-derived** under the new pin, not assumed to carry over.
 
-## Not built yet
+## No workspace glue yet
 
-`pragmata eval train-evaluator|predict-labels` (the `tlmtc` extra) run on the GPU box and
-are a separate effort in the pragmata repo. When they land, they mirror the annotation
-pipeline
-(`scripts/eval/` ↔ `scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and
-write to `data/eval/`. `score_synthetic_predictions.py` is the reserved name for scoring
-the evaluator model's predictions - the twin of `score_human_annotations.py` - and is
-deliberately not stubbed.
+`pragmata eval train-evaluator|predict-labels` are implemented in the pragmata repo, behind
+the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), and run on the GPU box against staged
+export CSVs. What does not exist is the workspace side: no make targets, no `configs/eval/`,
+no tested procedure - see
+[implementation guide §10](implementation-guide.md#10-run-the-evaluation) for the open list.
+When that glue lands it mirrors the annotation pipeline (`scripts/eval/` ↔
+`scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and writes to `data/eval/`.
+`score_synthetic_predictions.py` is the reserved name for scoring the evaluator model's
+predictions - the twin of `score_human_annotations.py` - and is deliberately not stubbed.

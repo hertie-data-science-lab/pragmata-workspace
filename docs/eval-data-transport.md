@@ -153,9 +153,10 @@ ship into the private, IP-allowlisted container; the annotator roster
 (`configs/annotation/users.json`) never leaves the CPU box, and the GPU box never needs
 it - eval consumes label columns, not identities.
 
-## Not here yet
+## Not wired up here yet
 
-**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are a separate
-effort in the pragmata repo and are not built yet - the walkthrough's step 2 onward
-describes that future flow. Scoring human labels has shipped and runs entirely on the CPU box; see
-[Eval pipeline](eval.md).
+**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are implemented
+in the pragmata repo and run on the GPU box, but the project-side procedure around them is
+untested - the walkthrough's step 2 onward describes the intended flow, not a rehearsed one
+([implementation guide §10](implementation-guide.md#10-run-the-evaluation)). Scoring human
+labels has shipped and runs entirely on the CPU box; see [Eval pipeline](eval.md).

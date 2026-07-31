@@ -9,9 +9,19 @@ itself. It does **not** hold data or outputs (those stay local and gitignored, s
 ```mermaid
 flowchart LR
   qg[querygen] --> bot[publikationsbot] --> comb[combine] --> imp["setup + import"] --> arg[(Argilla datasets)]
-  arg -->|export| ev["eval deliverables (score + report)"]
-  arg -. planned .-> tr["evaluator training + prediction"]
+  arg -->|export| ev["eval deliverables (score)"]
+  arg -->|export| tr["evaluator training + prediction"]
+  ev --> rep["report<br/>(separate private repo)"]
+  tr --> rep
 ```
+
+No stage above is hypothetical. Training and prediction live in `pragmata`
+(`pragmata eval train-evaluator|predict-labels`, `tlmtc`-backed) and run on the GPU box; what
+is still open there is the *project-side* procedure - the commit, config files and accepted
+commands - see
+[implementation guide §10](docs/implementation-guide.md#10-run-the-evaluation). The final
+report is assembled from the scored deliverables and the evaluator's predictions in a
+separate private repository, outside this workspace.
 
 ## Setup
 
@@ -92,7 +102,7 @@ make help                      # list every target
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
 - [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
-  pseudonymisation, and the refresh runbook; train/predict are still to build.
+  pseudonymisation, and the refresh runbook; train/predict have no workspace glue yet.
 - [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
