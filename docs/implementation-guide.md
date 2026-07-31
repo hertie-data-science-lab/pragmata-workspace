@@ -462,7 +462,7 @@ detail: [Eval data transport](eval-data-transport.md).
 ## 10. Run the evaluation
 
 **Scoring human labels has shipped and runs on the CPU VM.** Three targets produce the
-report deliverables into `reports/eval/<date>/`, each CSV with a provenance sidecar and the
+report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the
 data dictionary beside it:
 
     make eval-report     # annotation_operations, annotation_label_summary, retrieval_manifest
@@ -476,7 +476,7 @@ in the [data dictionary](eval-data-dictionary.md).
 **Evaluator training and prediction are implemented in `pragmata` and run on the GPU VM.**
 `pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` (default
 proxy `jhu-clsp/mmBERT-small`, target `jhu-clsp/mmBERT-base`) and writes a run directory, a
-model directory and a metadata sidecar; `pragmata eval predict-labels` applies a chosen
+model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen
 training run to an unlabelled CSV and writes probabilities and predictions. Both live behind
 the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock
 - the GPU box installs its own environment. They consume staged input by explicit path, e.g.:

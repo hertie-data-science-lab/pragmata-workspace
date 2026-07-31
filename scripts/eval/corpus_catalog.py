@@ -60,7 +60,7 @@ from pathlib import Path
 # read-only connection, and never echoes the credential in an error. Imported rather than
 # copied so that handling lives in one place. `uv run --script` isolates installed
 # packages, not local imports, so the dependency-free workspace lib is importable here
-# too, giving this script the same dated output dir and provenance sidecar contract as its
+# too, giving this script the same dated output dir and .provenance.json contract as its
 # four siblings. eval_common is NOT imported: it needs pandas, which this script has no
 # reason to install.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -348,7 +348,7 @@ def main() -> int:
         file=sys.stderr,
     )
     # Guarded: an empty result is possible (a stale MAIN_COLLECTION name) and the CSV
-    # and sidecar are already written by this point, so the run should end with a usable
+    # and .provenance.json are already written by this point, so the run should end with a usable
     # message rather than a ZeroDivisionError traceback over a valid artifact.
     share = f" ({resolved / len(rows):.1%})" if rows else ""
     print(

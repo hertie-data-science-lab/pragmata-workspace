@@ -60,7 +60,7 @@ Two halves, deliberately split:
 
 Each snapshot carries three metrics (production vs calibration where it applies):
 
-1. **Counts** - submitted responses (work units), completed records (met `min_submitted`),
+1. **Counts** - submitted responses (the work count), completed records (met `min_submitted`),
    and total records.
 2. **Calibration agreement** - Krippendorff α over the calibration overlap. The headline is
    **pooled**: item-level data from every domain goes into one reliability matrix per

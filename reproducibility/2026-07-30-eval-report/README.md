@@ -11,8 +11,8 @@ human-annotation and fairness-audit number in the report is derived from this fr
 other. It pins two things the earlier bundle kept apart:
 
 - the **annotation export** it rests on, and
-- the **report CSVs themselves**, with their provenance sidecars and the data dictionary that
-  defines their columns.
+- the **report CSVs themselves**, with their `.provenance.json` files and the data
+  dictionary that defines their columns.
 
 This is a **freeze**, not a lineage stage (see [`../README.md`](../README.md)): it records one
 run and is never replayed. `repro-reproduce` refuses it.
@@ -50,11 +50,12 @@ artefacts are untouched.
 The pragmata eval pin is `origin/main` plus the two eval-score PRs the scoring depends on
 (#305 panel-completeness skipping, #304 score-by-path), both **pending review upstream**. If
 they land in modified form, the numbers must be re-derived from the merged code, not assumed
-to carry over. Every report sidecar records the pin's branch, SHA and clean/dirty state.
+to carry over. Every report `.provenance.json` records the pin's branch, SHA and
+clean/dirty state.
 
 The snapshot's identity is pinned transitively: `annotation_operations.csv.provenance.json`
 carries the sha256 of that one log **line** — not of the append-only log, whose whole-file
-digest changes nightly — and that sidecar is itself pinned here.
+digest changes nightly — and that file is itself pinned here.
 
 `pins.sha256` and the Blob `MANIFEST.sha256` are not comparable by design: the first lists
 repo-relative paths, the second tree-relative ones. Each pins the same bytes under its own
@@ -80,13 +81,13 @@ and only six further responses arrived:
 |---|---:|---:|---:|
 | Submitted responses | 3462 | 3468 | +6 |
 | Completed records | 2510 | 2516 | +6 |
-| Annotated units | 2721 | 2721 | 0 |
+| Annotated items | 2721 | 2721 | 0 |
 | Live records | 4244 | 4244 | 0 |
 | Complete retrieval panels | 181 | 181 | 0 |
 
 All six landed on `digitalisierung-und-gemeinwohl` / grounding (94 → 100 responses), on
 records that already had responses — so they completed six records without creating any new
-unit.
+item.
 
 **No metric estimate changed.** All 16 rows of `eval_metric_estimates.csv` carry identical
 point estimates, identical intervals and identical `n` to 2026-07-29. The six new responses
@@ -96,8 +97,8 @@ move.
 
 Two expectations going in did **not** hold, recorded so they are not re-assumed:
 
-- `digitalisierung-und-gemeinwohl` / generation was expected to become newly units-eligible.
-  It was already complete at 2026-07-29: 130 live, 130 completed, 130 units, on both dates.
+- `digitalisierung-und-gemeinwohl` / generation was expected to become newly items-eligible.
+  It was already complete at 2026-07-29: 130 live, 130 completed, 130 items, on both dates.
 - The retired 2026-07-02 generation descope was expected to bring records back in. Those
   records were never removed from live, so they were already in the 2026-07-29 export.
 
@@ -121,7 +122,7 @@ Worth separating, because the two causes look alike in a diff:
 
 | CSV | Rows | Cols | What changed |
 |---|---|---|---|
-| `annotation_operations.csv` | 21 → 21 | 24 → 21 | Dropped `n_curated`, `session_gap_threshold_s` (now in the sidecar) and `n_panels_with_responses`; renamed the count columns to name their grain. Only the DIG/grounding row's numbers moved. |
+| `annotation_operations.csv` | 21 → 21 | 24 → 21 | Dropped `n_curated`, `session_gap_threshold_s` (now in the `.provenance.json`) and `n_panels_with_responses`; renamed the count columns to name their grain. Only the DIG/grounding row's numbers moved. |
 | `annotation_label_summary.csv` | 91 → 91 | 15 → 12 | Dropped `n_responses`, `n_true_responses`, `status` — a blank `alpha` now carries that meaning, per the dictionary. Agreement changes as above. |
 | `eval_metric_estimates.csv` | 16 → 16 | 20 → 18 | Dropped `alpha_min_ci_low` / `alpha_min_ci_high`. No point estimate, interval or `n` changed; 4 `alpha_min` values did. |
 | `retrieval_manifest.csv` | 6189 → 6189 | 16 → 18 | Added `annotated` and `n_annotated_chunks` — 464 of 1143 queries have an annotated retrieval panel; renamed the querygen spec's `task` to `query_task`. |

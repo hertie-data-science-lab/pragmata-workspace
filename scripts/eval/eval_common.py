@@ -1,10 +1,10 @@
 """Shared vocabulary for the eval-stage report scripts.
 
 The report CSVs are a contract with the report author, so the things that decide a
-number — which rows count, what a unit is, which population a statistic describes — are
+number — which rows count, what an item is, which population a statistic describes — are
 defined once here rather than re-derived per script.
 
-The prose definitions of response / record / unit / panel / query group, and every
+The prose definitions of response / record / item / panel / query group, and every
 column of every CSV, live in ``docs/eval-data-dictionary.md``. This module is the
 executable half of that document; keep the two in step.
 
@@ -54,11 +54,11 @@ LABELS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# The columns identifying one UNIT — one record's responses majority-consolidated, the
+# The columns identifying one ITEM — one record's responses majority-consolidated, the
 # grain eval ingests. Matches pragmata's _DUPLICATE_KEY_COLUMNS_BY_TASK
 # (core/eval/transforms.py). A retrieval record is one chunk, so a query's panel fans out
 # into one row per chunk; a grounding or generation record is one query.
-UNIT_KEYS: dict[str, tuple[str, ...]] = {
+ITEM_KEYS: dict[str, tuple[str, ...]] = {
     "retrieval": ("record_uuid", "chunk_id"),
     "grounding": ("record_uuid",),
     "generation": ("record_uuid",),
@@ -213,18 +213,18 @@ def has_subrows(task: str) -> bool:
     """Whether a task fans one query out into several rows.
 
     Retrieval does (one row per chunk); grounding and generation are one row per query.
-    Derived from UNIT_KEYS so the structural fact lives in one place, rather than
+    Derived from ITEM_KEYS so the structural fact lives in one place, rather than
     restating ``task == "retrieval"`` at every site that depends on it - panel
     completeness, chunks-per-query, and the calibration grain all turn on this.
     """
-    return len(UNIT_KEYS[task]) > 1
+    return len(ITEM_KEYS[task]) > 1
 
 
 def export_inputs(exports: Path, *, include_iaa: bool = True) -> list[Path]:
     """The export files a report derives from, for provenance hashing.
 
     One definition so the hashed input set is identical across reports and their
-    sidecars stay comparable.
+    provenance records stay comparable.
     """
     inputs = sorted(exports.rglob("*.csv"))
     if include_iaa:
@@ -233,13 +233,13 @@ def export_inputs(exports: Path, *, include_iaa: bool = True) -> list[Path]:
 
 
 def export_meta(exports: Path, programme: str) -> dict:
-    """A programme's ``annotation_export.meta.json`` sidecar, or {} if absent."""
+    """A programme's ``annotation_export.meta.json``, or {} if absent."""
     path = exports / programme / "annotation_export.meta.json"
     return json.loads(path.read_text()) if path.exists() else {}
 
 
 def panel_totals(exports: Path, programme: str) -> tuple[int, int]:
-    """(n_panels, n_panels_complete) for a programme, from the export's own sidecar.
+    """(n_panels, n_panels_complete) for a programme, from the export's own meta file.
 
     Taken from ``completeness_summary`` rather than counted off the CSV rows, because
     the rows only cover panels that received at least one submitted response. Counting
@@ -320,17 +320,18 @@ def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
 def consolidated_prevalence(
     frame: pd.DataFrame, task: str, label: str
 ) -> tuple[int, int]:
-    """(n_units, n_true) for one label, majority-consolidated per unit.
+    """(n_items, n_true) for one label, majority-consolidated per item.
 
     Follows pragmata's consolidate_labels_by_majority: a strict majority decides the
-    unit's label; an exact tie falls back to the first row's value in file order. So the
-    count is of annotated units, not of responses, and n_true counts units whose
-    consolidated label is true - the same numbers eval score would ingest. The client's
-    label table names this count `n_items`; see the data dictionary.
+    item's label; an exact tie falls back to the first row's value in file order. So the
+    count is of annotated items, not of responses, and n_true counts items whose
+    consolidated label is true - the same numbers eval score would ingest. Named
+    `n_items` in the label table and `n_items_annotated` in the operations table (the
+    same count at the same grain); see the data dictionary.
     """
     if frame.empty or label not in frame.columns:
         return 0, 0
-    keys = list(UNIT_KEYS[task])
+    keys = list(ITEM_KEYS[task])
     grouped = frame.groupby(keys, sort=False)[label].agg(["sum", "count", "first"])
     positive = grouped["sum"] * 2
     consolidated = (positive > grouped["count"]) | (
