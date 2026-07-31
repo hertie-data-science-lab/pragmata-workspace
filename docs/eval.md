@@ -58,8 +58,10 @@ what the original run read:
 
 The first two are constants in `scripts/eval/eval_common.py` (`FREEZE_DATE`,
 `CANONICAL_SNAPSHOT_RUN_AT`) - one place, so a refresh moves them once. The current freeze
-is recorded in [`reproducibility/2026-07-30-eval-report/`](../reproducibility/2026-07-30-eval-report/),
-whose README names the exact pragmata pin commit.
+is recorded in [`reproducibility/2026-07-31-eval-report/`](../reproducibility/2026-07-31-eval-report/),
+whose README names the exact pragmata pin commit. It pins the same export tree as
+`2026-07-30-eval-report/`, which it supersedes: the export did not move, the report schema
+did.
 
 ## Annotator identities
 
