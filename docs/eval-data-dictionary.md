@@ -94,7 +94,7 @@ x label.
 | Column | Definition |
 |---|---|
 | `programme`, `task`, `label` | The label's identity. |
-| `n_items` | **Items** with this label. |
+| `n_items` | Items with this label. |
 | `n_annotators` | Distinct annotators on this programme x task. |
 | `n_true` | Items whose majority-consolidated value for this label is true. |
 | `pct_agree` | Raw percentage agreement on the calibration overlap. |
@@ -105,9 +105,8 @@ x label.
 
 **Caveats.**
 
-- `n_items` / `n_true` are the *production+calibration* prevalence over items; `alpha`,
-  `pct_agree` and `n_items_calibration` describe the *calibration overlap only*. An alpha
-  on a row is evidence about the labelling scheme, not about those particular items.
+- `n_items` / `n_true` are the *pooled production+calibration* prevalence over items; `alpha`,
+  `pct_agree` and `n_items_calibration` describe the *calibration overlap only*. 
 - **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient
   to compute one - too few annotators saw the same records.
 - `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only
@@ -131,7 +130,7 @@ task x metric, pooled across programmes - the taxonomy has no per-programme grai
 | `point` | The point estimate. |
 | `ci_low`, `ci_high` | Confidence interval, at `ci_level`. |
 | `method` | Interval method (Wilson for rates, bootstrap for the continuous retrieval metrics). |
-| `n` | Items the metric averages over, after filtering. |
+| `n` | Items the metric averages over, (after post-hoc filtering in response to difficulites in annotation velocity/load vs expectation). |
 | `n_examples` | Queries scored, as pragmata counted them. |
 | `ci_level` | Confidence level, 0.95. |
 | `top_k` | `max(chunk_rank)` over the scored panels. |
@@ -146,16 +145,10 @@ task x metric, pooled across programmes - the taxonomy has no per-programme grai
 
 **Caveats.**
 
-- The intervals cover **sampling uncertainty over queries only** - not annotator
-  disagreement and not label error. That is pragmata's explicit design. A tight interval on
-  a label with alpha at or below chance reads as precision that is not there; the
-  `alpha_*` columns exist to stop that reading.
-- The `alpha_*` columns are the **pooled** alpha over every programme's calibration items -
-  the matching population for pooled metrics. They carry no interval: alpha's bootstrap is
-  resampled independently of the metric's, so the two side by side invited being read as one
-  uncertainty budget. Both use 1000 resamples with a fixed seed, so both are reproducible.
-- **`top_k` varies per query.** It is `max(chunk_rank)`, not a configured K, so these are
-  not "@5" metrics. Do not label them with a fixed K.
+- The intervals cover sampling uncertainty over queries only - not annotator
+  disagreement and not label error. A tight interval on a label with alpha at or below chance reads as precision that is not there; the `alpha_*` columns exist to stop that reading.
+- The `alpha_*` columns are the pooled alpha over every programme's calibration items.
+- `top_k` varies per query. It is `max(chunk_rank)`, not a configured K.
 - `n` counts the population that survived filtering (submitted responses; complete
   retrieval panels only), not the corpus. Read it beside `n_panels_skipped`.
 
@@ -169,14 +162,13 @@ denominators stay right.
 | Column | Definition |
 |---|---|
 | `query_id` | Stable query identifier, e.g. `europas-zukunft_q17`. |
-| `programme` | Programme slug. |
+| `programme` | Programme slug (reflecting BSt's domains). |
 | `doc_id` | Source document of this chunk. Joins to `corpus_catalog.csv`. |
-| `chunk_id` | The retrieved chunk. |
+| `chunk_id` | The retrieved chunk - **synthesised as `<doc_id>-c1`**. The bot returns one passage per document and the pipeline never splits it, so this is 1:1 with `doc_id` by construction, not by data. |
 | `rank` | Retrieval rank within this query, 1-based. |
 | `n_retrieved_chunks` | Chunks this query retrieved (query grain, repeated across its rows). |
-| `annotated` | Query grain, **retrieval only**: this query's retrieval panel received at least one submitted response. |
-| `n_annotated_chunks` | Query grain: how many of its chunks did. |
-| `domain` | Human-readable programme name, as the record carries it. |
+| `panel_started` | Query grain, **retrieval only**: at least one chunk of this query's retrieval panel received a submitted response. *Started*, not complete - contrast `n_panels_complete` in `annotation_operations.csv`. |
+| `n_chunks_annotated` | Query grain: how many of the query's chunks got a submitted response. |
 | `language`, `role`, `topic`, `intent`, `difficulty`, `format`, `spec_stem`, `retried` | Per-query metadata from the querygen spec, carried through unchanged. |
 | `query_task` | The querygen spec's own `task` - a description of what the query asks for (e.g. "extract evidence refuting a claim"). Renamed from `task` because `task` everywhere else in this bundle means retrieval / grounding / generation. |
 
@@ -185,16 +177,22 @@ denominators stay right.
 - **The source is the curated corpus, a superset of what was annotated.** It is *not*
   post-removal: curation selected a subset for import into Argilla, so most rows here belong
   to queries nobody annotated - 464 of 1143 queries are annotated.
-- **`annotated` is retrieval-scoped and is not a general "was this query annotated" flag.**
-  It says the query's *retrieval panel* got a response. Grounding and generation were
+- **`panel_started` and `n_chunks_annotated` are the only columns here derived from
+  annotation state**; every other column comes from the curated corpus. They exist because
+  the join that would reproduce them is not available from this bundle: the exports carry no
+  `query_id`, and this file carries no query text.
+- **`panel_started` is retrieval-scoped and is not a general "was this query annotated"
+  flag.** It says the query's *retrieval panel* got a response. Grounding and generation were
   annotated on their own records and cover more queries than retrieval does (447 grounding
-  and 713 generation items, against 464 retrieval-annotated queries), so filtering a
-  grounding or generation question on this column silently drops annotated data. Use it for
-  retrieval cuts only; for the other tasks, go to the export.
-- **Chunk-grain fan-out.** A `doc_id` appears once per retrieved chunk, so document
-  *frequency* means counting rows and distinct *documents* means deduplicating on
-  `(query_id, doc_id)`. **Never join on `chunk_id` alone** - 739 chunks here are retrieved
-  by more than one query, so a chunk-only join multiplies rows across unrelated queries.
+  and 713 generation items, against 464 retrieval-started queries), so filtering a grounding
+  or generation question on this column silently drops annotated data. Use it for retrieval
+  cuts only; for the other tasks, go to the export.
+- **Row fan-out is per retrieved passage, one per document.** Because `chunk_id` is
+  `<doc_id>-c1`, document *frequency* means counting rows and distinct *documents* means
+  deduplicating on `(query_id, doc_id)` - identical to deduplicating on `(query_id,
+  chunk_id)`. **Never join on `doc_id`/`chunk_id` alone**: 739 of the 1092 retrieved
+  documents are returned for more than one query (one for 72 of them), so a document-only
+  join multiplies rows across unrelated queries.
 - **Joining to the annotation exports.** They carry no `query_id`, only `record_uuid`. Join
   on the **query text**, which is verified 1:1 with `query_id` (1143 texts, 1143 ids, both
   directions), or on `(query_id, chunk_id)` once the query is resolved. Join to
@@ -208,31 +206,34 @@ base population. **Grain:** one row per `doc_id`.
 | Column | Definition |
 |---|---|
 | `doc_id` | Document identifier. Joins to `retrieval_manifest.csv`. |
+| `title` | Document title (`hst`), with the catalogue's `¬…¬` non-filing markers around a leading article removed. Present for every document. |
+| `subtitle` | Title continuation (`hst_zu`); blank for 844 of 2946 documents. |
+| `doi` | DOI where the catalogue records one - 897 of 2946 documents. |
+| `catalog_url` | BSt-internal library permalink. Reachable inside the BSt network only. |
 | `pub_year` | Four-digit year parsed from the free-text year field; blank if unparseable. |
 | `publisher`, `place` | Library metadata, verbatim. |
 | `extent` | The raw extent string, kept so the page parse is auditable. |
 | `extent_pages` | Largest number found in `extent`; blank when it holds no page count. |
 | `n_chunks` | Chunks this document contributes to the vector store. |
 | `n_authors` | Authors *recorded* on the document (at most three). |
-| `n_authors_resolved` | Of those, how many the name dictionary classified. |
+| `n_authors_resolved` | Of those, how many the name dictionary classified. Derivable from `author_genders_raw`. |
 | `is_institutional` | The document has recorded authors but no personal names. |
 | `first_author_gender` | `female` / `male` / `unknown` / `institutional` for the first recorded author. |
 | `author_gender` | Majority across resolved authors; `mixed` on a tie, else as above. |
-| `female_present` | Any resolved author classified female. |
+| `female_present` | Any resolved author classified female. Derivable from `author_genders_raw`. |
 | `first_author_gender_raw`, `author_genders_raw` | `gender-guesser`'s own six-way verdicts, uncollapsed. |
 
 **Caveats.**
 
-- **Gender is inferred from a first-name dictionary**, is not recorded in the corpus, and is
-  not a measure of how anyone identifies. It is weaker on non-Western names - the `*_raw`
-  columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so
-  that coverage stays visible.
-- **`author_gender = 'unknown'` merges two populations:** documents with no recorded author
-  at all, and documents whose authors the dictionary cannot classify. **Split on `n_authors`
-  (0 vs > 0) first.** Both gender columns use the same encoding, so a cut on one transfers
-  to the other, and neither is ever blank.
+- **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `*_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
+- `author_gender = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify. 
 - "Majority" is over *recorded* authors: the metadata holds at most three, so a
   twelve-author volume is judged on three.
-- The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row
-  count plus a checksum over the per-document chunk counts rather than by file hash. Either
-  changing means the corpus moved under the catalog.
+- The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.
+- **What the store holds but this catalog does not.** Of its 22 metadata keys, 13 are rolled
+  up here. Left out deliberately: `url_doi` (it is `https://doi.org/` + `doi`), `mediengrp`
+  (the constant `"G"` on all 544,692 chunks), `mediennr` (a second document id),
+  `filename`/`filepath_internal`/`source` (internal paths), and the per-chunk `headline` -
+  a section heading has no document-grain meaning, and `retrieval_manifest.csv` cannot join
+  to it either, because its `chunk_id` is the pipeline's own `<doc_id>-c1` rather than a key
+  this store holds.

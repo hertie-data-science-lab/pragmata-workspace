@@ -42,6 +42,18 @@ Three limits that belong in any published figure:
   3. Institutional authors have no personal name at all and are flagged
      `is_institutional`, not counted as unknown people.
 
+## What is taken from the store, and what is not
+
+The store keeps 22 metadata keys per chunk; this catalog rolls up 13 of them to document
+grain. `title`/`subtitle`/`doi`/`catalog_url` (`hst`, `hst_zu`, `doi`,
+`url_bibliothekskatalog`) exist so an audited row can be identified and looked up - the
+catalogue URL is a BSt-internal permalink. Deliberately not taken: `url_doi` (it is
+`https://doi.org/` + `doi`), `mediengrp` (the constant `"G"` on all 544,692 chunks),
+`mediennr` (a second document id), `filename`/`filepath_internal`/`source` (internal
+paths), and the per-chunk `headline` - a heading has no document-grain meaning, and the
+retrieval manifest cannot join to it (its `chunk_id` is the pipeline's own
+`<doc_id>-c1`, not a key this store holds).
+
 Run (needs an active `az login` in the BSt tenant):
     ./corpus_catalog.py                     # write the catalog CSV
     ./corpus_catalog.py --out-dir DIR       # explicit output directory
@@ -99,6 +111,12 @@ def first_name(raw: str | None) -> str | None:
 
 COLUMNS = [
     "doc_id",
+    # Bibliographic identity, verbatim from the store apart from the title's non-filing
+    # markers: without a title the audit is a table of opaque doc_ids nobody can check.
+    "title",
+    "subtitle",
+    "doi",
+    "catalog_url",
     "pub_year",
     "publisher",
     "place",
@@ -115,6 +133,16 @@ COLUMNS = [
     "female_present",
     "author_genders_raw",
 ]
+
+
+def clean_title(raw: str | None) -> str:
+    """Library title with its non-filing markers removed.
+
+    The catalogue wraps the leading article in ¬…¬ so sorting can skip it
+    ("¬The¬ Future of EU Cohesion"). The markers are a sorting instruction, not part of
+    the title, and nothing here sorts by title - so they go, and the rest is verbatim.
+    """
+    return (raw or "").replace("\u00ac", "").strip()
 
 
 def parse_year(raw: str | None) -> str:
@@ -189,6 +217,10 @@ def fetch_documents(cur) -> list[dict]:
         """
         SELECT e.cmetadata->>'doc_id'        AS doc_id,
                count(*)                      AS n_chunks,
+               max(e.cmetadata->>'hst')      AS hst,
+               max(e.cmetadata->>'hst_zu')   AS hst_zu,
+               max(e.cmetadata->>'doi')      AS doi,
+               max(e.cmetadata->>'url_bibliothekskatalog') AS catalog_url,
                max(e.cmetadata->>'jahr')     AS jahr,
                max(e.cmetadata->>'verl')     AS verl,
                max(e.cmetadata->>'ort')      AS ort,
@@ -280,6 +312,10 @@ def build_rows(documents: list[dict]) -> list[dict]:
         rows.append(
             {
                 "doc_id": doc["doc_id"],
+                "title": clean_title(doc.get("hst")),
+                "subtitle": clean_title(doc.get("hst_zu")),
+                "doi": (doc.get("doi") or "").strip(),
+                "catalog_url": (doc.get("catalog_url") or "").strip(),
                 "pub_year": parse_year(doc.get("jahr")),
                 "publisher": (doc.get("verl") or "").strip(),
                 "place": (doc.get("ort") or "").strip(),

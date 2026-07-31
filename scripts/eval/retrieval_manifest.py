@@ -8,12 +8,19 @@ over-represents any part of the corpus.
 Reads `*_combined.curated.jsonl` — the CURATED CORPUS, which is a superset of what was
 imported into Argilla and annotated. It is not post-removal: the curation recorded in
 reproducibility/ selected a subset for import, so most curated queries were never
-annotated. The `annotated` and `n_annotated_chunks` columns say which ones were, counted
-against the frozen export, so a rate over this file can pick its own denominator.
+annotated. `panel_started` and `n_chunks_annotated` say which ones were, counted against
+the frozen export, so a rate over this file can pick its own denominator. They are the
+only two columns here derived from annotation state; every other column comes from the
+curated corpus.
 
 `programme` is the directory/file slug (e.g. `nachhaltige-soziale-marktwirtschaft`),
-consistent with every other CSV here. The record's own `domain` field carries the
-human-readable name (`Nachhaltige soziale Marktwirtschaft`) and is emitted too.
+consistent with every other CSV here. The record's own `domain` field is NOT emitted: it
+is the same seven values in display case, 1:1 with the slug, so it was a second name for
+one dimension.
+
+One chunk per document, always. The bot returns one passage per hit and the pipeline
+never splits it, so `chunk_id` is synthesised as `<doc_id>-c1` (run_bot.py) and is 1:1
+with `doc_id` by construction, not by data.
 
 The querygen spec's own `task` field (a description of what the query asks for) is
 emitted as `query_task`: `task` in every other eval CSV means retrieval / grounding /
@@ -39,7 +46,6 @@ import workspace as ws
 # break retrieval down by any of them without a second join. Keyed by output column;
 # the spec's `task` is renamed to end the collision with the eval task vocabulary.
 QUERY_META = {
-    "domain": "domain",
     "language": "language",
     "role": "role",
     "topic": "topic",
@@ -59,9 +65,10 @@ COLUMNS = [
     "rank",
     "n_retrieved_chunks",
     # Annotation coverage, at QUERY grain and repeated across the query's rows: whether
-    # this query's retrieval panel was annotated at all, and how many of its chunks were.
-    "annotated",
-    "n_annotated_chunks",
+    # this query's retrieval panel was STARTED (>=1 chunk got a submitted response - not
+    # that the panel is complete), and how many of its chunks were annotated.
+    "panel_started",
+    "n_chunks_annotated",
     *QUERY_META,
 ]
 
@@ -102,8 +109,8 @@ def rows_for(
         base = {
             "query_id": record.get("query_id", ""),
             "programme": programme,
-            "annotated": n_annotated > 0,
-            "n_annotated_chunks": n_annotated,
+            "panel_started": n_annotated > 0,
+            "n_chunks_annotated": n_annotated,
             **{column: record.get(key, "") for column, key in QUERY_META.items()},
         }
         if not chunks:
@@ -135,7 +142,7 @@ def main() -> int:
 
     coverage = annotated_chunks(args.exports)
     rows: list[dict] = []
-    totals = {"queries": 0, "empty": 0, "annotated": 0}
+    totals = {"queries": 0, "empty": 0, "started": 0}
     for path in paths:
         programme = path.name.removesuffix(suffix)
         if programme in ec.EXCLUDED_PROGRAMMES:
@@ -144,10 +151,10 @@ def main() -> int:
         rows.extend(file_rows)
         totals["queries"] += n_queries
         totals["empty"] += n_empty
-        n_annotated = len({r["query_id"] for r in file_rows if r["annotated"]})
-        totals["annotated"] += n_annotated
+        n_started = len({r["query_id"] for r in file_rows if r["panel_started"]})
+        totals["started"] += n_started
         print(
-            f"  {programme}: {n_queries} queries ({n_annotated} annotated), "
+            f"  {programme}: {n_queries} queries ({n_started} panel-started), "
             f"{len(file_rows)} rows",
             file=sys.stderr,
         )
@@ -164,14 +171,14 @@ def main() -> int:
             exports_tree=str(args.exports),
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             n_queries=totals["queries"],
-            n_queries_annotated=totals["annotated"],
+            n_queries_panel_started=totals["started"],
             n_queries_without_chunks=totals["empty"],
             grain="query x retrieved chunk",
         ),
     )
     print(
         f"wrote {target} ({len(rows)} rows, {totals['queries']} queries, "
-        f"{totals['annotated']} annotated, {totals['empty']} with no chunks)",
+        f"{totals['started']} panel-started, {totals['empty']} with no chunks)",
         file=sys.stderr,
     )
     return 0
