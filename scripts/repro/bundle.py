@@ -22,7 +22,6 @@ absence: missing bytes can be fetched, changed bytes mean the pin no longer hold
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -166,8 +165,8 @@ def readme_stub(bundle: Path, kind: str, nfiles: int) -> str:
         f"| Files | {nfiles} |",
         f"| Workspace git | `{git['sha']}` (dirty: {git['dirty']}) |",
     ]
-    if src := os.environ.get("PRAGMATA_SRC"):
-        rows.append(f"| pragmata git | `{ws.git_describe(Path(src).parent)['sha']}` |")
+    if sha := ws.pragmata_pin()["sha"]:
+        rows.append(f"| pragmata git | `{sha}` |")
     return f"""# {bundle.name}
 
 kind: {kind}

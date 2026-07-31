@@ -71,14 +71,8 @@ load_dotenv() {
 load_dotenv "$WORKSPACE_ROOT/configs/settings.conf"
 load_dotenv "$WORKSPACE_ROOT/.env"
 
-# Pin the pragmata source: if PRAGMATA_SRC is set (in .env), shadow the installed package
-# on PYTHONPATH so the stages' subprocesses resolve to it — both the `pragmata` CLI
-# ($PRAGMATA) and bare `import pragmata` ($PY). Unset → the installed package. Guarded
-# against a duplicate prepend, since a stage script may source this under an already
-# exported PYTHONPATH.
-if [[ -n "${PRAGMATA_SRC:-}" && ":${PYTHONPATH:-}:" != *":$PRAGMATA_SRC:"* ]]; then
-  export PYTHONPATH="$PRAGMATA_SRC${PYTHONPATH:+:$PYTHONPATH}"
-fi
+# pragmata is pinned in pyproject.toml and installed into .venv; eval shadows its own
+# pin per-call (see workspace.py:eval_pragmata()).
 
 # --- guard: fail fast if any required env var is unset/empty ---
 require_env() {

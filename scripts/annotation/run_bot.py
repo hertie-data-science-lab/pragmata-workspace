@@ -44,7 +44,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -286,7 +286,7 @@ def _log_error(
     *why* a 5xx happened (vector store error, model fault, rate limit).
     """
     record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "query_id": query_id,
         "spec_stem": spec_stem,
         "error_type": error_type,
@@ -332,7 +332,7 @@ def _log_no_retrieval(
     of retrieval-gap behaviour.
     """
     record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "query_id": query_id,
         "spec_stem": spec_stem,
         "query": query,

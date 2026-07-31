@@ -1,0 +1,175 @@
+[project]
+name = "pragmata-workspace"
+version = "0.0.0"
+description = "Operational glue for the BSt annotation and eval pipelines."
+requires-python = ">=3.12,<3.13"
+
+# Direct dependencies only - everything else is transitive and pinned in uv.lock.
+#
+# pragmata is git-pinned to an exact SHA, not a branch: `pin/annotation-2026-07-01`
+# exists only to keep that commit reachable. This is the ANNOTATION pin - the code
+# that imported and annotated the live Argilla instance. It is deliberately frozen;
+# moving it would change export behaviour on a live dataset.
+#
+# The EVAL side runs a different pragmata commit and cannot be expressed here: two
+# versions of one package cannot coexist in one venv. It stays an environment pin
+# (PRAGMATA_EVAL_SRC in .env) shadowed onto PYTHONPATH at call time - see
+# scripts/lib/workspace.py:eval_pragmata() and docs/eval.md. Do not "simplify" it away.
+#
+# Extras: annotation -> argilla; querygen -> sentence-transformers; openai ->
+# langchain-openai (Azure OpenAI is reached through the OpenAI-compatible surface).
+dependencies = [
+    "pragmata[annotation,querygen,openai] @ git+ssh://git@github.com/bertelsmannstift/pragmata.git@94e821965eaa7f3cc7a4951d35e1603604dd48f0",
+    # Imported directly by scripts/ rather than reached through pragmata.
+    "pandera[pandas]>=0.31,<1.0",  # eval scoring; the one extra the eval module needs
+    "pandas>=3.0,<4.0",
+    "matplotlib>=3.10,<4.0",       # annotation-report-plots
+    "httpx>=0.28,<1.0",
+    "pyyaml>=6.0,<7.0",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.16,<1.0"]  # the commit/push hooks run this
+
+# The workspace is a set of scripts, not an importable library: there is nothing to
+# build or install, so uv manages the environment without packaging the project.
+
+# --- environment freeze -------------------------------------------------------
+# Exact versions of the environment that produced the shipped report deliverables
+# (reports/eval/2026-07-30/, pinned by hash in reproducibility/2026-07-30-eval-report/).
+#
+# Why constraints and not a bare `uv lock`: a fresh resolution moves numpy, scipy and
+# pandas, and the alpha bootstrap (1000 resamples, seed 0) runs on top of them. The
+# bundle's promise is that a re-run re-derives the same numbers, so the environment is
+# part of the pin, not an implementation detail.
+#
+# GENERATED from `uv pip freeze` on 2026-07-31; edit by regenerating, not by hand.
+# To take an upgrade deliberately: change the entries you want, `uv lock`, re-run the
+# eval targets into a scratch OUT=, and diff the CSVs before accepting.
+[tool.uv]
+package = false
+constraint-dependencies = [
+    "aiohappyeyeballs==2.6.2",
+    "aiohttp==3.13.5",
+    "aiosignal==1.4.0",
+    "annotated-doc==0.0.4",
+    "annotated-types==0.7.0",
+    "anyio==4.13.0",
+    "argilla==2.8.0",
+    "attrs==26.1.0",
+    "certifi==2026.5.20",
+    "charset-normalizer==3.4.7",
+    "click==8.4.1",
+    "contourpy==1.3.3",
+    "cuda-bindings==13.2.0",
+    "cuda-pathfinder==1.5.4",
+    "cuda-toolkit==13.0.2",
+    "cycler==0.12.1",
+    "datasets==4.8.5",
+    "deprecated==1.3.1",
+    "dill==0.4.1",
+    "distro==1.9.0",
+    "filelock==3.29.0",
+    "fonttools==4.63.0",
+    "frozenlist==1.8.0",
+    "fsspec==2026.2.0",
+    "h11==0.16.0",
+    "hf-xet==1.5.0",
+    "httpcore==1.0.9",
+    "httpx-sse==0.4.3",
+    "httpx==0.28.1",
+    "huggingface-hub==1.16.1",
+    "idna==3.16",
+    "jinja2==3.1.6",
+    "jiter==0.15.0",
+    "joblib==1.5.3",
+    "jsonpatch==1.33",
+    "jsonpointer==3.1.1",
+    "kiwisolver==1.5.0",
+    "langchain-core==1.4.0",
+    "langchain-mistralai==1.1.4",
+    "langchain-openai==1.2.2",
+    "langchain-protocol==0.0.15",
+    "langchain==1.3.1",
+    "langgraph-checkpoint==4.1.1",
+    "langgraph-prebuilt==1.1.0",
+    "langgraph-sdk==0.3.15",
+    "langgraph==1.2.1",
+    "langsmith==0.8.5",
+    "markdown-it-py==4.2.0",
+    "markupsafe==3.0.3",
+    "matplotlib==3.11.0",
+    "mdurl==0.1.2",
+    "mpmath==1.3.0",
+    "multidict==6.7.1",
+    "multiprocess==0.70.19",
+    "mypy-extensions==1.1.0",
+    "networkx==3.6.1",
+    "numpy==2.4.6",
+    "nvidia-cublas==13.1.1.3",
+    "nvidia-cuda-cupti==13.0.85",
+    "nvidia-cuda-nvrtc==13.0.88",
+    "nvidia-cuda-runtime==13.0.96",
+    "nvidia-cudnn-cu13==9.20.0.48",
+    "nvidia-cufft==12.0.0.61",
+    "nvidia-cufile==1.15.1.6",
+    "nvidia-curand==10.4.0.35",
+    "nvidia-cusolver==12.0.4.66",
+    "nvidia-cusparse==12.6.3.3",
+    "nvidia-cusparselt-cu13==0.8.1",
+    "nvidia-nccl-cu13==2.29.7",
+    "nvidia-nvjitlink==13.0.88",
+    "nvidia-nvshmem-cu13==3.4.5",
+    "nvidia-nvtx==13.0.85",
+    "openai==2.38.0",
+    "orjson==3.11.9",
+    "ormsgpack==1.12.2",
+    "packaging==26.2",
+    "pandas==3.0.3",
+    "pandera==0.32.1",
+    "pillow==12.2.0",
+    "propcache==0.5.2",
+    "pyarrow==24.0.0",
+    "pydantic-core==2.46.4",
+    "pydantic==2.13.4",
+    "pygments==2.20.0",
+    "pyparsing==3.3.2",
+    "python-dateutil==2.9.0.post0",
+    "pyyaml==6.0.3",
+    "regex==2026.5.9",
+    "requests-toolbelt==1.0.0",
+    "requests==2.34.2",
+    "rich==15.0.0",
+    "ruff==0.16.0",
+    "safetensors==0.7.0",
+    "scikit-learn==1.8.0",
+    "scipy==1.17.1",
+    "sentence-transformers==5.5.1",
+    "setuptools==81.0.0",
+    "shellingham==1.5.4",
+    "six==1.17.0",
+    "sniffio==1.3.1",
+    "standardwebhooks==1.0.1",
+    "sympy==1.14.0",
+    "tenacity==9.1.4",
+    "threadpoolctl==3.6.0",
+    "tiktoken==0.13.0",
+    "tokenizers==0.22.2",
+    "torch==2.12.0",
+    "tqdm==4.67.3",
+    "transformers==5.9.0",
+    "triton==3.7.0",
+    "typeguard==4.6.0",
+    "typer==0.25.1",
+    "types-deprecated==1.3.1.20260520",
+    "types-python-dateutil==2.9.0.20260518",
+    "typing-extensions==4.15.0",
+    "typing-inspect==0.9.0",
+    "typing-inspection==0.4.2",
+    "urllib3==2.7.0",
+    "uuid-utils==0.16.0",
+    "wrapt==2.2.1",
+    "xxhash==3.7.0",
+    "yarl==1.24.2",
+    "zstandard==0.25.0",
+]

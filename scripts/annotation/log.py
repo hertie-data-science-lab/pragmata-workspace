@@ -69,7 +69,7 @@ import statistics
 import sys
 import tempfile
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -78,7 +78,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import workspace as ws
 
-ws.load_env()  # configs/settings.conf + .env, and the PRAGMATA_SRC pin on sys.path
+ws.load_env()  # configs/settings.conf + .env (pragmata itself is the pinned install)
 
 # The data was imported by the pinned pragmata (partition_scope topology), so it must be
 # read back through the same tree. ws.load_env() applies the pin; unset → installed.
@@ -1097,7 +1097,7 @@ def run(domains: list[str], *, use_export: bool = False) -> dict:
     timing_by_task = {t: cadence_report(evs) for t, evs in events_by_task.items()}
 
     return {
-        "run_at": datetime.now(timezone.utc).isoformat(),
+        "run_at": datetime.now(UTC).isoformat(),
         "schema_version": ws.SNAPSHOT_SCHEMA_VERSION,
         "session_gap_threshold_s": int(SESSION_GAP_S),
         # The bootstrap parameters behind every alpha CI in this snapshot, so a report
@@ -1201,7 +1201,7 @@ def append_jsonl(result: dict) -> None:
 
 def self_check() -> int:
     """Assert the session guard splits sessions and excludes pause gaps."""
-    base = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
     recs = [
         ("a", base),
         ("b", base + timedelta(minutes=5)),

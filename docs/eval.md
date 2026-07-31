@@ -42,9 +42,16 @@ what the original run read:
    `run_at` timestamp (not "the latest") and pinned by the sha256 of that single line; the
    log is append-only, so a whole-file hash would change nightly and pin nothing.
 3. **The eval pragmata pin** - `PRAGMATA_EVAL_SRC` in `.env`, a checkout separate from the
-   annotation pipeline's frozen demo pin (`PRAGMATA_SRC`), so the live instance's export
-   behaviour stays fixed while eval tracks upstream. One venv runs both: the workspace venv
-   carries `pandera`, and the pin shadows the installed pragmata via `PYTHONPATH`.
+   annotation pipeline's frozen demo pin, so the live instance's export behaviour stays
+   fixed while eval tracks upstream. The annotation pin is a git dependency installed by
+   `uv sync`; the eval pin cannot be, because two commits of one package cannot coexist in
+   one venv - so it stays a path in `.env` and shadows the installed package on
+   `PYTHONPATH` at call time. One venv runs both: `pandera`, the only thing eval needs
+   beyond the annotation side, is a workspace dependency in `pyproject.toml`.
+
+   The **environment** is pinned too: `uv.lock` freezes all 126 packages at the versions
+   that produced these numbers, `numpy`/`scipy` included, since the alpha bootstrap runs
+   on them. See the `constraint-dependencies` comment in `pyproject.toml`.
 
 The first two are constants in `scripts/eval/eval_common.py` (`FREEZE_DATE`,
 `CANONICAL_SNAPSHOT_RUN_AT`) - one place, so a refresh moves them once. The current freeze

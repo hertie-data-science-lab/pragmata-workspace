@@ -17,16 +17,21 @@ flowchart LR
 
 Clone, then:
 
-1. `cp .env.example .env` and fill in the keys (Argilla, LLM, publikationsbot,
-   `PRAGMATA_SRC`). See [Configuration](docs/configuration.md).
-2. `cp configs/annotation/users.json.example configs/annotation/users.json` and
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `uv sync` -
+   creates `.venv/` from `pyproject.toml` + `uv.lock`, exactly, on the Python fixed by
+   `.python-version` (uv fetches it; no system Python needed). This installs pragmata
+   itself: it is a git dependency pinned to the commit that built the live Argilla
+   instance, so there is no checkout to point at and no version to choose.
+   **Requires a GitHub SSH key with read access to `bertelsmannstift/pragmata`** - the pin
+   is a `git+ssh://` dependency, so on a machine with no key configured `uv sync` fails
+   outright rather than degrading. Check with `ssh -T git@github.com` first.
+2. `cp .env.example .env` and fill in the keys (Argilla, LLM, publikationsbot, and
+   `PRAGMATA_EVAL_SRC` - the eval stage runs a *different* pragmata commit, which cannot
+   be installed alongside the pinned one). See [Configuration](docs/configuration.md).
+3. `cp configs/annotation/users.json.example configs/annotation/users.json` and
    `cp configs/annotation/users.secrets.json.example configs/annotation/users.secrets.json`,
    then fill in the real roster + passwords. Both stay gitignored. See
    [Annotator roster](docs/configuration.md#annotator-roster).
-3. Point `PRAGMATA_SRC` at a `pragmata` checkout (provides the `pragmata` CLI) and create the
-   `.venv/` it expects. Install `pragmata[annotation]` plus `pandera[pandas]` into it: the
-   one venv runs both the annotation pipeline and the eval stage, which is pinned
-   separately via `PRAGMATA_EVAL_SRC` and shadowed onto `PYTHONPATH`.
 4. `make help` lists the targets; preview a run with `make plan`.
 
 Data, logs, reports and Argilla backups are **not** committed - see

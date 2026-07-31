@@ -1,7 +1,8 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["psycopg2-binary"]
+# # Own uv-managed env, separate from .venv/uv.lock.
+# dependencies = ["psycopg2-binary==2.9.12"]
 # ///
 """Inventory the publikationsbot vector store (Postgres + pgvector).
 

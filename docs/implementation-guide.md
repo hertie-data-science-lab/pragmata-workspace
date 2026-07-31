@@ -63,7 +63,7 @@ guide; update this inventory when a resource or endpoint changes.
 
 | Component | Details |
 | --- | --- |
-| **CPU annotation VM** | OS: Ubuntu 22.04 LTS • Working directory: `~/pragmata-workspace` (with the `pragmata` checkouts as siblings) • Python: 3.12 in `pragmata-workspace/.venv` • **TODO (BSt)**: Azure tenant, subscription, resource group, VM name, access method |
+| **CPU annotation VM** | OS: Ubuntu 22.04 LTS • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `uv sync` • **TODO (BSt)**: Azure tenant, subscription, resource group, VM name, access method |
 | **Azure OpenAI** | Key + base URL in `.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`); base-URL format `https://<resource>.openai.azure.com/openai/v1/` • **TODO (BSt)**: tenant, subscription, resource group, resource name, model deployment name, key-secret location |
 | **Publikationsbot** | Service URL in `.env` (`PUBLIKATIONSBOT_URL`); auth = Azure access token via `az` CLI • **TODO (BSt)**: hosting resource, access process, approved number of parallel requests |
 | **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • **TODO (BSt)**: tenant, subscription, resource group, host, persistent-storage location, backup location |
@@ -74,50 +74,73 @@ guide; update this inventory when a resource or endpoint changes.
 
 ### 3.1 Record the code versions
 
-The CPU VM needs `pragmata-workspace` plus **two checkouts of `pragmata` at different
-commits** - the annotation pipeline and the eval stage are pinned independently, so they
-cannot share one working tree. Directory names are yours to choose; `.env` is what binds
-them, so pick names that say which pin they hold:
+The pipeline runs **two different commits of `pragmata`**, and they are obtained in two
+different ways.
+
+**The annotation pin needs nothing from you.** It is a git dependency pinned to an exact
+SHA in `pragmata-workspace/pyproject.toml`, installed by `uv sync` in §3.2. That commit is
+the one that built and imported the live Argilla instance, so annotation and export
+behaviour stays frozen. To see it:
+
+    grep 'pragmata.*git+' pyproject.toml
+
+**The eval pin is a checkout you provide**, because two commits of one package cannot be
+installed into the same environment. Clone `pragmata` a second time, check out the eval
+pin, and point `.env` at its `src/`:
+
+    git clone https://github.com/hertie-data-science-lab/pragmata-workspace.git
+    git clone https://github.com/bertelsmannstift/pragmata.git pragmata-eval
+    git -C pragmata-eval checkout pin/eval-report-2026-07
+
+    # in pragmata-workspace/.env
+    PRAGMATA_EVAL_SRC=<working-directory>/pragmata-eval/src
+
+giving:
 
     <working-directory>/
-    ├── pragmata-annotation/   # a pragmata checkout - PRAGMATA_SRC pin (annotation pipeline)
     ├── pragmata-eval/         # a pragmata checkout - PRAGMATA_EVAL_SRC pin (eval stage)
-    └── pragmata-workspace/
+    └── pragmata-workspace/    # annotation pin comes from pyproject.toml, not a checkout
 
-Clone them:
-
-    git clone https://github.com/bertelsmannstift/pragmata.git pragmata-annotation
-    git clone https://github.com/bertelsmannstift/pragmata.git pragmata-eval
-    git clone https://github.com/hertie-data-science-lab/pragmata-workspace.git
-
-Check out the agreed version in each, then point `.env` at the `src/` directory of each
-(`PRAGMATA_SRC=<working-directory>/pragmata-annotation/src`, likewise `PRAGMATA_EVAL_SRC`).
 Record the exact commits - not branch names:
 
-    git -C pragmata-annotation rev-parse HEAD
     git -C pragmata-eval rev-parse HEAD
     git -C pragmata-workspace rev-parse HEAD
 
-The pins actually used for the shipped deliverables are recorded in the reproducibility
-bundles (see [`reproducibility/`](../reproducibility/README.md)): the annotation pipeline
-runs the frozen `demo-2026-05-26` checkout, and the eval stage runs its own pin named in
+The pins behind the shipped deliverables are recorded in the reproducibility bundles (see
+[`reproducibility/`](../reproducibility/README.md)); the eval one is named in
 [`reproducibility/2026-07-30-eval-report/`](../reproducibility/2026-07-30-eval-report/).
-The two pins are deliberate and separate - see [Eval pipeline](eval.md#the-three-pins).
+The split is deliberate - see [Eval pipeline](eval.md#the-three-pins).
 
 ### 3.2 Create the Python environment
 
-The workspace expects `pragmata-workspace/.venv/bin/python` and
-`.venv/bin/pragmata`. There is no lockfile; the tested installation is:
+One command, from `pragmata-workspace`:
 
-    cd pragmata-workspace
-    python3.12 -m venv .venv
-    .venv/bin/pip install "../pragmata-annotation[annotation]" "pandera[pandas]>=0.31,<1.0"
+    uv sync
 
-`pandera` is the one extra the eval scoring stage needs beyond the annotation install; the
-same single venv runs both stages ([why](eval.md#the-three-pins)). Only one checkout is
-installed - the pins take effect by shadowing it on `PYTHONPATH`, so which of the two you
-install from does not matter, and installing both would just overwrite one with the other.
-The scripts also expect `/bin/bash`, `make`, `jq` and the Azure CLI on the PATH.
+This creates `.venv/` from the committed `pyproject.toml` and `uv.lock`, installing all
+126 packages at exactly the versions the shipped report numbers were produced with -
+including `pragmata` itself, from git at its pinned SHA. Python is uv-managed: the version
+is fixed by `.python-version` (3.12.13) and does not have to be installed beforehand.
+
+Two prerequisites, both worth checking before the first run:
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) on the PATH.
+- **A GitHub SSH key with read access to `bertelsmannstift/pragmata`.** The annotation pin
+  is a `git+ssh://` dependency, so a machine without a configured key cannot `uv sync` at
+  all - it fails rather than falling back. Verify with `ssh -T git@github.com`, which
+  should greet you by username. **TODO (BSt):** which key/account the operator uses, and
+  how it is provisioned on a new VM.
+
+Do not `pip install` into this environment. The lock is what makes a re-run reproducible -
+`numpy` and `scipy` sit under the inter-annotator-agreement bootstrap, so an unplanned
+upgrade can move published numbers. To change a dependency deliberately: edit
+`pyproject.toml`, run `uv lock`, regenerate the deliverables into a scratch `OUT=`, and
+diff them against the shipped CSVs before accepting the change.
+
+The single venv runs both stages ([why](eval.md#the-three-pins)); `pandera` is in it for
+the eval side. Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure
+CLI on the PATH. Two eval scripts (`corpus_catalog.py`, `vectorstore_inventory.py`) run in
+their own uv-managed environments, declared inline in the files rather than in `.venv`.
 
 ### 3.3 Create the local configuration
 
@@ -389,6 +412,7 @@ The rerun is complete when:
 12. the full run is archived and its bundle pinned.
 
 The remaining documentation gaps, all marked **TODO** above: CPU and GPU VM provisioning,
-the Azure resource names, shared Argilla deployment and operation, the clean-run procedure,
-the candidate-dataset and annotation acceptance rules, the GPU-side evaluation process, and
-the permanent archive location.
+the Azure resource names, the GitHub SSH key the repositories are cloned with, shared
+Argilla deployment and operation, the clean-run procedure, the candidate-dataset and
+annotation acceptance rules, the GPU-side evaluation process, and the permanent archive
+location.
