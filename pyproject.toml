@@ -34,6 +34,17 @@ dev = ["ruff>=0.16,<1.0"]  # the commit/push hooks run this
 # The workspace is a set of scripts, not an importable library: there is nothing to
 # build or install, so uv manages the environment without packaging the project.
 
+[tool.ruff.lint.per-file-ignores]
+# E402: every script in scripts/ inserts scripts/lib on sys.path before importing the
+# workspace lib, and the annotation scripts call ws.load_env() before importing pragmata
+# so .env is loaded first. Both are imports after code, by design.
+#
+# BLE001: these are glue scripts around a live service. Catching bare Exception around a
+# per-item network call, logging it and carrying on is the deliberate resilience pattern -
+# one failed domain must not abort a nightly run - so it is codified here rather than
+# marked on a dozen individual handlers.
+"scripts/**" = ["E402", "BLE001"]
+
 # --- environment freeze -------------------------------------------------------
 # Exact versions of the environment that produced the shipped report deliverables
 # (reports/eval/2026-07-30/, pinned by hash in reproducibility/2026-07-30-eval-report/).
