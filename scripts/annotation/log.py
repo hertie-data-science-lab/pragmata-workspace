@@ -1,61 +1,40 @@
 #!/usr/bin/env python3
-"""
-Daily annotation logger for the BSt pragmata-workspace.
+"""Daily annotation logger: one snapshot of live state, appended to logs/annotation/log.jsonl.
 
-This is the *logging* half of the pipeline: it computes one snapshot of the live
-annotation state and appends it to logs/annotation/log.jsonl. Turning snapshots
-into human-readable markdown + plots is the *reporting* half (manual; see
-report_tables.py and plot_summary.py).
+The *logging* half of the pipeline; `report_tables.py` and `plot_summary.py` are the
+reporting half. See `docs/annotation.md` (Logging & reporting).
 
-Reads the live Argilla annotation state (across all domains/workspaces/tasks)
-and emits three progress metrics, rolled up task -> domain -> total:
+Reads the live Argilla state across all domains/workspaces/tasks and emits three metrics,
+rolled up task -> domain -> total:
 
-  1. Counts — three distinct quantities, split production vs calibration:
-       • submitted_responses (work done; a record done by 3 people = 3),
-       • completed_records   (records that met their min_submitted threshold),
-       • total_records       (imported; the denominator).
-     Record counts come from Argilla ``dataset.progress()``; response counts
-     from the REST records endpoint.
-  2. Calibration agreement — Krippendorff's alpha over the calibration overlap, from
-     pragmata's IAA. The headline is **pooled**: item-level data from every domain goes
-     into one reliability matrix per (task, label), then those are averaged unweighted
-     across labels per task. alpha = 1 - Do/De is a ratio, so per-domain alphas are never
-     averaged; they are kept as a diagnostic only. Each pooled alpha is published with the
-     marginals that produced it (n, minority count, prevalence, De) because a label that
-     barely varies has De ~ 0, which makes alpha unstable — and at zero variance undefined,
-     where pragmata returns 1.0 by convention.
-  3. Annotation cadence — median time between consecutive submissions, both
-     per-annotator (true individual pace) and global (team throughput), each
-     session-guarded (see below).
+  1. Counts, split production vs calibration — submitted_responses (a record done by 3
+     people counts 3), completed_records (met their min_submitted threshold) and
+     total_records (the denominator). Record counts from `dataset.progress()`, response
+     counts from the REST records endpoint.
+  2. Calibration agreement — Krippendorff's alpha from pragmata's IAA, **pooled**: one
+     reliability matrix per (task, label) over every domain's items, then averaged
+     unweighted across labels per task. alpha = 1 - Do/De is a ratio, so per-domain alphas
+     are never averaged and are kept as a diagnostic only. Each pooled alpha is published
+     with the marginals that produced it (n, minority count, prevalence, De): at De ~ 0
+     alpha is unstable, and at zero variance undefined, where pragmata returns 1.0.
+  3. Cadence — median time between consecutive submissions, both per-annotator (individual
+     pace) and global (team throughput), each session-guarded: a gap longer than
+     LOG_SESSION_GAP_MIN (default 30 min) is a break, excluded from the median and reported
+     under `excluded_gaps` so the exclusion is auditable.
 
-Each run appends one JSON object to logs/annotation/log.jsonl (for trend-watching) and
-prints a one-line status to stdout. The human-readable stats tables are NOT
-printed here — they are rendered to reports/annotation/<date>/report.md by report_tables.py
-(pass --summary for an ad-hoc table). Diagnostics go to stderr. A domain that
-fails is recorded and skipped; the run continues.
+Per-response timestamps come from the Argilla v2 REST records endpoint
+(`response.inserted_at` + `user_id`). The SDK and the export CSVs drop them, and record
+`updated_at` is bumped by bulk/import ops, so REST is the only true source.
 
-Timestamps: per-response submission times come from the Argilla v2 REST records
-endpoint (``response.inserted_at`` + ``user_id``). The SDK and the export CSVs
-drop them, and record ``updated_at`` is unreliable (bulk/import ops bump it), so
-REST is the only true source — which is why cadence reads it directly.
-
-Session guard: an annotator's submissions are sorted by time and the gaps between
-them taken. Any gap longer than LOG_SESSION_GAP_MIN (default 30 min) is a
-*session break* (a pause, e.g. overnight) — excluded from the median and reported
-under ``excluded_gaps`` (global view) so the exclusion is auditable. The headline
-``median_active_gap_s`` is the median of the within-session gaps only.
-
-Reuses pragmata where it fits: ``export_annotations`` + ``compute_iaa`` for
-agreement, ``dataset.progress()`` for record counts, ``build_user_lookup`` /
-``dataset_name`` helpers; a thin REST call supplies per-response timestamps.
+Appends one JSON object per run and prints a one-line status; diagnostics to stderr. A
+domain that fails is recorded and skipped, and the run continues.
 
 Usage:
-  scripts/annotation/log.py                 # run all domains, append jsonl + one-line status
+  scripts/annotation/log.py                 # all domains, append jsonl + one-line status
   scripts/annotation/log.py --domain X      # one domain only (smoke test)
-  scripts/annotation/log.py --summary       # also print the human-readable table to stdout
+  scripts/annotation/log.py --summary       # also print the human-readable table
   scripts/annotation/log.py --no-jsonl      # don't append history
-  scripts/annotation/log.py --use-export    # reuse scripts/annotation/export.sh's durable per-domain
-                                            #   export for IAA instead of a throwaway one
+  scripts/annotation/log.py --use-export    # reuse export.sh's durable export for IAA
   scripts/annotation/log.py --self-check    # run the cadence unit self-check and exit
 """
 

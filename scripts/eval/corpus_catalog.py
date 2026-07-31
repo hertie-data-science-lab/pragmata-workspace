@@ -6,77 +6,18 @@
 # ///
 """One row per document in the publikationsbot corpus — the fairness audit's base.
 
-Joins to `retrieval_manifest.csv` on `doc_id` to ask whether retrieval
-over-represents any part of the corpus (by year, publisher, extent, or author gender).
+Columns, the author-gender collapse rule and every caveat are defined in
+`docs/eval-data-dictionary.md` (`corpus_catalog.csv`).
 
-Extends the query pattern in `vectorstore_inventory.py` from aggregate counts to
-per-document rows, importing its DSN handling so the credential-hiding error paths live
-in one place. The connection string is never stored here: it is pulled at runtime from
-the dev container app's secret via `az`, and the connection is read-only.
+Reads the live vector store read-only, rolling 13 of its 22 per-chunk metadata keys up to
+document grain; joins to `retrieval_manifest.csv` on `doc_id`. DSN handling is imported
+from `vectorstore_inventory.py` so the credential-hiding error paths live in one place.
+The connection string is never stored here: it is pulled at runtime from the dev
+container app's secret via `az`.
 
-## Author gender: what the columns mean, and what they cannot mean
-
-There is no gender field in the corpus. The only signal is a first name run through
-`gender-guesser` 0.4.0, a dictionary lookup. Each column comes in a pair: `_raw` is what
-`gender-guesser` returned, `_collapsed` is what WE decided that means.
-
-One pair per AUTHOR SLOT, aligned to the metadata's verf1..verf3 (pers1 standing in for
-verf1 when no verf* field exists):
-
-  `author1_gender_raw` / `author1_gender_collapsed`
-  `author2_gender_raw` / `author2_gender_collapsed`
-  `author3_gender_raw` / `author3_gender_collapsed`
-  `author_gender_collapsed`   majority across the document's authors; ties -> "mixed"
-
-Per slot rather than one ";"-joined list, because a list has to be compacted: skip an
-unparseable name and every later author shifts left, so "what did author 2 get?" stops
-being answerable. Blank in a slot pair means no author is recorded there - distinct from
-`unknown`, which means an author IS recorded and the dictionary could not classify them.
-
-The collapse rule, applied identically in every `_collapsed` column:
-
-  female, mostly_female  -> female
-  male, mostly_male      -> male
-  andy, unknown          -> unknown: an author, unclassified, excluded from any majority
-  name recorded, unparseable  -> institutional
-  no name in this slot        -> blank
-
-The pair exists because the rule is a decision, not a fact: `_raw` keeps `andy`
-(ambiguous) distinct from `unknown` (absent from the dictionary) so coverage stays
-visible, while `_collapsed` is the one authored verdict every consumer should use rather
-than re-deriving their own and disagreeing with the report.
-
-Nothing here restates anything else. Three columns were dropped as pure restatements of
-the per-slot verdicts, recomputable in one line each if wanted:
-
-  n_authors_resolved  = count of slots whose _raw is in {female, mostly_female, male,
-                        mostly_male}
-  female_present      = any slot whose _raw is in {female, mostly_female}
-  author_genders_raw  = ";".join of the non-blank _raw slots
-
-`n_authors` is NOT one of those: it counts the names RECORDED, including any that fail the
-"Last, First" parse and so leave their slot's `_raw` blank.
-
-Three limits that belong in any published figure:
-
-  1. The metadata records at most three authors (`verf1..verf3`), so "majority" is over
-     RECORDED authors, not all authors.
-  2. A dictionary of first names is weaker on non-Western names, and it is not a
-     measure of how anyone identifies.
-  3. Institutional authors have no personal name at all and are flagged
-     `is_institutional`, not counted as unknown people.
-
-## What is taken from the store, and what is not
-
-The store keeps 22 metadata keys per chunk; this catalog rolls up 13 of them to document
-grain. `title`/`subtitle`/`doi`/`catalog_url` (`hst`, `hst_zu`, `doi`,
-`url_bibliothekskatalog`) exist so an audited row can be identified and looked up - the
-catalogue URL is a BSt-internal permalink. Deliberately not taken: `url_doi` (it is
-`https://doi.org/` + `doi`), `mediengrp` (the constant `"G"` on all 544,692 chunks),
-`mediennr` (a second document id), `filename`/`filepath_internal`/`source` (internal
-paths), and the per-chunk `headline` - a heading has no document-grain meaning, and the
-retrieval manifest cannot join to it (its `chunk_id` is the pipeline's own
-`<doc_id>-c1`, not a key this store holds).
+Gender is a `gender-guesser` 0.4.0 dictionary lookup on first names, emitted per author
+slot (`verf1..verf3`) as a `_raw`/`_collapsed` pair — never as a joined list, because
+compacting one skips a hole and shifts every later author left.
 
 Run (needs an active `az login` in the BSt tenant):
     ./corpus_catalog.py                     # write the catalog CSV

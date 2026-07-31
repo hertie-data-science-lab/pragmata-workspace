@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 """Reproducibility bundle tool — pin, verify, reproduce.
 
-One convention: `reproducibility/<YYYY-MM-DD>-<name>/` holds a `README.md` (what/why/
-how-to-verify, with a `kind:` header line) and a generated `pins.sha256` listing
-repo-root-relative paths in `sha256sum` format. See `reproducibility/README.md` for the
-contract; this script is its whole tooling.
+The whole tooling for the convention in `reproducibility/README.md` and
+`docs/reproducibility.md`: `reproducibility/<YYYY-MM-DD>-<name>/` holds a `README.md`
+(what/why/how-to-verify, with a `kind:` header line) plus a generated `pins.sha256` listing
+repo-root-relative paths in `sha256sum` format.
 
   bundle.py pin NAME PATH...     create today's bundle and pin the given files/trees
   bundle.py verify [BUNDLE]      check pins per file: OK / MISMATCH / ABSENT
   bundle.py reproduce BUNDLE     replay the lineage onto its composed end state
 
 `reproduce` always composes the whole lineage chain in date order — a lineage bundle is
-only meaningful in sequence, so replaying a prefix of the chain would land on a state
-that was never live. BUNDLE names the bundle you are replaying toward, and is what the
-`kind:` check is applied to; it does not select how much of the chain is composed.
+only meaningful in sequence, so replaying a prefix would land on a state that was never
+live. BUNDLE names the bundle you are replaying toward, and is what the `kind:` check is
+applied to; it does not select how much of the chain is composed.
 
-Exit codes for `verify`: 0 all OK, 2 any mismatch, 3 absent only. A mismatch outranks an
-absence: missing bytes can be fetched, changed bytes mean the pin no longer holds.
+`verify` exit codes: 0 all OK, 2 any mismatch, 3 absent only. A mismatch outranks an
+absence — missing bytes can be fetched, changed bytes mean the pin no longer holds.
 """
 
 from __future__ import annotations

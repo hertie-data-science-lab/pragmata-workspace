@@ -1,40 +1,22 @@
 #!/usr/bin/env python3
 """Corpus metrics from the human-labelled annotations.
 
-The human-label half of the eval stage. Its twin, `score_synthetic_predictions.py`, is
-reserved for the evaluator-model run and does not exist yet.
+Columns and caveats are defined in `docs/eval-data-dictionary.md`
+(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, is reserved for
+the evaluator-model run and does not exist yet.
 
-Pools the frozen canonical export across programmes, runs `pragmata eval score` once
-per task, and collects every per-metric estimate into one tidy CSV — task x metric,
-16 rows. The metric taxonomy has no per-programme grain, and pooling is also what makes
-retrieval usable: panel completeness is very uneven, so several programmes contribute
-too few complete panels to report on their own. The composition of the pooled n is in
-`annotation_operations.csv`.
+Pools the frozen canonical export across programmes, runs `pragmata eval score` once per
+task, and collects every per-metric estimate into one tidy CSV. Pooling is also what makes
+retrieval usable: panel completeness is uneven enough that several programmes contribute
+too few complete panels to report on their own.
 
-**Why it filters first and passes --path.** `eval score` accepts `--export-id`, which
-would read the export directly — but it applies no completeness policy of its own
-(core/eval/grouping.py groups by record_uuid and averages whatever chunks are
-present), so incomplete retrieval panels would silently produce @K metrics over
-partial chunk sets. The filter is therefore applied here, explicitly and in version
-control, and the pooled filtered CSV is handed over by path. Two filters:
-
-  1. submitted responses only — a discarded response is an abstention with no labels
-  2. retrieval: incomplete panels are skipped by `eval score --skip-incomplete-panels`
-     (pragmata #305), which records the drop count on the report as n_panels_skipped;
-     --all-panels maps to --allow-incomplete-panels instead
-
-Calibration items stay in: pragmata's majority consolidation
-coalesces their multi-annotator rows into one value per item, exactly as it does when
-training. --exclude-calibration drops wholly-calibration queries for comparison runs
-(query grain, because a retrieval record is one chunk and panels are routinely mixed —
-see ec.drop_calibration_queries).
-
-**Why alpha travels in the same CSV.** The confidence intervals cover sampling
-uncertainty over queries only — not annotator disagreement, by explicit design (see
-pragmata's docs/design/eval-scoring-metrics.md). Some labels have Krippendorff alpha
-at or below chance, and a tight Wilson interval on such labels reads as precision
-that is not there. Each row therefore carries the POOLED alpha of the label(s) it
-rests on — the matching population for pooled metrics — from the pinned log snapshot.
+**Why it filters here and passes --path.** `eval score --export-id` would read the export
+directly, but applies no completeness policy of its own, so incomplete retrieval panels
+would silently produce @K metrics over partial chunk sets. The filter is therefore applied
+here, explicitly and in version control: submitted responses only, and for retrieval
+`--skip-incomplete-panels` (pragmata #305), which records the drop as `n_panels_skipped`.
+Calibration items stay in — majority consolidation coalesces them exactly as when
+training; `--exclude-calibration` drops wholly-calibration queries at query grain.
 
 Usage:
   scripts/eval/score_human_annotations.py                        # the reportable policy

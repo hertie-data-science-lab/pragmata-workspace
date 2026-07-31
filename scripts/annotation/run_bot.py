@@ -1,41 +1,32 @@
 #!/usr/bin/env python3
-"""
-Pipe pragmata querygen output through publikationsbot prod's /stream endpoint
-and emit annotation-import-ready JSONL.
+"""Pipe pragmata querygen output through publikationsbot prod's /stream endpoint.
 
-For each ``data/querygen/runs/<stem>/synthetic_queries.csv``:
-  - Skip query_ids already present in ``data/publikationsbot/<stem>.jsonl``
-  - For each remaining query:
-      1. Acquire/refresh Azure AD bearer token (via ``az``)
-      2. POST /login -> sessionToken (with retry on 401)
-      3. POST /stream (SSE) -> retrieved chunks block + streamed answer
-      4. Parse SSE into a record, append to JSONL, flush
-  - Ctrl+C / fatal errors leave persisted state intact; re-run resumes.
+Emits annotation-import-ready JSONL. For each
+`data/querygen/runs/<stem>/synthetic_queries.csv`, skips query_ids already present in
+`data/publikationsbot/<stem>.jsonl`, then per remaining query: acquire/refresh the Azure AD
+bearer token via `az`, POST /login for a sessionToken (retrying on 401), POST /stream and
+parse the SSE into a record, appending and flushing as it goes. Ctrl+C or a fatal error
+leaves persisted state intact and a re-run resumes.
 
-Output record schema (one JSON object per line). The first 5 fields satisfy
-pragmata's ``QueryResponsePair`` schema; the rest are extras that preserve
-provenance and are stripped at annotation-import time - at BOTH levels, since
-each chunk also carries two extras beyond pragmata's ``Chunk`` schema:
+One JSON object per line. The first five fields satisfy pragmata's `QueryResponsePair`; the
+rest preserve provenance and are stripped at annotation-import time, at both levels — each
+chunk also carries `title` and `score` beyond pragmata's `Chunk`:
 
     query, answer, chunks[{chunk_id, doc_id, chunk_rank, text, + title, score}],
     context_set, language,
-    [extras] query_id, domain, role, topic, intent, task, difficulty, format,
-             spec_stem
+    [extras] query_id, domain, role, topic, intent, task, difficulty, format, spec_stem
 
-``context_set`` is rendered as markdown: each chunk is a **bold** header line
-carrying the doc title inline -- ``**[chunk N • doc <id> (<title>) • <cid>]**``
--- followed by its body, with chunks separated by a ``---`` rule. ``<title>`` is
-the bot's native main title (``metadata.title``); it is ``title unavailable``
-when the bot omits it. This markdown renders in both the Grounding TextField
-(``use_markdown=True``) and the Generation collapsible widget.
+`context_set` is rendered as markdown so it displays in both the Grounding TextField
+(`use_markdown=True`) and the Generation collapsible widget: per chunk a bold header
+carrying the doc title inline — `**[chunk N • doc <id> (<title>) • <cid>]**` — then its
+body, with chunks separated by a `---` rule. `<title>` is the bot's native
+`metadata.title`, or `title unavailable` where the bot omits it.
 
 Modes:
-  --probe              : one query from the first available spec, dump raw
-                         SSE lines to data/publikationsbot/probe_<stem>.raw.txt
-                         for inspection. Does NOT write to <stem>.jsonl.
-  --spec <stem>        : process only this spec (default: all under data/querygen/runs/)
-  --max-per-spec N     : cap queries per spec (smoke testing)
-  (no flags)           : process all specs found, all queries, with resume
+  --probe            one query from the first available spec, dumping raw SSE lines to
+                     data/publikationsbot/probe_<stem>.raw.txt; does NOT write <stem>.jsonl
+  --spec <stem>      only this spec (default: all under data/querygen/runs/)
+  --max-per-spec N   cap queries per spec (smoke testing)
 """
 
 import argparse

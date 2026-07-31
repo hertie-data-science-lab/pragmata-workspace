@@ -1,30 +1,14 @@
 #!/usr/bin/env python3
 """The two human-annotation tables: label agreement, and annotation operations.
 
-`annotation_label_summary` — one row per programme x task x label. Agreement comes
-from each programme's `iaa/report.json`; `n_items`/`n_true` are counted over annotated
-ITEMS after pragmata-style majority consolidation, so they are the same numbers eval
-scoring ingests (a record annotated by three people counts once, at its majority value).
-`n_items` is the client's column name for that count; the vocabulary is in
-`docs/eval-data-dictionary.md`.
+Columns and caveats are defined in `docs/eval-data-dictionary.md`
+(`annotation_label_summary.csv`, `annotation_operations.csv`).
 
-Two agreement footnotes travel as columns rather than prose. `n_items_calibration`
-records the population alpha is actually computed on — pragmata's IAA keeps only the
-calibration overlap ("IAA is only meaningful on overlapped records"), so alpha's n is
-typically 30, not n_items. And `degenerate_calibration` flags labels with no variance
-in that overlap: alpha = 1 - Do/De is undefined at De = 0 and pragmata returns 1.0 by
-convention, so those 1.0s are not evidence of reliability.
-
-`annotation_operations` — programme x task, flat. Counts, discards and cadence from the
-pinned `logs/annotation/log.jsonl` snapshot; panel totals from the frozen export's own
-`annotation_export.meta.json`. Production and calibration are POOLED throughout: the
-operational question is how much annotation happened, and both kinds cost the same effort.
-
-**Why the gap columns come from the log and not the export.** The export CSVs cannot
-supply them: `created_at` is the *record's* `updated_at`, not the response timestamp,
-so every annotator on one record shares an identical value. `log.py` reads per-response
-timestamps from the Argilla REST API instead, session-guarded — the same machinery as
-the daily report.
+Inputs. Agreement comes from each programme's `iaa/report.json`; item counts from the
+frozen export CSVs after pragmata-style majority consolidation, so they are the numbers
+eval scoring ingests; operational counts, discards and cadence from the pinned
+`logs/annotation/log.jsonl` snapshot; panel totals from the export's own
+`annotation_export.meta.json`. Production and calibration are pooled throughout.
 
 Usage:
   scripts/eval/annotation_tables.py

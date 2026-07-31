@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Render summary-stat plots from logs/annotation/log.jsonl to PNGs.
 
-The *reporting* half (manual): progress.png uses the full snapshot history (a time
-series); the rest use one snapshot (latest by default). PNGs land in
-reports/annotation/<snapshot-date>/ alongside report.md, and the
-reports/annotation/_latest symlink is repointed at that dir.
+The *reporting* half (manual): `progress.png` uses the full snapshot history as a time
+series, the rest use one snapshot (latest by default). PNGs land in
+`reports/annotation/<snapshot-date>/` alongside `report.md`, and the
+`reports/annotation/_latest` symlink is repointed at that dir.
 
 Usage:
-  scripts/annotation/plot_summary.py                 # latest snapshot -> reports/annotation/<date>/
+  scripts/annotation/plot_summary.py                 # latest snapshot -> <date>/
   scripts/annotation/plot_summary.py --line N        # 0-based index; negative from end
   scripts/annotation/plot_summary.py --out-dir DIR   # write PNGs here instead
 """

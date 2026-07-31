@@ -1,15 +1,14 @@
 """Shared helpers + path constants for pragmata-workspace Python glue scripts.
 
-Import from any script in scripts/annotation/ with a two-line preamble:
+Centralizes the workspace layout, the .env / config loader ("existing env wins", matching
+scripts/lib/common.sh), the domain list (derived from configs/annotation/ rather than
+hardcoded), JSONL read/write, and the `.provenance.json` record every report CSV ships
+with.
 
-    import sys
-    from pathlib import Path
+Import from any script under scripts/ with a two-line preamble:
+
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
     import workspace as ws
-
-Centralizes the workspace layout, the .env / config loader ("existing env
-wins", matching scripts/lib/common.sh), the domain list (derived from
-configs/annotation/ rather than hardcoded), and JSONL read/write.
 """
 
 from __future__ import annotations

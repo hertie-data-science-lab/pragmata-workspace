@@ -1,34 +1,14 @@
 #!/usr/bin/env python3
 """What the retriever returned for each query — the join key for the fairness audit.
 
-One row per (query, retrieved chunk), carrying the per-query metadata the querygen
-spec attached. Joins to `corpus_catalog.csv` on `doc_id` to ask whether retrieval
-over-represents any part of the corpus.
+Columns and caveats are defined in `docs/eval-data-dictionary.md`
+(`retrieval_manifest.csv`).
 
-Reads `*_combined.curated.jsonl` — the CURATED CORPUS, which is a superset of what was
-imported into Argilla and annotated. It is not post-removal: the curation recorded in
-reproducibility/ selected a subset for import, so most curated queries were never
-annotated. `panel_started` and `n_chunks_annotated` say which ones were, counted against
-the frozen export, so a rate over this file can pick its own denominator. They are the
-only two columns here derived from annotation state; every other column comes from the
-curated corpus.
-
-`programme` is the directory/file slug (e.g. `nachhaltige-soziale-marktwirtschaft`),
-consistent with every other CSV here. The record's own `domain` field is NOT emitted: it
-is the same seven values in display case, 1:1 with the slug, so it was a second name for
-one dimension.
-
-One chunk per document, always. The bot returns one passage per hit and the pipeline
-never splits it, so `chunk_id` is synthesised as `<doc_id>-c1` (run_bot.py) and is 1:1
-with `doc_id` by construction, not by data.
-
-`score` is the retriever's own relevance value, carried through from the bot response.
-It is blank for records produced by a run that did not capture it, and cannot be
-back-filled: the bot response is not retained anywhere.
-
-The querygen spec's own `task` field (a description of what the query asks for) is
-emitted as `query_task`: `task` in every other eval CSV means retrieval / grounding /
-generation, and the two collided.
+Reads `*_combined.curated.jsonl` — the curated corpus, a superset of what was imported
+into Argilla and annotated — and carries the querygen spec's per-query metadata through
+unchanged. `panel_started` and `n_chunks_annotated` are counted against the frozen export
+and are the only two columns here derived from annotation state, so a rate over this file
+can pick its own denominator.
 
 Usage:
   scripts/eval/retrieval_manifest.py

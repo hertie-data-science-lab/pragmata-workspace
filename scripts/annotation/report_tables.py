@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
 """Render the annotation-report markdown tables deterministically from a snapshot.
 
-The *reporting* half (manual): turns one snapshot logged by log.py into markdown.
-Writes reports/annotation/<date>/report.md and updates the reports/annotation/_latest
-symlink; plot_summary.py drops its PNGs into the same dir.
+The *reporting* half (manual; see `docs/annotation.md`): reads one JSON snapshot line from
+`logs/annotation/log.jsonl` (the latest by default) and writes the analysis tables as
+markdown to `reports/annotation/<date>/report.md`, updating the `_latest` symlink.
+`plot_summary.py` drops its PNGs into the same dir.
 
-Reads one JSON snapshot line from ``logs/annotation/log.jsonl`` (the latest by default)
-and prints the analysis tables as markdown to stdout. The numbers are pulled
-verbatim from the snapshot - this script only reshapes and formats them, so the
-output is reproducible and the hand-written prose/commentary can be layered on top.
+Numbers are taken verbatim from the snapshot — this only reshapes and formats them — so the
+output is reproducible and hand-written prose can be layered on top. Sorting is fully
+determined: domains by submitted desc then name; per-task rows in
+retrieval/grounding/generation order, omitting tasks with no submissions; per-annotator
+timing by pace desc; pace tables by gap ascending, untimed groups last.
 
 Usage:
-  scripts/annotation/report_tables.py                       # latest snapshot -> reports/annotation/<date>/report.md
-  scripts/annotation/report_tables.py --line N              # 0-based line index (negative = from end)
-  scripts/annotation/report_tables.py --jsonl PATH          # a different history file
-  scripts/annotation/report_tables.py --out PATH            # write to a specific path
-  scripts/annotation/report_tables.py --stdout              # print to stdout instead
-
-Sort rules (all deterministic):
-  - domains by submitted desc, then name
-  - per-task rows: only tasks with submitted > 0, task order retrieval/grounding/generation
-  - per-annotator timing by pace (rec/active-h) desc
-  - pace tables by gap ascending (untimed groups last)
+  scripts/annotation/report_tables.py              # latest snapshot -> <date>/report.md
+  scripts/annotation/report_tables.py --line N     # 0-based line index (negative = end)
+  scripts/annotation/report_tables.py --jsonl PATH # a different history file
+  scripts/annotation/report_tables.py --out PATH   # write to a specific path
+  scripts/annotation/report_tables.py --stdout     # print to stdout instead
 """
 
 from __future__ import annotations
