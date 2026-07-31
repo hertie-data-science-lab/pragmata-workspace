@@ -39,8 +39,8 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 ## `annotation_operations.csv`
 
-**Purpose:** how much annotation happened, and how fast. **Grain:** one row per programme
-x task; production and calibration pooled, no split.
+- **Purpose:** how much annotation happened, and how fast. 
+- **Grain:** one row per programme x task; production and calibration pooled, no split.
 
 | Column | Definition |
 |---|---|
@@ -70,8 +70,8 @@ x task; production and calibration pooled, no split.
 
 ## `annotation_label_summary.csv`
 
-**Purpose:** per-label prevalence and reliability. **Grain:** one row per programme x task
-x label.
+- **Purpose:** per-label prevalence and reliability. 
+- **Grain:** one row per programme x task x label.
 
 | Column | Definition |
 |---|---|
@@ -103,8 +103,8 @@ x label.
 
 ## `eval_metric_estimates.csv`
 
-**Purpose:** the corpus metric taxonomy, scored on human labels. **Grain:** one row per
-task x metric, pooled across programmes - the taxonomy has no per-programme grain.
+- **Purpose:** the corpus metric taxonomy, scored on human labels. 
+- **Grain:** one row per task x metric, pooled across programmes - the taxonomy has no per-programme grain.
 
 | Column | Definition |
 |---|---|
@@ -136,10 +136,8 @@ task x metric, pooled across programmes - the taxonomy has no per-programme grai
 
 ## `retrieval_manifest.csv`
 
-**Purpose:** what the retriever returned per query - the join key for the fairness audit.
-**Grain:** one row per (query, retrieved chunk). A query whose retrieval returned nothing
-keeps one row with an empty `chunk_id` and `n_retrieved_chunks = 0`, so per-query
-denominators stay right.
+- **Purpose:** what the retriever returned per query - the join key for the fairness audit.
+- **Grain:** one row per (query, retrieved chunk). A query whose retrieval returned nothingkeeps one row with an empty `chunk_id` and `n_retrieved_chunks = 0`, so per-query denominators stay right.
 
 | Column | Definition |
 |---|---|
@@ -182,8 +180,8 @@ denominators stay right.
 
 ## `corpus_catalog.csv`
 
-**Purpose:** one row per document in the publikationsbot corpus - the fairness audit's
-base population. **Grain:** one row per `doc_id`.
+- **Purpose:** one row per document in the publikationsbot corpus - the fairness audit's base population. 
+- **Grain:** one row per `doc_id`.
 
 | Column | Definition |
 |---|---|
@@ -197,42 +195,40 @@ base population. **Grain:** one row per `doc_id`.
 | `extent` | The raw extent string, kept so the page parse is auditable. |
 | `extent_pages` | Largest number found in `extent`; blank when it holds no page count. |
 | `n_chunks` | Chunks this document contributes to the vector store. |
-| `n_authors` | Authors *recorded* on the document (at most three), including any whose name fails the `"Last, First"` parse and so never reaches `author_genders_raw`. |
+| `n_authors` | Authors *recorded* on the document (at most three), including any whose name fails the `"Last, First"` parse and so leaves its slot's `_raw` blank. |
 | `is_institutional` | The document has recorded authors but no personal names. |
-| `first_author_gender_raw` | `gender-guesser`'s six-way verdict on the first recorded author (`verf1`, `pers1` as fallback): `female` / `mostly_female` / `andy` / `unknown` / `mostly_male` / `male`, or blank where `verf1` is institutional. |
-| `first_author_gender_collapsed` | That verdict under our rule (below): `female` / `male` / `unknown` / `institutional`. |
-| `author_genders_raw` | The six-way verdict per parseable author, `;`-joined, in `verf1..verf3` order. |
-| `author_gender_collapsed` | Majority across resolved authors under the same rule; `mixed` on a tie, `institutional` / `unknown` where none resolved. |
+| `author1_gender_raw`, `author2_gender_raw`, `author3_gender_raw` | `gender-guesser`'s six-way verdict for the author in that slot: `female` / `mostly_female` / `andy` / `unknown` / `mostly_male` / `male`. Blank where the slot holds no name **and** where it holds one that does not parse - the `_collapsed` column beside it separates those two. |
+| `author1_gender_collapsed`, `author2_gender_collapsed`, `author3_gender_collapsed` | That slot's verdict under our rule (below): `female` / `male` / `unknown` / `institutional`, or blank where the slot holds no author. |
+| `author_gender_collapsed` | Majority across the document's authors under the same rule; `mixed` on a tie, `institutional` / `unknown` where none resolved. |
 
-**Every column above is independent** - no column restates another, so there is never a
-question of which of two spellings of one number to trust. Gender comes in pairs by design:
-`_raw` is what `gender-guesser` returned, `_collapsed` is the decision we made about it.
+**One pair per author slot**, aligned to the metadata's `verf1..verf3` (`pers1` stands in for `verf1` where no `verf*` field exists). `author2_*` is always the second *recorded* author, even where the first could not be classified. Gender comes in pairs by design: `_raw` is what `gender-guesser` returned, `_collapsed` is the decision we made about it.
 
-**The collapse rule**, applied identically in both `_collapsed` columns:
+**The collapse rule**, applied identically in every `_collapsed` column:
 
-| `gender-guesser` verdict | Collapses to |
-|---|---|
-| `female`, `mostly_female` | `female` |
-| `male`, `mostly_male` | `male` |
-| `andy` (ambiguous), `unknown` (not in the dictionary) | unresolved - excluded from any majority |
-| no parseable author, but a name recorded | `institutional` |
-| no author recorded at all | `unknown` |
+| Slot state | `_raw` | `_collapsed` |
+|---|---|---|
+| `female` or `mostly_female` | the verdict | `female` |
+| `male` or `mostly_male` | the verdict | `male` |
+| `andy` (ambiguous) or `unknown` (not in the dictionary) | the verdict | `unknown` - an author, unclassified, excluded from any majority |
+| a name is recorded but does not parse as `"Last, First"` | blank | `institutional` |
+| no name in this slot | blank | blank |
 
-Use `_collapsed` rather than re-deriving it: it is the published verdict, and a consumer
-who chooses a different tie rule will disagree with the report on the same corpus.
-
-Two columns were **dropped** for being pure restatements of `author_genders_raw`. Recompute
-them from it in one line each if you need them:
-
-| Dropped column | Recompute as |
-|---|---|
-| `n_authors_resolved` | count of entries in {`female`, `mostly_female`, `male`, `mostly_male`} |
-| `female_present` | any entry in {`female`, `mostly_female`} |
 
 **Caveats.**
 
 - **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
-- `author_gender_collapsed = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify. 
+- `author_gender_collapsed = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify.
+- **Three columns were dropped as pure restatements of the per-slot verdicts**, each a
+  one-liner if you need it: `n_authors_resolved` (count of slots whose `_raw` is in {`female`,
+  `mostly_female`, `male`, `mostly_male`}), `female_present` (any slot whose `_raw` is in
+  {`female`, `mostly_female`}), and `author_genders_raw` (`";".join` of the non-blank `_raw`
+  slots - but read the next caveat before rebuilding it).
+- **Going per-slot fixed a real misattribution.** The dropped `author_genders_raw` held only
+  the authors whose names parsed, so a hole shifted every later author left. Two documents
+  (`52109` "Ireland Report", `53806` "Gesundheitsförderung und Prävention gemeinsam
+  gestalten!") record `verf1` and `verf3` with no `verf2`, so their string's second position
+  was `verf3`'s verdict presented as the second author's. The slot columns cannot do that;
+  anything rebuilding the joined string inherits the flaw.
 - "Majority" is over *recorded* authors: the metadata holds at most three, so a
   twelve-author volume is judged on three.
 - The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.
@@ -246,8 +242,7 @@ them from it in one line each if you need them:
 
 
 ## Appendix
-
-> 3 points in the pipeline depend on this md by path and by hash:
+>Implications for editing this doc (pipeline deps); 3 points in the pipeline depend on this md by path and by hash:
 >
 > - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
 >   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
