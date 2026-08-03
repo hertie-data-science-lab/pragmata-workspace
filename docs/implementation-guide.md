@@ -114,14 +114,15 @@ The pipeline writes to fixed paths, not per-run ones:
 
 They are deliberately not per-run, this makes the stages resumable (the Publikationsbot client skips query IDs already present in its output file, and the combine stage absorbs matching `_batch` files from earlier runs). An interrupted run is therefore cheap to continue - but an *earlier* run left in place is silently mixed into the new one.
 
-So before running anything, confirm the tree is clean:
+The repository provides no reset command, so before running anything, confirm the tree is
+clean by hand:
 
-    make reset                   # preview: what run output is still here
+    ls data/querygen/runs        # should fail - no such directory
+    ls data/publikationsbot      # should hold only .gitkeep
     make plan                    # should list the full stage sequence for every domain in scope
 
-`make reset` with no arguments deletes nothing - it reports what the tree still holds. On a
-fresh deployment it prints `nothing to delete` and there is nothing to do here. If an earlier
-run's output is still in the tree - the case on the pilot CPU VM - archive and clear it first
+On a fresh deployment this is already true and there is nothing to do here. If an earlier run's
+output is still in the tree - the case on the pilot CPU VM - archive and clear it first
 ([§11.3](#113-clear-the-tree-for-the-next-run)), then come back to this check.
 
 ## 5. Test the deployment
@@ -519,34 +520,28 @@ here.
 
    Every line must read `OK`. (`make repro-verify PIN=<bundle>` checks the *working tree*, so it confirms the originals, not the copy - useful as the before/after pair.)
 
-4. **Decide on the planning carry-over**, because step 5 needs the answer.
+4. **Decide on the planning carry-over**, because step 5 acts on the answer.
    `data/querygen/<spec_fingerprint>.json` is not run output - it is the previous run's planning
    summary for that spec (its redundancy patterns and diversification targets), read back and
    fed into the next run's planning prompt. Left in place, the new run deliberately steers
    *away* from the questions the old one asked; removed, it plans from the spec alone. Either
    way the files are archived with the run, since they sit inside the pinned `data/querygen`
-   tree from step 1. Pass `CARRYOVER=drop` in step 5 to delete them.
+   tree from step 1.
 
-5. **Clear only then:**
+5. **Clear only then**, and only the generated outputs. Keep the directories and their
+   committed `.gitkeep` files:
 
-       make reset PIN=<bundle> APPLY=1                    # keep the planning carry-over
-       make reset PIN=<bundle> APPLY=1 CARRYOVER=drop     # drop it too
+       rm -rf data/querygen/runs
+       find data/publikationsbot -type f ! -name .gitkeep -delete
+       rm -f data/querygen/*.json          # only if step 4 said drop the carry-over
 
-   `make reset` deletes `data/querygen/runs/` and every file in `data/publikationsbot/` except
-   `.gitkeep`. It never touches `data/annotation/` - exports, and the frozen inputs behind
-   published numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)) - nor `logs/`,
-   `argilla_backup/` or `reports/`.
+   Leave `data/annotation/` alone - the exports, and the frozen inputs behind published
+   numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)) - as well as `logs/`,
+   `argilla_backup/` and `reports/`.
 
-   **Two guards stand between the command and data loss, and both must pass.** `PIN=` must
-   name a bundle that (a) lists *every* file about to be deleted, and (b) verifies clean
-   against the working tree. (a) matters because a pin can be internally consistent and still
-   say nothing about half the tree: pin only `data/querygen` and every Publikationsbot file is
-   unrecorded yet deletable. (b) matters because a `MISMATCH` means the pin is not a faithful
-   record of what is there, so the difference would be lost. Without `APPLY=1` the command only
-   previews, so `make reset` is always safe to run just to see what is still in the tree.
-
-   A pin is not an archive - it records checksums inside the repository and copies nothing.
-   Steps 2 and 3 are still yours to do.
+   Note the pin from step 1 is not an archive: it records checksums inside the repository and
+   copies nothing. Steps 2 and 3 are what actually preserve the run, and nothing enforces that
+   they happened before these deletions.
 
 Then re-run the §4 check to confirm the tree is clean.
 
