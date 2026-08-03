@@ -190,7 +190,7 @@ These paths are **not** per-run, and the stages are deliberately resumable: the
 Publikationsbot client skips query IDs already present in its output file, and the combine
 stage absorbs matching `_batch` files from earlier runs. That is what makes an interrupted
 run cheap to continue - and what silently mixes two runs together if the tree is left in
-place. The repository provides no reset command.
+place. `make reset` clears it, guarded (step 4).
 
 **Archive, then clear.** Use this procedure. A per-run output directory (a `RUN_ID` in the
 paths) would be tidier but requires changing the fixed paths in code; archive-and-clear is a
@@ -219,28 +219,38 @@ procedure only, so it is the one documented here.
    Every line must read `OK`. (`make repro-verify PIN=<bundle>` checks the *working tree*, so
    it confirms the originals, not the copy - useful as the before/after pair.)
 
-4. **Clear only then**, and only the generated outputs. Keep the directories and their
-   committed `.gitkeep` files:
+4. **Decide on the planning carry-over**, because step 5 needs the answer.
+   `data/querygen/<spec_fingerprint>.json` is not run output - it is the previous run's
+   planning summary for that spec (its redundancy patterns and diversification targets), read
+   back and fed into the next run's planning prompt. Left in place, the new run deliberately
+   steers *away* from the questions the old one asked; removed, it plans from the spec alone.
+   Either way the files are archived with the run, since they sit inside the pinned
+   `data/querygen` tree from step 1. Pass `CARRYOVER=drop` in step 5 to delete them.
 
-       rm -rf data/querygen/runs
-       find data/publikationsbot -type f ! -name .gitkeep -delete
+5. **Clear only then:**
 
-   Leave `data/annotation/exports-frozen/` alone: freezes are the pinned inputs behind
-   published numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)).
+       make reset                                         # preview - deletes nothing
+       make reset PIN=<bundle> APPLY=1                     # keep the planning carry-over
+       make reset PIN=<bundle> APPLY=1 CARRYOVER=drop      # drop it too
 
-5. **Decide on the planning carry-over.** `data/querygen/<spec_fingerprint>.json` is not run
-   output - it is the previous run's planning summary for that spec (its redundancy patterns
-   and diversification targets), read back and fed into the next run's planning prompt. Left
-   in place, the new run deliberately steers *away* from the questions the old one asked;
-   removed, the new run plans from the spec alone. For a clean run whose output should be
-   comparable with the previous one, archive these files with the run (they are inside the
-   pinned `data/querygen` tree from step 1) and then delete them:
+   `make reset` deletes `data/querygen/runs/` and every file in `data/publikationsbot/` except
+   the committed `.gitkeep`. It never touches `data/annotation/` - exports, and the frozen
+   inputs behind published numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)) - nor
+   `logs/`, `argilla_backup/` or `reports/`.
 
-       rm -f data/querygen/*.json
+   **Two guards stand between the command and data loss, and `APPLY=1` needs both.** `PIN=`
+   must name a bundle that (a) lists *every* file about to be deleted, and (b) verifies clean
+   against the working tree. (a) matters because a pin can be internally consistent and still
+   say nothing about half the tree: pin only `data/querygen` and every Publikationsbot file is
+   unrecorded yet deletable. (b) matters because a `MISMATCH` means the pin is not a faithful
+   record of what is there, so the difference would be lost. Without `APPLY=1` the command
+   only reports, so it is always safe to run just to see what the tree still holds.
 
-6. **Confirm the tree is clean** before starting: `ls data/querygen/runs` should fail,
-   `data/publikationsbot/` should hold only `.gitkeep`, and `make plan` should list the full
-   stage sequence for every domain in scope.
+   Note a pin is not an archive: it records checksums inside the repository and copies
+   nothing. Steps 2 and 3 remain manual.
+
+6. **Confirm the tree is clean** before starting: `make reset` should report `nothing to
+   delete`, and `make plan` should list the full stage sequence for every domain in scope.
 
 Do not delete an earlier run until its data, configuration, logs and checksums have been
 archived and the archive has been verified.

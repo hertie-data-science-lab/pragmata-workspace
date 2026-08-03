@@ -86,7 +86,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-report-plots \
         eval-report eval-score eval-catalog \
         transfer-push transfer-pull transfer-verify \
-        repro-pin repro-verify repro-reproduce setup help
+        repro-pin repro-verify repro-reproduce reset setup help
 
 # --- setup ---
 
@@ -197,6 +197,13 @@ repro-pin: ## Pin paths into a new bundle reproducibility/<today>-<NAME>/ (NAME=
 # when a caller needs to branch on absent-vs-mismatch.
 repro-verify: ## Verify bundle pins per file - OK/MISMATCH/ABSENT (PIN=<bundle-dir>, default all)
 	$(PY) scripts/repro/bundle.py verify $(PIN)
+
+# Clears one run's generated output. No APPLY = preview. APPLY=1 requires PIN= and refuses
+# unless that bundle both names every file about to go and verifies clean against the tree:
+# a pin is the only proof that what is being deleted was recorded first.
+reset: ## Clear a finished run's output for the next one (PIN=<bundle> APPLY=1 to act; CARRYOVER=drop). No APPLY = preview
+	bash scripts/repro/reset.sh $(if $(PIN),--pin $(PIN),) $(if $(APPLY),--apply,) \
+	  $(if $(filter drop,$(CARRYOVER)),--drop-carryover,)
 
 # PIN names the bundle you are replaying toward and is what the kind: check applies to; it
 # does not select how much of the chain is composed. Lineage replay always composes every
