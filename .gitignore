@@ -6,6 +6,9 @@ configs/annotation/users.json
 
 # --- python virtualenv ---
 .venv/
+# uv's interpreter + wheel cache, kept in-tree so a checkout shared between users
+# does not depend on any one user's home (see the exports in the Makefile).
+.uv/
 
 # --- data, outputs, run state (not version-controlled) ---
 # Tracked scaffolds (README/.gitkeep) inside these dirs are force-added.
