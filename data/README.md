@@ -11,10 +11,12 @@ data/
 ├── publikationsbot/     source query corpora (<slug>_combined.jsonl) + querygen intermediates
 ├── annotation/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
-│   └── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
-│                        annotator_id is pseudonymised on export; see docs/eval.md
-│                        one dir per domain config and nothing else: this tree is published
-│                        by transfer-push and consumers read exports/*/ as the domain list
+│   ├── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
+│   │                    annotator_id is pseudonymised on export; see docs/eval.md
+│   │                    one dir per domain config and nothing else: this tree is published
+│   │                    by transfer-push and consumers read exports/*/ as the domain list
+│   └── exports-frozen/  read-only (chmod a-w) freezes, one dir per <date>: the pinned
+│                        inputs behind published numbers; see docs/eval.md
 ├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
 ├── eval-inputs/         workspace-staged CSVs handed to `eval score --path`; kept out of
 │                        eval/ so that tree holds only what pragmata wrote
