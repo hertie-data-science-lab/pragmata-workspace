@@ -40,7 +40,8 @@ export DATA_DIR
 ts()      { date -Iseconds; }
 log()     { printf '[%s] %s\n'        "$(ts)" "$*" >&2; }
 warn()    { printf '[%s] WARN: %s\n'  "$(ts)" "$*" >&2; }
-fatal()   { printf '[%s] FATAL: %s\n' "$(ts)" "$*" >&2; exit "${2:-1}"; }
+# $2 is the exit code, so the message is $1 only - $* would print the code as text.
+fatal()   { printf '[%s] FATAL: %s\n' "$(ts)" "$1" >&2; exit "${2:-1}"; }
 section() { printf '\n=== %s ===\n'   "$*" >&2; }
 
 cd_root() { cd "$WORKSPACE_ROOT" || fatal "cannot cd to $WORKSPACE_ROOT"; }

@@ -19,7 +19,7 @@ redirect). Every CSV ships with a `.provenance.json` file, and the
 | `make eval-report` | `annotation_tables.py` | `annotation_operations.csv`, `annotation_label_summary.csv` |
 | `make eval-report` | `retrieval_manifest.py` | `retrieval_manifest.csv` |
 | `make eval-score` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
-| `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`; runs via `uv`, not the workspace venv) |
+| `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
 
 `scripts/eval/` also holds `vectorstore_inventory.py` (aggregate corpus counts, to stdout)
 and `eval_common.py` (shared vocabulary and filters, not runnable).
