@@ -169,7 +169,10 @@ def combine(exports: Path) -> int:
             frame = ec.submitted(raw)
             if frame.empty:
                 reason = "no_data" if raw.empty else "no_rows_after_filter"
-                print(f"  {programme}/{task}: contributes nothing ({reason})", file=sys.stderr)
+                print(
+                    f"  {programme}/{task}: contributes nothing ({reason})",
+                    file=sys.stderr,
+                )
                 continue
             frame = frame.copy()
             frame["source_domain"] = programme
@@ -213,7 +216,9 @@ def combine(exports: Path) -> int:
             counts = pooled[label].value_counts(dropna=False).to_dict()
             n_true = int(counts.get(True, 0))
             n_false = int(counts.get(False, 0))
-            print(f"    {label}: {n_true} positive / {n_false} negative", file=sys.stderr)
+            print(
+                f"    {label}: {n_true} positive / {n_false} negative", file=sys.stderr
+            )
     return 0
 
 
@@ -379,7 +384,9 @@ def main() -> int:
         help="Diagnostic: how much of each task's input the default truncates",
     )
 
-    retrieval_parser = sub.add_parser("train-retrieval", help="Train the retrieval evaluator")
+    retrieval_parser = sub.add_parser(
+        "train-retrieval", help="Train the retrieval evaluator"
+    )
     retrieval_parser.add_argument(
         "--threshold-type",
         choices=["label", "global"],
@@ -387,8 +394,12 @@ def main() -> int:
         help="Threshold optimization mode (default: global, best AUC of the three).",
     )
 
-    sub.add_parser("train-grounding", help="Train the grounding evaluator (slow, 2+ hours)")
-    sub.add_parser("train-generation", help="Train the generation evaluator (see docstring)")
+    sub.add_parser(
+        "train-grounding", help="Train the grounding evaluator (slow, 2+ hours)"
+    )
+    sub.add_parser(
+        "train-generation", help="Train the generation evaluator (see docstring)"
+    )
 
     args = parser.parse_args()
 
