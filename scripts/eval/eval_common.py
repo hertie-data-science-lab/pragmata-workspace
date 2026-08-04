@@ -83,7 +83,7 @@ def _freeze_pin(key: str) -> str:
     if not FREEZE_CONF.exists():
         raise SystemExit(
             f"missing {FREEZE_CONF.relative_to(ws.ROOT)} - it pins the canonical freeze.\n"
-            "  Cut one with `make annotation-freeze DATE=<date> RUN_AT=<run_at>`, or restore\n"
+            "  Cut one with `make annotation-freeze`, or restore\n"
             "  the file from git. See docs/eval.md."
         )
     value = os.environ.get(key, "").strip()

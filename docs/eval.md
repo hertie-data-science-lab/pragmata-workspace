@@ -107,12 +107,16 @@ not interleave. The sequence that works:
 1. **Finish and commit all code changes first.** Never rewrite history (`reset`, `amend`)
    after generating the provenance files - they would name a commit that no longer exists.
 2. **Take the export and snapshot**: `make annotation-export` (pseudonymises as it goes),
-   then `make annotation-log`; note the new snapshot's `run_at`.
-3. **Freeze the tree and write the pin**:
-   `make annotation-freeze DATE=<date> RUN_AT=<the run_at from step 2>`. Everything is a
-   guard until the copy - clean working tree, no freeze under that date already, `RUN_AT`
-   really present in the log, no real names left in `exports/` - and only then does it make
-   the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write
+   then `make annotation-log`.
+3. **Freeze the tree and write the pin**: `make annotation-freeze`, no arguments needed.
+   DATE and RUN_AT both derive from the export tree's own `created_at` - DATE from its UTC
+   calendar date, RUN_AT from the first log snapshot taken after it, since the run always
+   exports before it logs. Pass `DATE=<date>` or `RUN_AT=<run_at>` to override either;
+   an explicit RUN_AT is checked against the same pairing rather than only for existing in
+   the log, refusing one that predates the export or lags it implausibly. Everything is a
+   guard until the copy - clean working tree, no freeze under that date already, the
+   resolved RUN_AT schema-current, no real names left in `exports/` - and only then does it
+   make the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write
    `configs/eval/freeze.conf`.
 
    **The dated copy is write-protected; the `exports-frozen/` parent may not be.** `chmod`

@@ -1,9 +1,10 @@
 #!/bin/bash
-# scripts/annotation/freeze.sh <date> <run_at>
+# scripts/annotation/freeze.sh [date] [run_at]
 #
 # Cuts the canonical freeze: an immutable dated copy of data/annotation/exports/, plus the
 # pin (configs/eval/freeze.conf) that points every eval report at it and at the one log
-# snapshot taken beside it. Run as `make annotation-freeze DATE=<date> RUN_AT=<run_at>`.
+# snapshot taken beside it. Run as `make annotation-freeze` on its own — DATE and RUN_AT
+# both derive from the export tree's own created_at; pass either explicitly to override.
 #
 # Why this is a target of its own rather than a step of annotation-export: daily.sh's 02:00
 # cron re-runs the export every night, so freezing on export would mint a write-protected
@@ -24,28 +25,22 @@ cd_root
 
 DATE="${1:-}"
 RUN_AT="${2:-}"
-[[ -n "$DATE" && -n "$RUN_AT" ]] \
-  || fatal "usage: make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<snapshot run_at>"
 
 SRC="$DATA_DIR/annotation/exports"
 FROZEN_ROOT="$DATA_DIR/annotation/exports-frozen"
-DEST="$FROZEN_ROOT/$DATE"
 PIN="configs/eval/freeze.conf"
 
 # --- guards: all of them before anything is written ---
 
-# The date names the freeze directory, and eval_common.py picks the newest freeze by
-# sorting those names — which only orders them if they are all shaped the same way.
-[[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || fatal "DATE must be YYYY-MM-DD: $DATE"
+# Checked immediately if given, rather than waiting for the derived value below to fail
+# the same regex — a hand-typed DATE should fail fast, before any other guard runs.
+[[ -z "$DATE" || "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+  || fatal "DATE must be YYYY-MM-DD: $DATE"
 
 # A freeze cut from a dirty tree has no citable lineage of its own: every .provenance.json
 # records the workspace commit it was generated at (docs/eval.md step 1).
 [[ -z "$(git status --porcelain)" ]] \
   || fatal "working tree is dirty — commit or stash first, so the freeze can cite a commit"
-
-# Never overwrite a published freeze: something already cites those bytes.
-[[ ! -e "$DEST" ]] \
-  || fatal "already frozen: ${DEST#"$WORKSPACE_ROOT"/} — pick another DATE"
 
 [[ -d "$SRC" ]] || fatal "no export tree at ${SRC#"$WORKSPACE_ROOT"/} — run 'make annotation-export'"
 shopt -s nullglob
@@ -54,18 +49,41 @@ shopt -u nullglob
 (( ${#programmes[@]} > 0 )) \
   || fatal "${SRC#"$WORKSPACE_ROOT"/} holds no programme dirs — nothing to freeze"
 
-# A mistyped snapshot pin is otherwise caught only at report time, long after the freeze is
-# published. find_snapshot is the lookup the reports themselves use, so this accepts exactly
-# what they will accept — the schema-version check included.
-"$PY" - "$RUN_AT" <<'PYEOF' || fatal "RUN_AT does not name a snapshot in logs/annotation/log.jsonl: $RUN_AT"
+# DATE and RUN_AT are both optional: a freeze names and pairs one export moment, and the
+# tool has what it needs to derive both itself. Every programme's
+# annotation_export.meta.json carries created_at; DATE defaults to that moment's UTC
+# calendar date, and RUN_AT to the first log snapshot taken after it — the run always
+# exports before it logs (scripts/daily.sh), so that snapshot is the one taken beside it.
+# Passing either explicitly still works — DATE to re-date a freeze, RUN_AT for a
+# non-nightly export — but RUN_AT is then validated against the same pairing rather than
+# only checked for existing in the log. resolve_freeze_pin also runs find_snapshot's
+# schema-version check, so a mistyped or stale RUN_AT is caught here, not at report time.
+resolved="$("$PY" - "$SRC" "$DATE" "$RUN_AT" <<'PYEOF'
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path("scripts/lib").resolve()))
 import workspace as ws
 
-ws.find_snapshot(sys.argv[1])
+export_dir, date, run_at = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+resolved_date, resolved_run_at = ws.resolve_freeze_pin(
+    export_dir, date or None, run_at or None
+)
+print(resolved_date)
+print(resolved_run_at)
 PYEOF
+)" || fatal "DATE/RUN_AT could not be resolved against ${SRC#"$WORKSPACE_ROOT"/} — see above"
+resolved_date="${resolved%%$'\n'*}"
+resolved_run_at="${resolved#*$'\n'}"
+[[ -n "$DATE" ]] || log "derived DATE=$resolved_date from the export's created_at"
+[[ -n "$RUN_AT" ]] || log "derived RUN_AT=$resolved_run_at from the export's created_at and logs/annotation/log.jsonl"
+DATE="$resolved_date"
+RUN_AT="$resolved_run_at"
+DEST="$FROZEN_ROOT/$DATE"
+
+# Never overwrite a published freeze: something already cites those bytes.
+[[ ! -e "$DEST" ]] \
+  || fatal "already frozen: ${DEST#"$WORKSPACE_ROOT"/} — pick another DATE"
 
 # Before the copy, not after: transfer-push runs this same check, but by then the names
 # would already sit in a write-protected tree that a published number cites.
@@ -96,8 +114,8 @@ cat > "$PIN" <<'PINEOF'
 # published report number. Committed, because a report's provenance is only citable if
 # the pin that produced it is in git.
 #
-# Written by `make annotation-freeze DATE=<date> RUN_AT=<run_at>` — commit the change it
-# makes. Editing by hand works but skips that command's guards; see docs/eval.md.
+# Written by `make annotation-freeze` — commit the change it makes. Editing by hand works
+# but skips that command's guards; see docs/eval.md.
 #
 # The snapshot is pinned by timestamp rather than taken as "the latest": the nightly cron
 # appends one every night, so a report re-run months later must still read the line it was
