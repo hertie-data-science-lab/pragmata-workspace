@@ -322,16 +322,18 @@ NB: the export tree is intended to be transient, as it is derived. The export ID
 
     make annotation-freeze 
 
-Optionally:
+No arguments are needed: `DATE` derives from the export tree's own `created_at` (its UTC
+calendar date) and `RUN_AT` from the first log snapshot taken after it, since the run always
+exports before it logs. Override either on purpose:
 
-    make annotation-freeze DATE=YYYY-MM-DD RUN_AT=<associated-log-file>
+    make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<snapshot run_at>
 
 `make annotation-freeze` copies the export tree (and the associated `logs/annotation/log.jsonl` data) from `exports` into `exports-frozen/<date>`. This gives:
 
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
 
-`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, `RUN_AT` really present in `logs/annotation/log.jsonl`, and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducible bundle creaed by `make repro-pin`).
+`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, an explicit `RUN_AT` that pairs with the export (rather than merely existing in `logs/annotation/log.jsonl` - one that predates the export or lags it implausibly is refused), and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducibility bundle created by `make repro-pin`).
 
 > NB: The freeze and the reproducibility bundle are twinned but separate artefacts. The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`. The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git.
 
