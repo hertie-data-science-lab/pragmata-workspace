@@ -134,14 +134,14 @@ flowchart LR
 
 That brings up five containers: the Argilla server (v2.8.0) on port 6900, an Argilla worker, Postgres, Elasticsearch and Redis. `--profile all-bundled` (what `make docker-up` uses) runs all three backing services locally; `make docker-up-external-pg`, `-external-es` and `docker-up-external` swap them for services you provide instead.
 
-**Credentials, and why the first boot matters.** `deploy/annotation/.env` sets three values the server reads on first boot:
+**Initial Credentials** `deploy/annotation/.env` sets three values the server reads on first boot:
 
 | Variable | What it is |
 | --- | --- |
 | `ARGILLA_USERNAME`, `ARGILLA_PASSWORD` | the Argilla *owner* account, for browser login - the operator's, not an annotator's. Annotator accounts are created later, by `make annotation-setup` ([§7.3](#73-create-workspaces-and-users)) |
 | `ARGILLA_API_KEY` | the server's bootstrap API key - and the same value the workspace `.env` must carry as `ARGILLA_API_KEY` (§3.3), because that is what `pragmata annotation setup\|import\|export\|status` authenticate with |
 
-The shipped values (`argilla` / `argilla123` / `argilla.apikey`) are dev defaults: replace all three before the first `up` on any real deployment. The server keeps the bootstrap key it was first started with, so changing it afterwards is not a value edit - it needs the volumes destroyed and the stack rebuilt (`make docker-down-clean`, `make docker-up`, then §7.3 again). On the workspace side, set `ARGILLA_API_URL` to this stack's address: `http://localhost:6900` when the two sit on the same box, as they do here.
+The shipped values are dev defaults: replace all three before the first `up` on any real deployment. The server keeps the bootstrap key it was first started with, so changing it afterwards is not a value edit - it needs the volumes destroyed and the stack rebuilt (`make docker-down-clean`, `make docker-up`. On the workspace side, set `ARGILLA_API_URL` to this stack's address: `http://localhost:6900` when the two sit on the same VM, as they do here.
 
 **Lifecycle, and what holds the data.** State lives in named Docker volumes on the VM's OS disk - `annotation_argilladata`, `annotation_postgresdata`, `annotation_elasticdata`, `annotation_redisdata`, the prefix being the Compose project name (taken from the compose file's directory, hence `annotation`).
 
@@ -152,9 +152,9 @@ The shipped values (`argilla` / `argilla123` / `argilla.apikey`) are dev default
 | `make docker-down-clean` | stop and **delete every volume**: the whole annotation database, irreversibly |
 | `make docker-logs`, `make docker-status` | tail logs; show container health |
 
-Those volumes *are* the annotation database, and today they share one disk with the `argilla_backup/` dumps (§2.1) - so take a backup and move it off the box before anything that touches them ([§7.2](#72-back-up-argilla)).
+Those volumes *are* the annotation database, and they share one disk with the `argilla_backup/` dumps (§2.1) - so take a backup and move it off the box before anything that touches them ([§7.2](#72-back-up-argilla)).
 
-> `pragmata`'s design docs describe a `pragmata annotation up` CLI verb as the eventual end-user entry point for this stack. It exists in neither pin: the compose file and the `make docker-*` targets above are the only route today.
+> later we will be implementing pRAGamta native commands, including `pragmata annotation up` as the CLI verb as the eventual end-user entry point for this stack. However, for the pilot, it exists in neither pin so the compose file and the `make docker-*` targets above are the only route today.
 
 ## 4. Confirm the output tree is clean
 
