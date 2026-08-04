@@ -79,7 +79,7 @@ def _pragmata_eval():
       the PRAGMATA_EVAL_SRC checkout, shadowed onto sys.path; the in-process equivalent of the
       PYTHONPATH score_human_annotations.py hands its subprocess.
     - The GPU host trains inside a container against its own venv, where pragmata[eval] is
-      installed outright from configs/eval/training/requirements.txt. There is only one
+      installed outright from configs/eval/train-requirements.txt. There is only one
       pragmata there, so there is nothing to shadow, and PRAGMATA_EVAL_SRC generally does not
       even exist inside the container - only the workspace is mounted.
 
@@ -104,7 +104,7 @@ def _pragmata_eval():
             raise SystemExit(
                 f"cannot import the eval API from {pin.src}: {exc}\n"
                 "  On the GPU host, install pragmata[eval] from\n"
-                "  configs/eval/training/requirements.txt instead - see docs/eval-training.md."
+                "  configs/eval/train-requirements.txt instead - see docs/eval-training.md."
             ) from exc
 
     print(
@@ -176,6 +176,46 @@ def _training_csv(task: str) -> Path:
             "  Run `make eval-train-inputs` first - it pools the frozen export per task."
         )
     return path
+
+
+def _resolve_exports(exports: Path) -> Path:
+    """The export tree to pool from, allowing for the GPU box holding it somewhere else.
+
+    `transfer-pull` writes only under data/transfer/ - it refuses any destination that would
+    escape it - so on the GPU host the canonical freeze arrives at
+    data/transfer/exports-frozen/<date>/, not at the data/annotation/exports-frozen/<date>/
+    that eval_common defaults to. Both are the same freeze: the date comes from the committed
+    pin either way, so there is no question of picking up different data, only of where it
+    physically sits.
+
+    Falls back rather than guessing: an explicit --exports is honoured untouched, and the
+    fallback says which tree it settled on, because "which bytes did this train on" is the
+    one thing a training run must not leave implicit.
+    """
+    if exports.is_dir():
+        return exports
+    # Only the DEFAULT falls back. An explicitly named tree that is absent is an error: the
+    # caller asked for particular bytes, and quietly training on different ones instead is
+    # worse than failing.
+    if exports.resolve() != ec.FROZEN_EXPORTS.resolve():
+        raise SystemExit(f"no export tree at {exports}")
+    staged = ws.DATA_DIR / "transfer" / "exports-frozen" / ec.FREEZE_DATE
+    if staged.is_dir():
+        # --exports may be relative, so relative_to alone would raise: same guard as
+        # ws.provenance uses on its hashed inputs.
+        shown = exports.resolve()
+        shown = shown.relative_to(ws.ROOT) if shown.is_relative_to(ws.ROOT) else shown
+        print(
+            f"note: {shown} is absent; using the pulled tree at "
+            f"{staged.relative_to(ws.ROOT)}",
+            file=sys.stderr,
+        )
+        return staged
+    raise SystemExit(
+        f"no export tree at {exports}.\n"
+        f"  Nor a pulled copy at {staged}.\n"
+        f"  On the GPU host: make transfer-pull PREFIX=exports-frozen/{ec.FREEZE_DATE}"
+    )
 
 
 def combine(exports: Path) -> int:
@@ -400,7 +440,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "combine":
-        return combine(args.exports)
+        return combine(_resolve_exports(args.exports))
     if args.command == "check-sequence-length":
         return check_sequence_length()
     return train(args.task, args.threshold_type)

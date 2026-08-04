@@ -119,6 +119,16 @@ make eval-train-seqlen                                   # confirm the truncatio
 make eval-train TASK=retrieval                           # then grounding, then generation
 ```
 
+**Where the export tree is read from differs by box, and `eval-train-inputs` handles it.**
+`transfer-pull` writes only under `data/transfer/` - it refuses any destination that would
+escape it - so on the GPU host the freeze arrives at
+`data/transfer/exports-frozen/<FREEZE_DATE>/`, while `eval_common` defaults to the CPU-side
+`data/annotation/exports-frozen/<FREEZE_DATE>/`. When the default is absent and the pulled copy
+is present, the target uses the pulled copy and says so. Both are the same freeze - the date
+comes from the committed pin either way - so this is only about where the bytes sit. An
+explicitly passed `EXPORTS=` is never silently substituted: if that tree is missing, the run
+fails.
+
 **`eval-train-inputs`** pools the frozen canonical export into one CSV per task. It derives
 the programme list from the export tree via `eval_common.programmes()` rather than carrying
 one, and filters to submitted responses. Both matter:
