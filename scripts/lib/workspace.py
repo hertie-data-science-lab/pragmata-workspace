@@ -19,7 +19,7 @@ import importlib.metadata
 import json
 import os
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -129,6 +129,30 @@ def check_snapshot(snapshot: dict) -> None:
         )
 
 
+def _first_snapshot_matching(
+    predicate, path: Path | None = None
+) -> tuple[dict, dict] | None:
+    """(snapshot, identity) for the first snapshot with a ``run_at`` predicate(...) accepts.
+
+    Streamed and parsed line by line: the log grows without rotation, and matching on the
+    raw text would couple this lookup to the writer's JSON separator convention.
+    """
+    path = _snapshot_log(path)
+    with path.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            snapshot = json.loads(line)
+            run_at = snapshot.get("run_at")
+            if not run_at or not predicate(run_at):
+                continue
+            check_snapshot(snapshot)
+            digest = hashlib.sha256(line.encode()).hexdigest()
+            return snapshot, {"run_at": run_at, "sha256": digest}
+    return None
+
+
 def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
     """(snapshot, identity) for the snapshot with this exact ``run_at``.
 
@@ -137,25 +161,118 @@ def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
     ``{run_at, sha256}`` where the digest covers that ONE line: the log is append-only,
     so hashing the whole file would change every night and pin nothing.
     """
+    found = _first_snapshot_matching(lambda at: at == run_at, path)
+    if found is None:
+        raise SystemExit(
+            f"no snapshot with run_at={run_at} in {_snapshot_log(path)}.\n"
+            "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
+            "another, or re-run `make annotation-log` and update the pin."
+        )
+    return found
+
+
+# A freeze pairs one export moment with the one log snapshot taken right after it. The
+# nightly cron's actual gap is under a minute (scripts/daily.sh runs export then log in one
+# invocation), so anything past this is almost certainly not the snapshot from the same run
+# - a hand-typed RUN_AT naming the wrong day, or an export re-run without a matching log.
+_MAX_EXPORT_TO_SNAPSHOT_LAG = timedelta(hours=2)
+
+
+def export_created_at(export_dir: Path) -> str:
+    """Newest ``created_at`` across an export tree's per-programme meta files.
+
+    Every programme's annotation_export.meta.json is written by pragmata at export time,
+    staggered a few seconds apart as export.sh loops over programmes. The newest one
+    anchors the run's end - the moment the log snapshot taken right after it describes.
+    """
+    created_ats = [
+        v
+        for p in sorted(export_dir.glob("*/annotation_export.meta.json"))
+        if (v := json.loads(p.read_text()).get("created_at"))
+    ]
+    if not created_ats:
+        raise SystemExit(
+            f"no annotation_export.meta.json with created_at under {export_dir}"
+        )
+    return max(created_ats, key=datetime.fromisoformat)
+
+
+def find_first_snapshot_after(
+    after: str, path: Path | None = None
+) -> tuple[dict, dict]:
+    """(snapshot, identity) for the earliest snapshot with run_at strictly after ``after``.
+
+    Same streamed lookup and schema check as find_snapshot, but matched by ORDER rather
+    than by exact value - for deriving RUN_AT from an export's created_at instead of an
+    operator-supplied timestamp.
+    """
+    after_dt = datetime.fromisoformat(after)
     path = _snapshot_log(path)
-    # Streamed and parsed line by line: the log grows without rotation, and matching on
-    # the raw text would couple this lookup to the writer's JSON separator convention.
     with path.open(encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
             if not line:
                 continue
             snapshot = json.loads(line)
-            if snapshot.get("run_at") != run_at:
+            run_at = snapshot.get("run_at")
+            if not run_at or datetime.fromisoformat(run_at) <= after_dt:
                 continue
             check_snapshot(snapshot)
             digest = hashlib.sha256(line.encode()).hexdigest()
             return snapshot, {"run_at": run_at, "sha256": digest}
     raise SystemExit(
-        f"no snapshot with run_at={run_at} in {path}.\n"
-        "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
-        "another, or re-run `make annotation-log` and update the pin."
+        f"no snapshot after {after} in {path}.\n"
+        "The export finished but `make annotation-log` has not logged one since - run it, "
+        "or pass RUN_AT explicitly to pin a different snapshot."
     )
+
+
+def _resolve_run_at(created_at: str, run_at: str | None) -> str:
+    """The RUN_AT to pin given an export's created_at: derived if omitted, else checked.
+
+    A snapshot predating the export describes the Argilla instance BEFORE these labels
+    were exported, not beside them; one lagging by more than _MAX_EXPORT_TO_SNAPSHOT_LAG is
+    implausibly far from a same-run pairing to be it by coincidence.
+    """
+    if run_at is None:
+        _snapshot, identity = find_first_snapshot_after(created_at)
+        return identity["run_at"]
+
+    _snapshot, identity = find_snapshot(run_at)
+    created_dt = datetime.fromisoformat(created_at)
+    run_dt = datetime.fromisoformat(identity["run_at"])
+    if run_dt <= created_dt:
+        raise SystemExit(
+            f"RUN_AT={run_at} predates the export (created_at={created_at}) - that "
+            "snapshot describes the Argilla instance before these labels were exported, "
+            "not beside them."
+        )
+    if run_dt - created_dt > _MAX_EXPORT_TO_SNAPSHOT_LAG:
+        raise SystemExit(
+            f"RUN_AT={run_at} is {run_dt - created_dt} after the export "
+            f"(created_at={created_at}) - too far from a same-run pairing (the nightly "
+            "cron's gap is under a minute). Pass the run_at `make annotation-log` printed "
+            "for this export, or omit RUN_AT to derive it."
+        )
+    return identity["run_at"]
+
+
+def resolve_freeze_pin(
+    export_dir: Path, date: str | None, run_at: str | None
+) -> tuple[str, str]:
+    """(DATE, RUN_AT) to pin for a freeze - both derived from the export tree if omitted.
+
+    Both name the same export moment: the newest ``created_at`` across the tree's
+    programmes. DATE defaults to that moment's UTC calendar date, so a freeze cut a day
+    late (or on a re-run export) is still named for the export it freezes, not for
+    whenever the operator happened to run the command. RUN_AT defaults to the first log
+    snapshot taken after that moment, or is validated against it if given explicitly -
+    see ``_resolve_run_at``.
+    """
+    created_at = export_created_at(export_dir)
+    resolved_date = date or datetime.fromisoformat(created_at).date().isoformat()
+    resolved_run_at = _resolve_run_at(created_at, run_at)
+    return resolved_date, resolved_run_at
 
 
 def require_env(*names: str) -> list[str]:

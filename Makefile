@@ -139,8 +139,7 @@ annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: 
 # Deliberately not part of annotation-export: the nightly cron re-exports every night, and a
 # freeze asserts "these bytes back a published number". It writes configs/eval/freeze.conf;
 # committing that is the operator's step, and the script prints it.
-annotation-freeze: ## Freeze the current export tree + pin it for the eval reports (DATE= RUN_AT= required)
-	@test -n "$(DATE)" && test -n "$(RUN_AT)" || { echo "usage: make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<snapshot run_at>"; exit 2; }
+annotation-freeze: ## Freeze the current export tree + pin it for the eval reports (DATE=/RUN_AT= optional; derived from the export by default)
 	bash scripts/annotation/freeze.sh "$(DATE)" "$(RUN_AT)"
 
 annotation-backup: ## Status-preserving Argilla backup -> argilla_backup/<UTC-ts>/ (read-only)
