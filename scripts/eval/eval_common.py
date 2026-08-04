@@ -65,7 +65,7 @@ ITEM_KEYS: dict[str, tuple[str, ...]] = {
 
 # --- the canonical freeze: one date and one snapshot behind every report number ------
 #
-# The pin is data, not code: it lives in configs/eval/freeze.conf so `make eval-freeze`
+# The pin is data, not code: it lives in configs/eval/freeze.conf so `make annotation-freeze`
 # can write it, leaving only the commit to the operator. Read here rather than in each
 # script so a refresh moves it once. The snapshot is pinned by timestamp, not taken as
 # "the latest": the nightly cron appends one every night, so a report re-run months later
