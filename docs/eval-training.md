@@ -28,29 +28,45 @@ puts it first on `sys.path` so it shadows the installed annotation pragmata, whi
 frozen demo commit with no eval module at all. Nothing new is needed here: the scoring stage
 already resolves the same pin the same way.
 
-**The training extra is not in `uv.lock`, and must not be added to it.**
-`pragmata[eval]` pulls `tlmtc[train]`, which pulls a CUDA build of torch. Two reasons it
-stays out:
+**The training extra is not in `uv.lock`, and the workspace venv cannot train.** This is not a
+policy choice to work around - it is a hard incompatibility. The lock resolves
+`torch 2.12.0+cu130`, which needs CUDA 13, while the GPU host's driver (535.309.01) caps at
+CUDA 12.2. On `ds01` the workspace venv therefore reports:
 
-- `uv.lock` freezes the exact environment behind the published human-label numbers (see the
-  `constraint-dependencies` comment in `pyproject.toml`). Resolving a training stack into it
-  would move packages the alpha bootstrap runs on.
-- The GPU host's driver caps it at CUDA 12.2 (§2.1 of the
-  [implementation guide](implementation-guide.md#21-deployment-inventory)), so the wheel
-  index that works there is not the one this lock resolves against.
+```
+torch: 2.12.0+cu130    built for CUDA: 13.0
+cuda.is_available(): False    device count: 0
+```
 
-So the GPU host installs its own environment, as §10 of the implementation guide already
-states. In that environment:
+...even though `nvidia-smi` shows four A100s. Nor can the lock simply move: it freezes the
+exact environment behind the published human-label numbers (see the `constraint-dependencies`
+comment in `pyproject.toml`), so resolving a training stack into it would move packages the
+alpha bootstrap runs on.
+
+**So training runs in a container, not on the host.** `ds01` is a shared bare-metal box, and
+its own workspace venv is the one described above. Launch a container with a GPU assigned:
+
+```bash
+project-launch --guided     # select the pragmata project, 1 GPU
+```
+
+Inside it, the checkout appears at `/workspace`. Nothing needs adjusting for that - every path
+is resolved from the script's own location via `scripts/lib/workspace.py`, so the `make`
+targets behave identically in the container and on the host. Then build the training
+environment:
 
 ```bash
 uv pip install -e "$PRAGMATA_EVAL_SRC/..[eval]"
 uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu126
 python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-# expect: 2.8.0+cu126 True
+# expect: 2.8.0+cu126 True   <- if this says False, stop; nothing below will use the GPU
 ```
 
 Run the training commands with `PRAGMATA_EVAL_SRC` set the same way it is on the CPU VM. If
 the extra is missing, `make eval-train` exits with that instruction rather than a traceback.
+
+**Check the GPUs are free before claiming one.** The box is shared and other people's jobs run
+on it; `nvidia-smi` shows per-GPU memory and utilisation. Take an idle one.
 
 ## Run order
 
