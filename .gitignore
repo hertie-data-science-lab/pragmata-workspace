@@ -26,6 +26,8 @@ argilla_backup/
 tmp/
 *.log
 .pipeline.lock
+# GPU-container idle-timeout keep-alive; docs/eval-training.md tells operators to create it.
+.keep-alive
 
 # --- python caches ---
 __pycache__/
