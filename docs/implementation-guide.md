@@ -1,4 +1,4 @@
-# pRAGmata implementation guide (Bertelsmann Stiftung)
+# pRAGmata IMPLEMENTATION GUIDE (Bertelsmann Stiftung)
 
 ## 1. Purpose
 
@@ -52,7 +52,7 @@ The `pragmata-workspace` repository is public, so the actual identifier values -
 | **CPU annotation VM** | Ubuntu 22.04 LTS, 4 vCPU, Sweden Central, in the Bertelsmann Stiftung tenant • Working directory: `~/pragmata-workspace` (with the eval-pin `pragmata` checkout as a sibling) • Python: 3.12.13, uv-managed, in `pragmata-workspace/.venv` via `make setup` • Access: SSH key auth as `azureuser`, password auth disabled • Tenant, subscription, resource group and VM name: recorded in the local inventory, as is the ingress path that publishes port 22 (the VM's NICs carry no public IP and no Bastion is visible in its subscription). |
 | **Azure OpenAI** | Key + base URL in `.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`); base-URL format `https://<resource>.openai.azure.com/openai/v1/` • Same tenant, subscription and resource group as the CPU VM; resource and deployment names in the local inventory, the deployment matching the model named in `querygen_specs/_runtime.yaml`.|
 | **Publikationsbot** | Service URL in `.env` (`PUBLIKATIONSBOT_URL`); the production endpoint is an Azure Container App • Auth = an Azure AD bearer, fetched with `az account get-access-token --resource https://graph.microsoft.com`. See `scripts/annotation/run_bot.py`. NB the operator needs `az login` in the tenant and an authorised account • Parallelism in use: `N_PARALLEL_BOTS=4` (`configs/settings.conf`) - more than that caused service instability. |
-| **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • Co-located on the CPU annotation VM (not separately hosted): Docker Compose (project `annotation`) from the `pragmata` checkout's `deploy/annotation/docker-compose.dev.yml`, serving port 6900, with Postgres, Redis and Elasticsearch beside it • State: named Docker volumes on the VM's OS disk • Backups: `argilla_backup/<UTC-timestamp>/` in the workspace, from `make annotation-backup` • **TODO: what is the intended off-box backup destination -> volumes and backups share one OS disk today (on the VM), so when we lose the VM we will lose the annotation database, need BSt's archive process.** |
+| **Argilla** | URL + API key in `.env` (`ARGILLA_API_URL`, `ARGILLA_API_KEY`) • Co-located on the CPU annotation VM (not separately hosted): Docker Compose (project `annotation`) from the `pragmata` checkout's `deploy/annotation/docker-compose.dev.yml`, serving port 6900, with Postgres, Redis and Elasticsearch beside it - how to bring it up is [§3.4](#34-bring-up-the-argilla-instance) • State: named Docker volumes on the VM's OS disk • Backups: `argilla_backup/<UTC-timestamp>/` in the workspace, from `make annotation-backup` • **TODO: what is the intended off-box backup destination -> volumes and backups share one OS disk today (on the VM), so when we lose the VM we will lose the annotation database, need BSt's archive process.** |
 | **Azure Blob Storage** | Account/container/SAS in `.env` (`EVAL_BLOB_*`); container is private and IP-allowlisted; SAS is data-plane only, no `az login` • The SAS is container-scoped and HTTPS-only (and expires mid-2027) **TODO get details of subscription and resource group** |
 | **GPU evaluation host** | A shared bare-metal GPU server in the Hertie Data Science Lab: Ubuntu 22.04.5 LTS (kernel 6.8), 4 × NVIDIA A100-PCIE-40GB, AMD EPYC 7742 (64C/128T), 503 GB RAM, 3.5 TB NVMe • Driver 535.309.01 (NB: this makes CUDA 12.2 the host ceiling). Evaluation runs in containers with runtime (`nvidia-container-toolkit` 1.19.1) • The checkout is shared between users by POSIX ACL, which is why `make setup` exists (see §3.2) |
 
@@ -100,6 +100,61 @@ The committed run settings live in:
   querygen counts (`N_BASELINE`, `N_EDGECASE`) and the IAA bootstrap parameters
 - [`configs/annotation/querygen_specs/`](../configs/annotation/querygen_specs/) - per-domain query instructions, plus `_runtime.yaml` for model/batching/timeout
 - [`configs/annotation/domains/`](../configs/annotation/domains/) - the Argilla workspace/dataset structure, one YAML per domain
+
+### 3.4 Bring up the Argilla instance
+
+Argilla is not a hosted service in this deployment - it is a Docker Compose stack running on the CPU VM itself, and it has to be up before §5 onwards. Nothing in `pragmata-workspace` starts, stops or configures it: the workspace scripts are HTTP clients that read `ARGILLA_API_URL` and `ARGILLA_API_KEY` out of `.env` and talk to whatever is listening there. The stack itself is owned by `pragmata`.
+
+```mermaid
+flowchart LR
+  subgraph ws["pragmata-workspace"]
+    mk["make annotation-setup / -import / -export / -backup<br/>(and pragmata annotation status)"]
+  end
+  subgraph st["Compose project 'annotation' - from the pragmata checkout"]
+    arg["argilla-server :6900"]
+    w[worker]
+    pg[(postgres)]
+    es[(elasticsearch)]
+    rd[(redis)]
+    arg --- w
+    arg --- pg
+    arg --- es
+    arg --- rd
+  end
+  mk -->|"HTTP · ARGILLA_API_URL + ARGILLA_API_KEY"| arg
+```
+
+**Where the stack comes from.** `pragmata` ships the compose file at `deploy/annotation/docker-compose.dev.yml` and drives it from its own `Makefile`. It is a deployment asset rather than pinned Python code, so the eval-pin checkout from §3.1 already carries it - no third clone is needed. Docker Compose v2.20.2+ is required. From that checkout:
+
+    cd ../pragmata-eval
+    cp deploy/annotation/.env.dev.example deploy/annotation/.env    # then edit - see below
+    make docker-up        # profile all-bundled: pull, start, wait for health
+    make docker-status    # every service Up / healthy
+    cd -
+
+That brings up five containers: the Argilla server (v2.8.0) on port 6900, an Argilla worker, Postgres, Elasticsearch and Redis. `--profile all-bundled` (what `make docker-up` uses) runs all three backing services locally; `make docker-up-external-pg`, `-external-es` and `docker-up-external` swap them for services you provide instead.
+
+**Initial Credentials** `deploy/annotation/.env` sets three values the server reads on first boot:
+
+| Variable | What it is |
+| --- | --- |
+| `ARGILLA_USERNAME`, `ARGILLA_PASSWORD` | the Argilla *owner* account, for browser login - the operator's, not an annotator's. Annotator accounts are created later, by `make annotation-setup` ([§7.3](#73-create-workspaces-and-users)) |
+| `ARGILLA_API_KEY` | the server's bootstrap API key - and the same value the workspace `.env` must carry as `ARGILLA_API_KEY` (§3.3), because that is what `pragmata annotation setup\|import\|export\|status` authenticate with |
+
+The shipped values are dev defaults: replace all three before the first `up` on any real deployment. The server keeps the bootstrap key it was first started with, so changing it afterwards is not a value edit - it needs the volumes destroyed and the stack rebuilt (`make docker-down-clean`, `make docker-up`. On the workspace side, set `ARGILLA_API_URL` to this stack's address: `http://localhost:6900` when the two sit on the same VM, as they do here.
+
+**Lifecycle, and what holds the data.** State lives in named Docker volumes on the VM's OS disk - `annotation_argilladata`, `annotation_postgresdata`, `annotation_elasticdata`, `annotation_redisdata`, the prefix being the Compose project name (taken from the compose file's directory, hence `annotation`).
+
+| Command | Effect |
+| --- | --- |
+| `make docker-stop` | pause the containers without removing them |
+| `make docker-down` | stop and remove the containers, **keep** the volumes - safe |
+| `make docker-down-clean` | stop and **delete every volume**: the whole annotation database, irreversibly |
+| `make docker-logs`, `make docker-status` | tail logs; show container health |
+
+Those volumes *are* the annotation database, and they share one disk with the `argilla_backup/` dumps (§2.1) - so take a backup and move it off the box before anything that touches them ([§7.2](#72-back-up-argilla)).
+
+> later we will be implementing pRAGamta native commands, including `pragmata annotation up` as the CLI verb as the eventual end-user entry point for this stack. However, for the pilot, it exists in neither pin so the compose file and the `make docker-*` targets above are the only route today.
 
 ## 4. Confirm the output tree is clean
 
@@ -165,9 +220,13 @@ This exercises Azure OpenAI, Publikationsbot and the combine stage without touch
     data/publikationsbot/*.errors.jsonl
     data/publikationsbot/*.no_retrieval.jsonl
 
-### 5.5 Test Argilla 
+### 5.5 Test Argilla
+
+The stack from [§3.4](#34-bring-up-the-argilla-instance) has to be up - `make docker-status` in the `pragmata` checkout shows it.
 
     .venv/bin/pragmata annotation status     # returns task table, not a connection error
+
+A connection error means the stack is down or `ARGILLA_API_URL` does not point at it; an authentication error means `ARGILLA_API_KEY` disagrees with the key the server was bootstrapped with (§3.4).
 
 ### 5.6 Test Blob Storage
 
