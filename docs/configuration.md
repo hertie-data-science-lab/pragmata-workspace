@@ -18,6 +18,11 @@
   the shipped report numbers; see the comment there before upgrading anything.
 - **Operational tunables** live in `configs/settings.conf` (queries-per-spec, bot
   concurrency, throttle, disk thresholds) - committed.
+- **The canonical freeze pin** lives in `configs/eval/freeze.conf` (`FREEZE_DATE`,
+  `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same
+  "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval
+  report scripts; it is what makes a published number cite one export tree and one log
+  snapshot. See [Eval pipeline](eval.md#the-three-pins).
 - **querygen runtime** (model, reasoning effort, batching) lives in
   `configs/annotation/querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
 - **The domain list** is derived from `configs/annotation/domains/*.yaml` - add a domain by
@@ -147,6 +152,7 @@ specs, and the `reproducibility/` bundle.
 |---|---|---|
 | `data/publikationsbot/*_combined*.jsonl` | large (~52M curated / ~119M full) | fetch the corpus artifact pinned in `reproducibility/.../pins.sha256`, or regenerate via `make pipeline` (querygen is non-deterministic) |
 | `data/annotation/exports/` | annotator **PII** (free-text notes; `annotator_id` is pseudonymised on export) | re-export from live Argilla (`make annotation-export`) |
+| `data/annotation/exports-frozen/<date>/` | same PII, and too large for git; it is the dataset published numbers cite, so it must not be regenerated | `make transfer-pull PREFIX=exports-frozen/<date>` - the bytes are archived in Blob and pinned by hash in the matching `reproducibility/` bundle. A re-export is **not** a substitute: it reads the live database, which has moved on |
 | `argilla_backup/` | large (~250M for the pinned pre-prune snapshot) | that snapshot is an external archive, pinned by `pins.sha256`; the rest are local recovery points, retained per `reproducibility/README.md` |
 | `.env`, `users.json`, `users.secrets.json` | secrets / names | copy the committed `.example` templates and fill in |
 

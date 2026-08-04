@@ -122,35 +122,24 @@ On a fresh deployment this is already true and there is nothing to do here. If a
 
 ## 5. Test the deployment
 
-### 5.0 One-line checks
-
-
-
-| What | Command | A pass looks like |
-| --- | --- | --- |
-| **Python environment** | `.venv/bin/python --version` | `Python 3.12.13` |
-| **`pragmata` installed** | `.venv/bin/pragmata --version` | the pinned version, no import error |
-| **Eval pin checkout** *(only needed if reproducing pilot)* | `git -C ../pragmata-eval rev-parse --short HEAD` | the commit recorded in §3.1 |
-| **GitHub SSH key** *(annotation pin; only needed if repoducing the pilot)* | `ssh -T git@github.com` | greets you by username; exit 1 is normal |
-| **`az` authenticated** (Publikationsbot, catalog) | `az account show --query user.name -o tsv` | your account, not `Please run 'az login'` |
-| **Azure OpenAI** | `curl -s -o /dev/null -w '%{http_code}\n' "$OPENAI_BASE_URL/models" -H "api-key: $OPENAI_API_KEY"` | `200` |
-| **Publikationsbot** | `make bot-probe SPEC=gesundheit` | one answer with retrieved chunks |
-| **Argilla** | `.venv/bin/pragmata annotation status` | the task table, not a connection error |
-| **Blob Storage** | `bash -c 'source scripts/lib/common.sh; az storage blob list --account-name "$EVAL_BLOB_ACCOUNT" --container-name "$EVAL_BLOB_CONTAINER" --sas-token "$EVAL_BLOB_SAS" -o table'` | a listing, empty or not. `403` = the box's egress IP is not on BSt's allowlist; a timeout = outbound 443 blocked |
-| **GPU visible** (in container) | `python -c "import torch; print(torch.cuda.is_available())"` | `True` |
-
-A note on scope: the Blob check is the only one to run on both boxes; the GPU check runs only inside the evaluation container; the Azure OpenAI, Publikationsbot and Argilla checks need to run only on the CPU VM.
+Everything below runs on the CPU VM unless said otherwise: §5.6 is the one check to run on **both** boxes, and §5.7 only applies to the GPU host.
 
 ### 5.1 Check local installation
 
-    .venv/bin/python --version
-    .venv/bin/pragmata --help
+    .venv/bin/python --version         # Python 3.12.13
+    .venv/bin/pragmata --version       # the pinned version, and no import error
     make help
-    make plan                    # preview the pipeline without running it
+    make plan                          # preview the pipeline without running it
+
+Only when reproducing the pilot exactly: `git -C ../pragmata-eval rev-parse --short HEAD` should print the eval-pin commit recorded in §3.1, and `ssh -T git@github.com` should greet you by username (it exits 1 even on success) - the annotation pin is a `git+ssh://` dependency, so without that key the environment cannot be built at all.
 
 ### 5.2 Test question generation
 
-Run one domain with reduced counts (the committed defaults in `settings.conf` are
+Reachability first - anything other than `200` here is a key, base-URL or network problem rather than a pipeline one:
+
+    curl -s -o /dev/null -w '%{http_code}\n' "$OPENAI_BASE_URL/models" -H "api-key: $OPENAI_API_KEY"
+
+Then run one domain with reduced counts (the committed defaults in `settings.conf` are
 production-sized):
 
     N_BASELINE=5 N_EDGECASE=2 make pipeline TO=querygen-run FILTER=gesundheit
@@ -159,9 +148,12 @@ Confirm the query CSVs appear under `data/querygen/runs/`.
 
 ### 5.3 Test Publikationsbot
 
-    make bot-probe SPEC=gesundheit
+Auth is an Azure AD bearer, so an `az login` in the tenant is a prerequisite:
 
-This sends one question and dumps the raw response without writing to the result JSONL. For a limited multi-question test, call the script directly with `--max-per-spec`.
+    az account show --query user.name -o tsv     # your account, not "Please run 'az login'"
+    make bot-probe SPEC=gesundheit               # one answer, with retrieved chunks
+
+`bot-probe` sends one question and dumps the raw response without writing to the result JSONL. For a limited multi-question test, call the script directly with `--max-per-spec`.
 
 ### 5.4 Test the generation flow
 
@@ -175,11 +167,26 @@ This exercises Azure OpenAI, Publikationsbot and the combine stage without touch
     data/publikationsbot/*.no_retrieval.jsonl
 
 ### 5.5 Test Argilla 
-    pragmata annotation status
+
+    .venv/bin/pragmata annotation status     # the task table, not a connection error
 
 ### 5.6 Test Blob Storage
 
-Run the Blob check on **both** boxes - it is the one dependency they share. Background on prerequisites: [Eval data transport](eval-data-transport.md#one-time-setup-on-each-box).
+Run this on **both** boxes - it is the one dependency they share. Background on prerequisites: [Eval data transport](eval-data-transport.md#one-time-setup-on-each-box).
+
+    bash -c 'source scripts/lib/common.sh; az storage blob list \
+      --account-name "$EVAL_BLOB_ACCOUNT" --container-name "$EVAL_BLOB_CONTAINER" \
+      --sas-token "$EVAL_BLOB_SAS" -o table'
+
+A listing, empty or not, is a pass. `403` means the box's egress IP is not on BSt's allowlist; a timeout means outbound 443 is blocked. No `az login` is needed - the SAS is data-plane credentials in their own right.
+
+### 5.7 Test the GPU host
+
+Inside the evaluation container:
+
+    python -c "import torch; print(torch.cuda.is_available())"     # True
+
+The driver caps the usable CUDA version (§2.1), so a `False` here is usually an image/driver mismatch rather than a missing GPU.
 
 ## 6. Generate and review the candidate dataset
 
@@ -315,9 +322,17 @@ The export writes per-task CSVs under `data/annotation/exports/`, one directory 
 
 NB: the export tree is intended to be transient, as it is derived. The export ID is the domain, so the CSVs go to fixed paths and a later export silently replaces that domain's snapshot. The annotations live in Argilla's database and the CSVs are a projection of it, so `make annotation-export` regenerates them. Two caveats:
 
-The archive is the freeze. A dataset behind report numbers is copied to `data/annotation/exports-frozen/<date>/`, write-protected, and pushed to the Blob container. `make repro-pin` then records SHA-256 hashes so drift is detectable - it preserves no bytes. **There is no make target for this**: cutting a freeze is four commands by hand (`chmod u+w` the parent, `cp`, `chmod -R a-w` the new dir, `chmod a-w` the parent), and it is not live until `FREEZE_DATE` and `CANONICAL_SNAPSHOT_RUN_AT` in `scripts/eval/eval_common.py` are updated and committed. The step order matters: [Eval pipeline](eval.md#cutting-a-new-freeze).
+The archive is the freeze. A dataset behind report numbers is copied to `data/annotation/exports-frozen/<date>/`, write-protected, and pushed to the Blob container:
 
-> **"Freeze" means two things here.** An *export* freeze is the write-protected `exports-frozen/<date>/` copy above, made by hand. A *bundle* freeze is `make repro-pin KIND=freeze`, which only marks a reproducibility bundle as a self-contained record that `repro-reproduce` never replays (as against `KIND=lineage`). `KIND=freeze` does not cut an export freeze.
+    make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<the run_at of the paired log snapshot>
+
+Everything in it is a guard until the copy: clean working tree (the provenance files cite a commit), no freeze under that date already, `RUN_AT` really present in `logs/annotation/log.jsonl`, and no real names left in `exports/` - the same check `transfer-push` runs, moved ahead of the point where an immutable published copy exists. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups.
+
+**The freeze is not live until that pin is committed**, and the target deliberately stops there: a script must not make that commit, because provenance files name the commit they were generated at and history must not be rewritten afterwards. Until it is committed, another checkout still resolves the old date - which is why the report scripts refuse to run when the pin is not the newest freeze on disk. The step order matters: [Eval pipeline](eval.md#cutting-a-new-freeze).
+
+**The freeze and the bundle are separate on purpose, and cannot be merged.** The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`, answering "what exactly did we publish from". The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git, answering "has any of it drifted since". A freeze without a pin cannot be shown to be unedited; a pin without a freeze detects drift with nothing to restore. They cannot be one step because the bundle pins inputs **and** outputs together (`reproducibility/2026-07-31-eval-report/pins.sha256` holds 52 entries: 41 frozen export files plus the 11 report CSVs and their sidecars), and the outputs do not exist until the report targets have run. So `annotation-freeze` prints the `repro-pin` command rather than running it.
+
+> **"Freeze" means two things here.** An *export* freeze is the write-protected `exports-frozen/<date>/` copy above, cut by `make annotation-freeze`. A *bundle* freeze is `make repro-pin KIND=freeze`, which only marks a reproducibility bundle as a self-contained record that `repro-reproduce` never replays (as against `KIND=lineage`). `KIND=freeze` does not cut an export freeze.
 
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
@@ -346,9 +361,11 @@ Scoring human-annotated labels runs on the CPU VM. Three targets produce the rep
     make eval-score      # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog    # corpus_catalog.csv (needs an active `az login`)
 
-They read pinned inputs, never the live export tree; the pin model, the vocabulary and the
-refresh procedure are in [Eval pipeline](eval.md), and every column of every CSV is defined
-in the [data dictionary](eval-data-dictionary.md).
+They read pinned inputs, never the live export tree, and refuse to run at all if the pin in
+`configs/eval/freeze.conf` is not the newest freeze on disk - so a freeze cut without moving
+the pin fails loudly instead of publishing the previous dataset. The pin model, the
+vocabulary and the refresh procedure are in [Eval pipeline](eval.md), and every column of
+every CSV is defined in the [data dictionary](eval-data-dictionary.md).
 
 **Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.**
 `pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` (default
