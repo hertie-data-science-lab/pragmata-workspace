@@ -23,14 +23,19 @@ Training and prediction live in `pragmata` (`pragmata eval train-evaluator|predi
 report is assembled from the scored deliverables and the evaluator's predictions in a
 separate private repository, outside this workspace.
 
+> **Start here: the [IMPLEMENTATION GUIDE](docs/implementation-guide.md).** It walks the whole
+> pipeline end to end - produce, annotate and evaluate a dataset from a fresh machine - and
+> cross-references out to the topic docs for detail. The rest of this README is reference for
+> readers who already know the shape of the pipeline.
+
 ## Setup
 
 Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
-`make setup` and fill in the local configuration. The full procedure - what `make setup`
-does, why it is preferred over a bare `uv sync`, the GitHub SSH key the pinned dependency
-needs, and every file to copy and complete - is
-[implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration).
-Variable definitions and file formats are in [Configuration](docs/configuration.md).
+`make setup` and fill in the local configuration. The full procedure is
+[implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration);
+variable definitions and file formats are in [Configuration](docs/configuration.md); and the
+pilot's own identifiers and env values are in the git-excluded
+`docs/deployment-inventory.local.md`.
 
 Then `make help` lists the targets; preview a run with `make plan`.
 
@@ -93,8 +98,9 @@ make help                      # list every target
 
 ## Documentation
 
-- [Implementation guide](docs/implementation-guide.md) - the end-to-end handover walkthrough:
-  produce, annotate and evaluate a new dataset from a fresh machine.
+- **[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end
+  handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine.
+  Everything below is reference detail it cross-references.
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
 - [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
