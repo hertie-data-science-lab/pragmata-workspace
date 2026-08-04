@@ -397,7 +397,17 @@ They read pinned inputs (the `make annotation-freeze` outputs), never the live e
       --evaluator-run-id <run-id-from-training> \
       --task <retrieval|grounding|generation>
 
-**TODO come back to this**
+**Training has a project-side procedure; prediction does not yet.**
+
+For training, use the workspace targets rather than the bare CLI above - they carry the recommended configuration per task, pool the frozen export into the staged input, and resolve the eval pragmata pin:
+
+    make eval-train-inputs                  # frozen export -> data/eval-inputs/training/<task>.csv
+    make eval-train-seqlen                  # diagnostic: sequence-length truncation per task
+    make eval-train TASK=retrieval          # then grounding (2+ hours), then generation
+
+The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Eval training](eval-training.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
+
+For prediction, the CLI above is still the only route - there is no target, no staging convention for the unlabelled side, and no tested procedure. `score_synthetic_predictions.py` is the reserved name for scoring its output and is deliberately not stubbed.
 
 The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
 

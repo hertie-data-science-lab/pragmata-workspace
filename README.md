@@ -15,10 +15,10 @@ flowchart LR
   tr --> rep
 ```
 
-Training and prediction live in `pragmata`
-(`pragmata eval train-evaluator|predict-labels`, `tlmtc`-backed) and run on the GPU box; what
-is still open there is the *project-side* procedure - the commit, config files and accepted
-commands - see
+Training and prediction live in `pragmata` (`pragmata eval train-evaluator|predict-labels`,
+`tlmtc`-backed) and run on the GPU box. **Training** has a project-side procedure -
+`make eval-train TASK=<task>`, one recommended configuration per task, in
+[Eval training](docs/eval-training.md). **Prediction** does not yet: see
 [implementation guide §10](docs/implementation-guide.md#10-run-the-evaluation). The final
 report is assembled from the scored deliverables and the evaluator's predictions in a
 separate private repository, outside this workspace.
@@ -73,6 +73,11 @@ make eval-report               # annotation_operations, annotation_label_summary
 make eval-score                # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
 
+# Eval training  (the synthetic evaluators; GPU host - see docs/eval-training.md)
+make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
+make eval-train-seqlen         # diagnostic: sequence-length truncation per task
+make eval-train                # train one evaluator (TASK= required; grounding is 2+ hours)
+
 # Data transport  (see docs/eval-data-transport.md)
 make transfer-push             # push a tree to the Blob             (SRC= source, PREFIX= dest; both required)
 make transfer-pull             # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
@@ -93,7 +98,10 @@ make help                      # list every target
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
 - [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
-  pseudonymisation, and the refresh runbook; train/predict have no workspace glue yet.
+  pseudonymisation, and the refresh runbook; prediction has no workspace glue yet.
+- [Eval training](docs/eval-training.md) - training the synthetic evaluators: the recommended
+  config per task, why the training extra stays out of the lock, and what was tried and
+  rejected.
 - [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
