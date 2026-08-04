@@ -78,11 +78,24 @@ cd ~
 curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=$HOME/.local/bin:$PATH
 uv venv --python 3.12 ~/train-venv          # the base image ships 3.10; pragmata needs 3.12
 uv pip install --no-config --python ~/train-venv/bin/python \
-    torch==2.8.0 --index-url https://download.pytorch.org/whl/cu126
-uv pip install --no-config --python ~/train-venv/bin/python -r /workspace/configs/eval/train-requirements.txt
+    torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --no-config --python ~/train-venv/bin/python \
+    -r /workspace/configs/eval/train-requirements.txt
 ~/train-venv/bin/python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-# expect: 2.8.0+cu126 True   <- if this says False, stop; nothing below will use the GPU
+# expect: 2.9.1+cu128 True   <- if this says False, stop; nothing below will use the GPU
 ```
+
+**torch goes first, and from the cu128 index.** Installing `tlmtc[train]` first pulls the
+default PyPI torch, which is a cu130 build the driver cannot use - the smoke test then says
+`False` and nothing trains. The full transitive pin set is
+[`configs/eval/train-requirements.txt`](../configs/eval/train-requirements.txt), 153 packages
+frozen from a verified container.
+
+Two notes on the version. cu128 wheels run on a CUDA 12.2 driver through CUDA 12.x
+minor-version compatibility - verified on `ds01`, real GPU matmul included. And 2.9 is the
+floor `tlmtc[train]` declares (`torch<3.0,>=2.9`): the `torch==2.8.0` in the original handover
+notes silently violated that, which would surface as an obscure failure only once tlmtc reached
+an API added in 2.9 - potentially hours into the grounding run.
 
 The `make` targets default to `.venv/bin/python`, which inside the container is the *host's*
 venv and cannot train. Point them at the training venv per run:
