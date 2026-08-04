@@ -76,12 +76,17 @@ python3 "$WORKSPACE_ROOT/scripts/lib/check_pseudonymised.py" "$SRC" \
 
 section "freeze: annotation/exports -> annotation/exports-frozen/$DATE"
 mkdir -p "$FROZEN_ROOT"
-chmod u+w "$FROZEN_ROOT" || fatal "cannot unlock ${FROZEN_ROOT#"$WORKSPACE_ROOT"/} to write into it"
-cp -r "$SRC" "$DEST" || { chmod a-w "$FROZEN_ROOT"; fatal "copy failed: $SRC -> $DEST"; }
-# The new tree first, then the parent: the parent's own write bit is what stops a stray cp
-# from landing another freeze beside this one.
+# The parent is meant to be write-protected — that is what stops a stray cp landing a
+# second tree beside a published freeze. So unlock it only if it is genuinely locked:
+# chmod needs ownership, and in a checkout shared by POSIX ACL these dirs can belong to
+# another user while still being group-writable to us.
+[[ -w "$FROZEN_ROOT" ]] || chmod u+w "$FROZEN_ROOT" 2>/dev/null \
+  || fatal "cannot write into ${FROZEN_ROOT#"$WORKSPACE_ROOT"/}: not writable, and owned by $(stat -c %U "$FROZEN_ROOT")"
+cp -r "$SRC" "$DEST" || { chmod a-w "$FROZEN_ROOT" 2>/dev/null; fatal "copy failed: $SRC -> $DEST"; }
+# The new tree first, then the parent.
 chmod -R a-w "$DEST" || warn "could not write-protect ${DEST#"$WORKSPACE_ROOT"/}"
-chmod a-w "$FROZEN_ROOT" || warn "could not re-protect ${FROZEN_ROOT#"$WORKSPACE_ROOT"/}"
+chmod a-w "$FROZEN_ROOT" 2>/dev/null \
+  || warn "${FROZEN_ROOT#"$WORKSPACE_ROOT"/} stays writable (owned by $(stat -c %U "$FROZEN_ROOT")) — a stray copy could still land beside this freeze"
 log "froze $(find "$DEST" -type f | wc -l) files into ${DEST#"$WORKSPACE_ROOT"/} (read-only)"
 
 # --- the pin: written whole, so a re-freeze diffs as two changed values ---
