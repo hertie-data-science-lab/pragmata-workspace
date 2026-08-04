@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -93,6 +94,14 @@ def _pragmata_eval():
         import pragmata.api.eval as eval_api
         from pragmata.core.schemas.annotation_task import Task
     except ImportError:
+        # The failed attempt left the ANNOTATION pin's `pragmata` package cached in
+        # sys.modules. Adding the eval src to sys.path cannot dislodge it - the retry would
+        # resolve against the stale package object and fail identically - so drop the
+        # partially-imported tree first.
+        for name in [
+            n for n in sys.modules if n == "pragmata" or n.startswith("pragmata.")
+        ]:
+            del sys.modules[name]
         pin = ws.eval_pragmata()
         src = str(pin.src)
         if sys.path[0] != src:
@@ -358,6 +367,40 @@ def check_sequence_length() -> int:
     return 0
 
 
+def _require_gpu(config: dict) -> None:
+    """Refuse to start a run whose interpreter cannot see a GPU.
+
+    Checked here rather than left to fail later, because every way of getting this wrong
+    surfaces a long way from its cause:
+
+    - Inside the container the `make` default is `.venv/bin/python`, which is the HOST's venv
+      on the mounted workspace. Its torch is a cu130 build the driver cannot use, so
+      is_available() is False even though nvidia-smi shows four A100s. Pass
+      PY=<training venv>/bin/python.
+    - On the host itself, GPU compute is disabled by site policy (CUDA_VISIBLE_DEVICES is
+      blanked), so no interpreter there can train regardless of its torch.
+
+    Left to itself, the first symptom is a CUDA error raised inside tlmtc's Trainer setup -
+    for grounding, potentially after a long tokenisation pass. `use_cpu: true` is honoured as
+    a deliberate escape hatch, though nothing in configs/eval/training/ sets it.
+    """
+    if config.get("train_kwargs", {}).get("use_cpu"):
+        return
+    import torch
+
+    if torch.cuda.is_available():
+        return
+    raise SystemExit(
+        f"this interpreter cannot see a GPU: torch {torch.__version__}, "
+        f"cuda.is_available() False.\n"
+        f"  CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')!r}\n"
+        "  Inside the training container, point make at the training venv:\n"
+        "    make eval-train TASK=<task> PY=~/train-venv/bin/python\n"
+        "  On the GPU host outside a container, compute is disabled by site policy - launch a\n"
+        "  container first. See docs/eval-training.md."
+    )
+
+
 def train(task: str, threshold_type: str | None = None) -> int:
     """Train one task's evaluator at its committed configuration.
 
@@ -390,6 +433,8 @@ def train(task: str, threshold_type: str | None = None) -> int:
             f"grounding labels narrowed to: {', '.join(GROUNDING_TRAIN_LABELS)}",
             file=sys.stderr,
         )
+
+    _require_gpu(config)
 
     csv_path = _training_csv(task)
     print(
