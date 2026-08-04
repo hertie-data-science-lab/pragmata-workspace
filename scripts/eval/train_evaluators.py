@@ -70,22 +70,46 @@ GROUNDING_TRAIN_LABELS = (
 
 
 def _pragmata_eval():
-    """Import the eval pin's pragmata API, or exit saying how to get one.
+    """The pragmata eval API, from wherever this environment has it.
 
-    Shadows the installed annotation pragmata - a frozen demo commit with no eval module -
-    by putting the pin's src first on sys.path, the in-process equivalent of the PYTHONPATH
-    that score_human_annotations.py hands its subprocess. Imported through here rather than
-    at module scope so `--help` and `combine` cost nothing.
+    Two environments reach this, and they supply eval differently:
+
+    - The CPU VM has ONE venv running both stages, where the installed pragmata is the
+      annotation pin - a frozen commit with no eval module at all. Eval therefore comes from
+      the PRAGMATA_EVAL_SRC checkout, shadowed onto sys.path; the in-process equivalent of the
+      PYTHONPATH score_human_annotations.py hands its subprocess.
+    - The GPU host trains inside a container against its own venv, where pragmata[eval] is
+      installed outright from configs/eval/training/requirements.txt. There is only one
+      pragmata there, so there is nothing to shadow, and PRAGMATA_EVAL_SRC generally does not
+      even exist inside the container - only the workspace is mounted.
+
+    So try the plain import first and shadow only if it has no eval module. Which one answered
+    is printed rather than inferred: silently training against a different commit than the one
+    a run claims is the failure this ordering could otherwise hide.
+
+    Imported through here rather than at module scope so `--help` and `combine` cost nothing.
     """
-    pin = ws.eval_pragmata()
-    src = str(pin.src)
-    if sys.path[0] != src:
-        sys.path.insert(0, src)
     try:
         import pragmata.api.eval as eval_api
         from pragmata.core.schemas.annotation_task import Task
-    except ImportError as exc:
-        raise SystemExit(f"cannot import the eval API from {pin.src}: {exc}") from exc
+    except ImportError:
+        pin = ws.eval_pragmata()
+        src = str(pin.src)
+        if sys.path[0] != src:
+            sys.path.insert(0, src)
+        try:
+            import pragmata.api.eval as eval_api
+            from pragmata.core.schemas.annotation_task import Task
+        except ImportError as exc:
+            raise SystemExit(
+                f"cannot import the eval API from {pin.src}: {exc}\n"
+                "  On the GPU host, install pragmata[eval] from\n"
+                "  configs/eval/training/requirements.txt instead - see docs/eval-training.md."
+            ) from exc
+
+    print(
+        f"pragmata eval API: {Path(eval_api.__file__).parent.parent}", file=sys.stderr
+    )
     return eval_api, Task
 
 
