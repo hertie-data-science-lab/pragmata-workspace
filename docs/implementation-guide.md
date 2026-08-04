@@ -117,7 +117,7 @@ Before running anything, confirm the tree is clean:
     ls data/publikationsbot      # should hold only .gitkeep
     make plan                    # should list the full stage sequence for every domain in scope
 
-On a fresh deployment this is already true and there is nothing to do here. If an earlier run's output is still in the tree, archive and clear it first ([§11.3](#113-clear-the-tree-for-the-next-run)).
+On a fresh deployment this is already true and there is nothing to do here. If an earlier run's output is still in the tree, archive and clear it first ([§11.2](#112-archive-the-completed-run)) - and do not delete an earlier run until its data, configuration, logs and checksums are archived and that archive has been verified.
 
 ## 5. Test the deployment
 
