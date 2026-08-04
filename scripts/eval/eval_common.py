@@ -18,6 +18,8 @@ Import with the same preamble the annotation scripts use::
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -63,12 +65,40 @@ ITEM_KEYS: dict[str, tuple[str, ...]] = {
 
 # --- the canonical freeze: one date and one snapshot behind every report number ------
 #
-# Both live here rather than in each script so a refresh moves them once. The snapshot is
-# pinned by timestamp, not taken as "the latest": the nightly cron appends one every
-# night, so a report re-run months later must still read the line it was built from.
-FREEZE_DATE = "2026-07-30"
+# The pin is data, not code: it lives in configs/eval/freeze.conf so `make eval-freeze`
+# can write it, leaving only the commit to the operator. Read here rather than in each
+# script so a refresh moves it once. The snapshot is pinned by timestamp, not taken as
+# "the latest": the nightly cron appends one every night, so a report re-run months later
+# must still read the line it was built from.
+FREEZE_CONF = ws.ROOT / "configs" / "eval" / "freeze.conf"
+
+
+def _freeze_pin(key: str) -> str:
+    """One key from configs/eval/freeze.conf, or exit saying what is missing.
+
+    Loaded into the environment rather than parsed here, reusing the loader that already
+    reads settings.conf and .env - which also means an env var of the same name wins, the
+    escape hatch a scratch run needs.
+    """
+    if not FREEZE_CONF.exists():
+        raise SystemExit(
+            f"missing {FREEZE_CONF.relative_to(ws.ROOT)} - it pins the canonical freeze.\n"
+            "  Cut one with `make annotation-freeze DATE=<date> RUN_AT=<run_at>`, or restore\n"
+            "  the file from git. See docs/eval.md."
+        )
+    value = os.environ.get(key, "").strip()
+    if not value:
+        raise SystemExit(
+            f"{key} is unset or empty in {FREEZE_CONF.relative_to(ws.ROOT)}.\n"
+            "  Both FREEZE_DATE and CANONICAL_SNAPSHOT_RUN_AT are required."
+        )
+    return value
+
+
+ws.load_dotenv(FREEZE_CONF)  # existing env wins, as with settings.conf
+FREEZE_DATE = _freeze_pin("FREEZE_DATE")
+CANONICAL_SNAPSHOT_RUN_AT = _freeze_pin("CANONICAL_SNAPSHOT_RUN_AT")
 FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
-CANONICAL_SNAPSHOT_RUN_AT = "2026-07-30T12:41:38.450281+00:00"
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
@@ -115,15 +145,66 @@ def out_dir(explicit: Path | None) -> Path:
     return ws.stage_report_dir("eval", explicit)
 
 
+FREEZE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def newest_freeze() -> str | None:
+    """The newest dated dir under exports-frozen/, or None if there is none.
+
+    The names are ISO dates, so lexical order is chronological. Anything else there is
+    ignored: annotation-freeze refuses such a name, and a stray directory must not be able
+    to make a current pin look stale.
+    """
+    root = FROZEN_EXPORTS.parent
+    if not root.is_dir():
+        return None
+    dated = sorted(
+        p.name for p in root.iterdir() if p.is_dir() and FREEZE_DIR_RE.match(p.name)
+    )
+    return dated[-1] if dated else None
+
+
+def check_freeze_current() -> None:
+    """Refuse to read the canonical freeze while a newer one sits on disk.
+
+    A MISSING freeze already fails loudly (`no such export tree` below). A STALE pin does
+    not: cut a new freeze, leave the pin on the old one, and every report silently
+    publishes the previous dataset. It stays auditable afterwards - each
+    .provenance.json hashes its inputs - but nothing stopped it at the time.
+
+    `make annotation-freeze` writes the pin itself, so this catches what the target
+    cannot: a hand-edited freeze.conf, a freeze cut without the target, and - most likely
+    - a freeze.conf written but never committed, so another checkout still resolves the
+    old date.
+    """
+    newest = newest_freeze()
+    if newest is None or newest == FREEZE_DATE:
+        return
+    raise SystemExit(
+        f"stale freeze pin: {FREEZE_CONF.relative_to(ws.ROOT)} names {FREEZE_DATE}, but "
+        f"{newest} is the newest freeze on disk.\n"
+        "  A report built from the older tree would publish the previous dataset. Either\n"
+        "  move the pin (`make annotation-freeze` writes it - and commit it), or pass\n"
+        "  --exports explicitly to read a non-canonical tree on purpose."
+    )
+
+
 def programmes(exports: Path) -> list[str]:
     """Programme slugs present in an export tree, sorted, minus the excluded set.
 
     Read from the tree rather than configs/annotation/domains/ so a programme with an
     export but no config (or vice versa) surfaces as a mismatch instead of being
     silently dropped. EXCLUDED_PROGRAMMES is the one deliberate omission.
+
+    Also where the freeze pin is checked for staleness, because all three report scripts
+    pass through here. Gated on the tree actually BEING the canonical freeze rather than
+    on --exports having been omitted: the same bytes must behave the same way however the
+    path was spelled, so no wrapper can disable the guard by passing the default.
     """
     if not exports.is_dir():
         raise SystemExit(f"no such export tree: {exports}")
+    if exports.resolve() == FROZEN_EXPORTS.resolve():
+        check_freeze_current()
     return sorted(
         p.name
         for p in exports.iterdir()

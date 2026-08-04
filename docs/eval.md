@@ -39,8 +39,9 @@ Every report number is derived from pinned inputs, so a re-run months later read
 what the original run read:
 
 1. **The frozen export tree** - `data/annotation/exports-frozen/<FREEZE_DATE>/`, a read-only
-   (`chmod -R a-w`) copy of one night's export. The live `data/annotation/exports/` is
-   overwritten by the 02:00 cron and is never read by the report scripts.
+   (`chmod -R a-w`) copy of one night's export, cut by `make annotation-freeze`. The live
+   `data/annotation/exports/` is overwritten by the 02:00 cron and is never read by the
+   report scripts.
 2. **The canonical log snapshot** - one line of `logs/annotation/log.jsonl`, selected by its
    `run_at` timestamp (not "the latest") and pinned by the sha256 of that single line; the
    log is append-only, so a whole-file hash would change nightly and pin nothing.
@@ -56,8 +57,14 @@ what the original run read:
    that produced these numbers, `numpy`/`scipy` included, since the alpha bootstrap runs
    on them. See the `constraint-dependencies` comment in `pyproject.toml`.
 
-The first two are constants in `scripts/eval/eval_common.py` (`FREEZE_DATE`,
-`CANONICAL_SNAPSHOT_RUN_AT`) - one place, so a refresh moves them once. The current freeze
+The first two are `FREEZE_DATE` and `CANONICAL_SNAPSHOT_RUN_AT` in
+[`configs/eval/freeze.conf`](../configs/eval/freeze.conf) - the pin as data rather than as
+code, so `make annotation-freeze` writes it and the operator only commits it.
+`eval_common.py` reads that file, so a refresh moves the pin once for all three scripts.
+The scripts also **refuse to run when the pin is not the newest freeze on disk**: a stale
+pin would otherwise publish the previous dataset in silence, which is the one failure in
+this chain that is not loud (a *missing* freeze raises `no such export tree`). Pass
+`--exports` to read a non-canonical tree on purpose. The current freeze
 is recorded in [`reproducibility/2026-07-31-eval-report/`](../reproducibility/2026-07-31-eval-report/),
 whose README names the exact pragmata pin commit. It pins the same export tree as
 `2026-07-30-eval-report/`, which it supersedes: the export did not move, the report schema
@@ -73,8 +80,10 @@ every export before that date carried real names in every task CSV and in the
 - `scripts/annotation/pseudonymize_export.py` runs as part of every export (`export.sh`,
   fatal on failure) and rewrites both surfaces to the annotator's Argilla user id - stable
   across exports, so cross-snapshot comparison still works.
-- `transfer-push` independently refuses to upload any tree whose `annotator_id` values or
-  IAA pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot leave the box.
+- `transfer-push` and `annotation-freeze` independently refuse any tree whose `annotator_id`
+  values or IAA pairwise keys are not UUIDs, so a tree that skipped the rewrite can neither
+  leave the box nor be immortalised in a freeze. One check, `scripts/lib/check_pseudonymised.py`,
+  at both boundaries.
 
 The rewrite is forward-only: `exports-frozen/2026-07-29/` predates it, still holds names,
 and stays local. Exports still count as PII either way - the free-text `notes` and
@@ -99,11 +108,16 @@ not interleave. The sequence that works:
    after generating the provenance files - they would name a commit that no longer exists.
 2. **Take the export and snapshot**: `make annotation-export` (pseudonymises as it goes),
    then `make annotation-log`; note the new snapshot's `run_at`.
-3. **Freeze the export tree.** The `exports-frozen/` parent is write-protected:
-   `chmod u+w` the parent, copy `exports/` to `exports-frozen/<date>/`, `chmod -R a-w` the
-   new dir, `chmod a-w` the parent again.
-4. **Move the pins**: update `FREEZE_DATE` and `CANONICAL_SNAPSHOT_RUN_AT` in
-   `eval_common.py`, commit.
+3. **Freeze the tree and write the pin**:
+   `make annotation-freeze DATE=<date> RUN_AT=<the run_at from step 2>`. Everything is a
+   guard until the copy - clean working tree, no freeze under that date already, `RUN_AT`
+   really present in the log, no real names left in `exports/` - and only then does it make
+   the read-only dated copy (`chmod u+w` parent, copy, `chmod -R a-w` the new dir,
+   `chmod a-w` the parent again) and write `configs/eval/freeze.conf`.
+4. **Commit the pin.** The target stops one step short on purpose: a script must not make
+   this commit, because step 1 forbids rewriting history once provenance files name a
+   commit. Until it is committed, another checkout still resolves the old date - which is
+   what the staleness guard above catches.
 5. **Regenerate everything on the clean tree**: `make eval-report eval-score eval-catalog`.
    A re-run rewrites them, so this must happen after the last code commit.
 6. **Re-pin the bundle.** `repro-pin` refuses a pre-existing bundle dir and `pins.sha256`
@@ -121,7 +135,7 @@ be **re-derived** under the new pin, not assumed to carry over.
 `pragmata eval train-evaluator|predict-labels` are implemented in the pragmata repo, behind
 the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), and run on the GPU box against staged
 export CSVs. What does not exist is the workspace side: no make targets, no eval configs
-(`configs/eval/` holds only a stub README), no tested procedure - see
+(`configs/eval/` holds the freeze pin and nothing else), no tested procedure - see
 [implementation guide §10](implementation-guide.md#10-run-the-evaluation) for the open list.
 When that glue lands it mirrors the annotation pipeline (`scripts/eval/` ↔
 `scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and writes to `data/eval/`.

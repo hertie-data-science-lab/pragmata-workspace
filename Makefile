@@ -36,8 +36,9 @@
 #   make eval-report                       # the two annotation tables + the retrieval manifest
 #   make eval-score                        # the corpus metric estimates
 #   make eval-catalog                      # the corpus catalog for the fairness audit
-# All three read the frozen canonical export and the snapshot pinned in
-# scripts/eval/eval_common.py. See docs/eval-data-dictionary.md for what the columns mean.
+# All three read the frozen canonical export and the log snapshot pinned in
+# configs/eval/freeze.conf, which `make annotation-freeze` writes. See
+# docs/eval-data-dictionary.md for what the columns mean.
 #
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
 # it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
@@ -80,7 +81,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
 .PHONY: pipeline plan \
         querygen-run bot-run bot-probe combine-run \
         annotation-setup annotation-import \
-        annotation-log annotation-export annotation-daily \
+        annotation-log annotation-export annotation-daily annotation-freeze \
         annotation-backup annotation-restore \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
@@ -134,6 +135,13 @@ annotation-export: ## Export current annotations to per-task CSVs (DOMAIN= to fi
 
 annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make annotation-report)
 	bash scripts/daily.sh
+
+# Deliberately not part of annotation-export: the nightly cron re-exports every night, and a
+# freeze asserts "these bytes back a published number". It writes configs/eval/freeze.conf;
+# committing that is the operator's step, and the script prints it.
+annotation-freeze: ## Freeze the current export tree + pin it for the eval reports (DATE= RUN_AT= required)
+	@test -n "$(DATE)" && test -n "$(RUN_AT)" || { echo "usage: make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<snapshot run_at>"; exit 2; }
+	bash scripts/annotation/freeze.sh "$(DATE)" "$(RUN_AT)"
 
 annotation-backup: ## Status-preserving Argilla backup -> argilla_backup/<UTC-ts>/ (read-only)
 	$(PY) scripts/annotation/argilla_backup.py dump
