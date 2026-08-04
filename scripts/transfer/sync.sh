@@ -45,49 +45,10 @@ cmd_push() {
 
   # Pseudonymity boundary. This is the edge past which data leaves the box, so the
   # no-real-names invariant is enforced here, not only in the exporter that writes the
-  # tree (export.sh runs pseudonymize_export.py, but a killed export or a hand-placed
-  # tree never went through it). Any CSV carrying an annotator_id column and any
-  # iaa/report.json pairwise key must hold UUIDs only; trees without those surfaces
-  # (predictions, checkpoints) pass untouched. Offending values are never echoed.
-  python3 - "$src" <<'PYEOF' || fatal "refusing to push $src: it carries non-pseudonymised annotator identities"
-import csv, json, sys, uuid
-from pathlib import Path
-
-def ok(value):
-    if not value:
-        return True
-    try:
-        uuid.UUID(str(value))
-    except ValueError:
-        return False
-    return True
-
-bad = []
-root = Path(sys.argv[1])
-for p in sorted(root.rglob("*.csv")):
-    with p.open(newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if not reader.fieldnames or "annotator_id" not in reader.fieldnames:
-            continue
-        if not all(ok(row.get("annotator_id")) for row in reader):
-            bad.append(p)
-for p in sorted(root.rglob("iaa/report.json")):
-    report = json.loads(p.read_text())
-    pairs = [
-        pair
-        for block in report.get("tasks") or []
-        for pair in block.get("pairwise_kappa") or []
-    ]
-    if not all(ok(pair.get(k)) for pair in pairs for k in ("annotator_a", "annotator_b")):
-        bad.append(p)
-if bad:
-    print(
-        "non-pseudonymised annotator identities in: "
-        + ", ".join(str(p) for p in bad),
-        file=sys.stderr,
-    )
-    sys.exit(1)
-PYEOF
+  # tree. The check itself is shared with annotation-freeze, the other boundary that must
+  # not immortalise a name — see scripts/lib/check_pseudonymised.py.
+  python3 "$WORKSPACE_ROOT/scripts/lib/check_pseudonymised.py" "$src" \
+    || fatal "refusing to push $src: it carries non-pseudonymised annotator identities"
 
   local manifest; manifest="$(mktemp)"
   trap 'rm -f "$manifest"' RETURN
