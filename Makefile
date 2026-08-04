@@ -206,12 +206,13 @@ eval-train-inputs: ## Eval training: pool the frozen export per task -> data/eva
 eval-train-seqlen: ## Eval training: diagnostic, how much of each task's input the default sequence_length truncates
 	$(PY) scripts/eval/train_evaluators.py check-sequence-length
 
-# TASK is the whole interface on purpose: each task has one recommended config, pinned in the
-# script rather than passed here, because the three are not interchangeable knobs.
+# TASK is the whole interface on purpose: each task's configuration is pinned in
+# configs/eval/training/<task>.yaml, not passed here, because the three are not
+# interchangeable knobs. THRESHOLD_TYPE overrides that pin for one run.
 eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<run_id>/ (TASK=retrieval|grounding|generation; grounding is 2+ hours)
 	@case "$(TASK)" in retrieval|grounding|generation) ;; *) \
 	  echo "usage: make eval-train TASK=retrieval|grounding|generation"; exit 2 ;; esac
-	$(PY) scripts/eval/train_evaluators.py train-$(TASK) $(if $(THRESHOLD_TYPE),--threshold-type $(THRESHOLD_TYPE),)
+	$(PY) scripts/eval/train_evaluators.py train $(TASK) $(if $(THRESHOLD_TYPE),--threshold-type $(THRESHOLD_TYPE),)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---

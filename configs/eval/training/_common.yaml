@@ -1,0 +1,34 @@
+# Shared evaluator-training config.
+# Deep-merged with each per-task YAML by scripts/eval/train_evaluators.py before the values
+# reach pragmata's EvalTrainSettings. Task values win on conflict.
+# Leading underscore keeps this file out of the <task>.yaml glob, matching
+# configs/annotation/querygen_specs/_runtime.yaml.
+#
+# These are pins, not operator knobs: every published metric was produced at these values.
+# Changing one invalidates comparison with the numbers in the eval report, so change it
+# deliberately and re-run all three tasks. See docs/eval-training.md.
+
+# Base model. mmBERT is pragmata's own default and beat answerdotai/ModernBERT-base on every
+# task tested, most sharply on grounding, where it was part of what made training possible at
+# all. The exports are substantially German, which is the likely reason a multilingual base
+# wins. Stated explicitly rather than relied on as a default, so a pin change upstream shows
+# up here as a conflict rather than silently moving the model.
+checkpoint: jhu-clsp/mmBERT-base
+proxy_checkpoint: jhu-clsp/mmBERT-small
+
+train_kwargs:
+  # GPU-only: the training extra is not in uv.lock and the CPU VM cannot run this at all.
+  use_cpu: false
+
+  # Half the data trains, a quarter validates, a quarter tests. The seed makes a split
+  # reproducible; every published number used 42.
+  validation_size: 0.25
+  test_size: 0.25
+  random_seed: 42
+
+  # 40 epochs with patience 15 - in practice every run stopped early, so the ceiling is a
+  # guard rather than a target.
+  train_epochs: 40
+  early_stopping_patience: 15
+
+  verbosity: quiet

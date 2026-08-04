@@ -1,0 +1,25 @@
+# Retrieval evaluator - the strongest result of the three, and the only one to trust outright.
+# Deep-merged over _common.yaml. See docs/eval-training.md.
+
+task: retrieval
+
+# Left at pragmata's default. Only 10.6% of retrieval items exceed it (median 690 tokens), so
+# raising it was measured and found unnecessary - unlike grounding and generation.
+sequence_length: 1024
+
+train_kwargs:
+  # Both of these help retrieval and neither helps the other two tasks. Retrieval has enough
+  # underlying signal for a threshold optimiser to redistribute; grounding and generation do
+  # not, and there the same setting collapses into predicting positive almost everywhere.
+  hyperparameter_tuning: true
+  threshold_optimization: true
+
+  # global reached roc_auc_macro 0.769, the best of the project; `label` reached 0.752 with a
+  # better f1_macro (0.720 against 0.704). Both are legitimate - global leads on the primary
+  # metric. Override for one run with `make eval-train TASK=retrieval THRESHOLD_TYPE=label`.
+  threshold_type: global
+
+  # Load-bearing, not cosmetic. threshold_optimization otherwise switches checkpoint
+  # selection from AUC to F1 silently, which rewards majority-class collapse - the exact
+  # failure seen on generation. Pinning it is what made threshold optimisation work here.
+  best_model_metric: roc_auc_macro

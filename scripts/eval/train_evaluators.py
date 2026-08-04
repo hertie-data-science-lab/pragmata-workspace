@@ -6,16 +6,15 @@ CSVs out of the frozen canonical export, then trains one evaluator per task at t
 configuration each task's numbers were established under. Runs on the GPU box: the training
 extra is not in this workspace's lock, see [Eval training](../../docs/eval-training.md).
 
-Every parameter below is a pin behind a published number rather than an operator knob, so it
-lives here in code and not in configs/settings.conf. The comments say what was tried and
-rejected as well as what was kept - re-deriving a dead end costs a GPU day.
+The per-task configuration lives in configs/eval/training/ - a shared `_common.yaml`
+deep-merged with one file per task, mirroring configs/annotation/querygen_specs/. Those values
+are pins behind published numbers, so they are committed data rather than code, and each one
+is documented beside itself, including the levers tested and found not to help.
 
 Usage:
   scripts/eval/train_evaluators.py combine                 # -> data/eval-inputs/training/
   scripts/eval/train_evaluators.py check-sequence-length   # diagnostic, trains nothing
-  scripts/eval/train_evaluators.py train-retrieval [--threshold-type label|global]
-  scripts/eval/train_evaluators.py train-grounding
-  scripts/eval/train_evaluators.py train-generation
+  scripts/eval/train_evaluators.py train <task>            # [--threshold-type label|global]
 
 Long training runs belong under nohup; grounding takes 2+ hours. See the doc.
 """
@@ -42,33 +41,15 @@ import workspace as ws
 # under different filters and must not collide.
 TRAINING_INPUTS = ws.DATA_DIR / "eval-inputs" / "training"
 
-# The tokenizer the sequence-length diagnostic measures against. Deliberately the same
-# default train_evaluator uses when no checkpoint is passed, so the numbers describe the run
-# that will actually happen.
-DEFAULT_CHECKPOINT = "jhu-clsp/mmBERT-base"
-
-# The field pairs each task feeds the tokenizer, matching what pragmata's build_tlmtc_frame
-# concatenates. Prose calls the `answer` column a *response* (see the data dictionary); the
-# column name itself is `answer` and that is what is read here.
-TASK_FIELDS: dict[str, tuple[str, str]] = {
-    "retrieval": ("query", "chunk"),
-    "grounding": ("answer", "context_set"),
-    "generation": ("query", "answer"),
-}
+# Per-task training config, mirroring configs/annotation/querygen_specs/: a shared
+# underscore-prefixed file deep-merged with one file per unit. The values are pins behind
+# published numbers, so they are committed data rather than code - the same reasoning that
+# puts the freeze pin in configs/eval/freeze.conf.
+TRAINING_CONFIGS = ws.ROOT / "configs" / "eval" / "training"
+COMMON_CONFIG = TRAINING_CONFIGS / "_common.yaml"
 
 SEQUENCE_LIMITS = (1024, 1536, 2048, 3072, 4096, 6144, 8192)
 
-# Shared across all three tasks. validation/test at 0.25 each leaves half for training and
-# is what every published number used; the seed makes a split reproducible.
-COMMON_TRAIN_KWARGS = {
-    "use_cpu": False,
-    "validation_size": 0.25,
-    "test_size": 0.25,
-    "verbosity": "quiet",
-    "early_stopping_patience": 15,
-    "train_epochs": 40,
-    "random_seed": 42,
-}
 
 # Grounding trains on three of its five labels. support_present (672 positive / 2 negative)
 # and source_cited (669 / 5) in the 2026-07-30 export have too few negatives for any split
@@ -106,6 +87,40 @@ def _pragmata_eval():
     except ImportError as exc:
         raise SystemExit(f"cannot import the eval API from {pin.src}: {exc}") from exc
     return eval_api, Task
+
+
+def _task_config(task: str) -> dict:
+    """_common.yaml deep-merged with <task>.yaml, task values winning.
+
+    Merged with pragmata's own deep_merge, so the result is identical to what its layered
+    config resolution would produce - the same reasoning as scripts/annotation/merge_yaml.py,
+    which composes querygen's _runtime.yaml with each spec. Merged here rather than written to
+    a temp file and passed as config_path, because the caller has to supply base_dir and
+    labeled_data_path as overrides anyway and train_evaluator deep-merges overrides too.
+    """
+    import yaml
+    from pragmata.core.settings.settings_base import deep_merge
+
+    task_config = TRAINING_CONFIGS / f"{task}.yaml"
+    merged: dict = {}
+    for path in (COMMON_CONFIG, task_config):
+        if not path.exists():
+            raise SystemExit(
+                f"missing training config {path.relative_to(ws.ROOT)}.\n"
+                "  Each task needs one, deep-merged over _common.yaml. Restore it from git."
+            )
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            raise SystemExit(f"{path}: YAML root must be a mapping")
+        merged = deep_merge(merged, data)
+
+    declared = merged.pop("task", None)
+    if declared is not None and declared != task:
+        raise SystemExit(
+            f"{task_config.relative_to(ws.ROOT)} declares task: {declared}, "
+            f"but was loaded for {task}."
+        )
+    return merged
 
 
 def _train(eval_api, **kwargs):
@@ -223,148 +238,107 @@ def combine(exports: Path) -> int:
 
 
 def check_sequence_length() -> int:
-    """Report how much of each task's input the default sequence_length truncates.
+    """Report how much of each task's input the configured sequence_length truncates.
 
     Trains nothing. Worth re-running whenever the export moves materially: truncation is
     silent, and grounding was found to be 100% truncated at the 1024 default, with a median
-    need of ~4171 tokens - the model never saw a complete grounding input.
+    need of ~4,100 tokens - the model never saw a complete grounding input.
+
+    Measures what training will actually tokenize, by running the rows through pragmata's own
+    import and transform rather than re-deriving them here. That matters twice over: which
+    columns become `text`/`text_pair` is pragmata's decision (TEXT_COLUMNS_BY_TASK), and
+    build_tlmtc_frame consolidates each item's responses by majority first - so the row count
+    it yields is the grain the model sees, not the per-response grain of the staged CSV. An
+    earlier version restated the column pairs and measured pre-consolidation rows, which made
+    both the percentages and the row counts describe a dataset that never reaches tlmtc.
     """
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(DEFAULT_CHECKPOINT)
-    for task, (first, second) in TASK_FIELDS.items():
-        frame = pd.read_csv(_training_csv(task))
-        # The field names are bound as defaults rather than closed over: the lambda is
-        # consumed immediately by apply(), but a late-binding closure over the loop
-        # variables would silently measure the wrong columns if that ever stopped being true.
-        lengths = frame.apply(
-            lambda row, a=first, b=second: len(
-                tokenizer.encode(f"{row.get(a, '')} {row.get(b, '')}")
+    # Task is pragmata's own enum; the binding keeps its class name deliberately.
+    _eval_api, Task = _pragmata_eval()
+    from pragmata.core.eval.imports import import_eval_train_frame
+    from pragmata.core.eval.transforms import build_tlmtc_frame
+
+    for task in ec.TASKS:
+        # The checkpoint comes from the merged config, so the diagnostic always measures the
+        # tokenizer the run will use rather than a copy of pragmata's default.
+        config = _task_config(task)
+        checkpoint = config.get("checkpoint")
+        if not checkpoint:
+            raise SystemExit(
+                f"no `checkpoint` in {COMMON_CONFIG.relative_to(ws.ROOT)} - the "
+                "diagnostic measures the configured tokenizer and will not guess one."
+            )
+        configured = config.get("sequence_length")
+
+        task_enum = Task(task)
+        frame = import_eval_train_frame(path=_training_csv(task), task=task_enum)
+        tlmtc_frame = build_tlmtc_frame(frame, task=task_enum, mode="train")
+
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        lengths = tlmtc_frame.apply(
+            lambda row, tok=tokenizer: len(
+                tok.encode(str(row["text"]), str(row["text_pair"]))
             ),
             axis=1,
         )
-        print(f"--- {task} ({first} + {second}, {len(frame)} rows) ---")
+
+        print(f"--- {task} ({len(tlmtc_frame)} items, {checkpoint}) ---")
         print(f"  median {int(lengths.median())} tokens, max {int(lengths.max())}")
         for limit in SEQUENCE_LIMITS:
-            print(f"  seq_len={limit}: {(lengths > limit).mean():.1%} still truncated")
+            marker = "  <- configured" if limit == configured else ""
+            print(
+                f"  seq_len={limit}: {(lengths > limit).mean():.1%} still truncated{marker}"
+            )
         print()
     return 0
 
 
-def train_retrieval(threshold_type: str) -> int:
-    """Retrieval - the strongest result of the three, and the only one to trust outright.
+def train(task: str, threshold_type: str | None = None) -> int:
+    """Train one task's evaluator at its committed configuration.
 
-    mmBERT (pragmata's own default, so no checkpoint override) + hyperparameter tuning +
-    threshold optimization with best_model_metric pinned explicitly. Pinning that metric is
-    load-bearing: letting threshold_optimization silently switch checkpoint selection from
-    AUC to F1 is what made the same setting degenerate on the other two tasks.
+    The three tasks differ only in configuration, so they share this one path. What each
+    value is and why it was chosen - including the levers tested and found not to help - is
+    documented beside the values in configs/eval/training/, not restated here.
 
-    threshold_type selects label-specific or global thresholds. Both are legitimate -
-    global reached roc_auc_macro 0.769, label-specific 0.752 with a better f1_macro (0.720
-    vs 0.704). Global is the default on the primary metric.
+    Two things cannot be configuration and so are handled in code:
 
-    A checkpoint override is deliberately absent everywhere in this file. mmBERT-base beat
-    answerdotai/ModernBERT-base on every task tested, most sharply on grounding, where it
-    was part of what made training possible at all. Do not pass one without meaning to.
+    - ``base_dir`` and ``labeled_data_path`` are machine-dependent, so they must not be
+      committed to a config file; they are passed as overrides, which pragmata deep-merges
+      over the config layer.
+    - Grounding's label narrowing reassigns a pragmata module-level mapping before the schema
+      is read. EvalTrainSettings forbids extra keys, so it could not live in the YAML even as
+      an ignored field.
     """
     eval_api, Task = _pragmata_eval()
-    result = _train(
-        eval_api,
-        base_dir=str(ws.DATA_DIR),
-        labeled_data_path=str(_training_csv("retrieval")),
-        task=Task.RETRIEVAL,
-        train_kwargs={
-            **COMMON_TRAIN_KWARGS,
-            "hyperparameter_tuning": True,
-            "threshold_optimization": True,
-            "threshold_type": threshold_type,
-            "best_model_metric": "roc_auc_macro",
-        },
+    config = _task_config(task)
+
+    if threshold_type is not None:
+        config.setdefault("train_kwargs", {})["threshold_type"] = threshold_type
+        print(f"threshold_type overridden to {threshold_type}", file=sys.stderr)
+
+    if task == "grounding":
+        # Must happen before train_evaluator reads the schema; see GROUNDING_TRAIN_LABELS.
+        from pragmata.core.schemas import eval_input
+
+        eval_input.LABEL_COLUMNS_BY_TASK[Task.GROUNDING] = GROUNDING_TRAIN_LABELS
+        print(
+            f"grounding labels narrowed to: {', '.join(GROUNDING_TRAIN_LABELS)}",
+            file=sys.stderr,
+        )
+
+    csv_path = _training_csv(task)
+    print(
+        f"training {task} from {csv_path.relative_to(ws.ROOT)} "
+        f"(seq_len={config.get('sequence_length', 1024)})",
+        file=sys.stderr,
     )
-    print(f"SUCCESS: {result.paths.run_dir}")
-    return 0
-
-
-def train_grounding() -> int:
-    """Grounding - trainable only with the two unusable labels dropped and a long sequence.
-
-    sequence_length=6144 against a median need of ~4171 tokens; the 1024 default truncated
-    every single row. batch_size=1 is required at that length - batch_size=4 exhausted a
-    40GB A100's memory in testing - which is what makes this the slow run, 2+ hours. Do not
-    raise it without checking headroom first.
-
-    Both extra levers were tested on this exact config and neither helped:
-      - hyperparameter_tuning: macro AUC flat within noise, f1_macro worse.
-      - threshold_optimization: the degenerate "predict positive almost everywhere" pattern
-        (pred_prevalence 0.87-1.0 against a true 0.28), not a real precision/recall trade.
-    Their absence below is deliberate.
-
-    Only unsupported_claim_present has enough test-set support (31 positives) to trust.
-    contradicted_claim_present and fabricated_source land 2-4 test positives, where one
-    flipped prediction moves AUC by 0.2-0.3, so treat them as directional until a second
-    seed or more annotation confirms them.
-    """
-    eval_api, Task = _pragmata_eval()
-
-    # Narrow the label set before train_evaluator reads the schema. Done through the schema
-    # module rather than a train_kwarg because pragmata exposes no per-run label override;
-    # keep it adjacent to the import so nothing else observes the unpatched value.
-    from pragmata.core.schemas import eval_input
-
-    eval_input.LABEL_COLUMNS_BY_TASK[Task.GROUNDING] = GROUNDING_TRAIN_LABELS
-    print(f"grounding labels: {', '.join(GROUNDING_TRAIN_LABELS)}", file=sys.stderr)
-
     result = _train(
         eval_api,
         base_dir=str(ws.DATA_DIR),
-        labeled_data_path=str(_training_csv("grounding")),
-        task=Task.GROUNDING,
-        sequence_length=6144,
-        train_kwargs={
-            **COMMON_TRAIN_KWARGS,
-            "hyperparameter_tuning": False,
-            "threshold_optimization": False,
-            "batch_size": 1,
-        },
-    )
-    print(f"SUCCESS: {result.paths.run_dir}")
-    return 0
-
-
-def train_generation() -> int:
-    """Generation - the best config found, and still not a trustworthy evaluator.
-
-    Kept for reproducibility, not recommended for production use. sequence_length=3072
-    covers 100% of rows against the default's 84% and gave a small real gain, but
-    majority-class collapse persists on proper_action and response_on_topic: their F1 reads
-    0.94 and 0.88 while AUC sits at 0.55-0.57, i.e. the model is still largely predicting
-    the majority class. Every lever tried - mmBERT, HPO, threshold optimization,
-    oversampling, sequence length - moved it at most slightly.
-
-    The cause is upstream of any model choice: minority-class scarcity (16 negative examples
-    for response_on_topic in the whole training set) compounded by annotator agreement at or
-    near zero for these labels. Neither is fixable here.
-
-    Two more dead ends, so nobody re-derives them:
-      - hyperparameter_tuning: f1_macro improved, AUC unchanged - a precision/recall
-        rebalance, not better discrimination.
-      - threshold_optimization: actively worse, via the checkpoint-selection switch above.
-      - Oversampling minority rows by duplicating CSV lines: zero effect. pragmata
-        deduplicates rows before training and silently undoes it.
-    """
-    eval_api, Task = _pragmata_eval()
-    result = _train(
-        eval_api,
-        base_dir=str(ws.DATA_DIR),
-        labeled_data_path=str(_training_csv("generation")),
-        task=Task.GENERATION,
-        sequence_length=3072,
-        train_kwargs={
-            **COMMON_TRAIN_KWARGS,
-            "hyperparameter_tuning": False,
-            "threshold_optimization": False,
-            "batch_size": 4,
-        },
+        labeled_data_path=str(csv_path),
+        task=Task(task),
+        **config,
     )
     print(f"SUCCESS: {result.paths.run_dir}")
     return 0
@@ -384,21 +358,19 @@ def main() -> int:
         help="Diagnostic: how much of each task's input the default truncates",
     )
 
-    retrieval_parser = sub.add_parser(
-        "train-retrieval", help="Train the retrieval evaluator"
+    train_parser = sub.add_parser(
+        "train",
+        help="Train one task's evaluator (grounding is slow, 2+ hours)",
     )
-    retrieval_parser.add_argument(
+    train_parser.add_argument("task", choices=list(ec.TASKS))
+    train_parser.add_argument(
         "--threshold-type",
         choices=["label", "global"],
-        default="global",
-        help="Threshold optimization mode (default: global, best AUC of the three).",
-    )
-
-    sub.add_parser(
-        "train-grounding", help="Train the grounding evaluator (slow, 2+ hours)"
-    )
-    sub.add_parser(
-        "train-generation", help="Train the generation evaluator (see docstring)"
+        default=None,
+        help=(
+            "Override threshold_optimization's mode for this run. Default: whatever the "
+            "task's config pins (global for retrieval; the other two do not use it)."
+        ),
     )
 
     args = parser.parse_args()
@@ -407,11 +379,7 @@ def main() -> int:
         return combine(args.exports)
     if args.command == "check-sequence-length":
         return check_sequence_length()
-    if args.command == "train-retrieval":
-        return train_retrieval(args.threshold_type)
-    if args.command == "train-grounding":
-        return train_grounding()
-    return train_generation()
+    return train(args.task, args.threshold_type)
 
 
 if __name__ == "__main__":

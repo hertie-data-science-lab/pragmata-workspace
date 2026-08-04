@@ -1,0 +1,30 @@
+# Generation evaluator - the best config found, and still NOT a trustworthy evaluator.
+# Kept for reproducibility, not recommended for use. Deep-merged over _common.yaml.
+# See docs/eval-training.md.
+#
+# Majority-class collapse persists on proper_action and response_on_topic regardless of what
+# is set here: they read F1 0.94 and 0.88 while their AUC sits at 0.55-0.57, i.e. the model is
+# still largely predicting the majority class. The cause is upstream of any setting in this
+# file - minority-class scarcity (16 negative examples for response_on_topic in the whole
+# training set) compounded by annotator agreement at or near zero for these labels.
+
+task: generation
+
+# 3072 covers 100% of generation items against the 1024 default's 84.2%. A small real gain on
+# some labels; it did not fix the collapse above.
+sequence_length: 3072
+
+train_kwargs:
+  # Conservative given grounding's OOM at longer sequences; generation's inputs are much
+  # shorter (median 690 tokens) so this has headroom.
+  batch_size: 4
+
+  # Both tested, neither helped:
+  #   hyperparameter_tuning: f1_macro up, AUC unchanged - a precision/recall rebalance, not
+  #     better discrimination.
+  #   threshold_optimization: actively worse (macro AUC 0.59 -> 0.47), via the silent
+  #     checkpoint-selection switch from AUC to F1.
+  # A third dead end is not expressible here: oversampling minority rows by duplicating CSV
+  # lines has zero effect, because pragmata deduplicates rows before training.
+  hyperparameter_tuning: false
+  threshold_optimization: false

@@ -4,9 +4,12 @@ Training the synthetic evaluators - the third part of the [eval pipeline](eval.m
 data transport and scoring human labels. One evaluator per task is fine-tuned on the pooled
 human annotations, then applied to unlabelled data by `pragmata eval predict-labels`.
 
-`scripts/eval/train_evaluators.py` holds the recommended configuration per task and the two
-diagnostics that justify it. It runs on the GPU host: the training dependencies are
-deliberately outside this workspace's lock, see [The environment](#the-environment).
+`scripts/eval/train_evaluators.py` drives it; the recommended configuration per task lives in
+[`configs/eval/training/`](../configs/eval/training/) as a shared `_common.yaml` deep-merged
+with one file per task, exactly as `querygen_specs/_runtime.yaml` composes with each spec. The
+keys are pragmata's own `EvalTrainSettings` fields, so pragmata validates them directly. The
+training itself runs on the GPU host: its dependencies are deliberately outside this
+workspace's lock, see [The environment](#the-environment).
 
 | Target | Does | Where it runs |
 |---|---|---|
@@ -43,30 +46,56 @@ exact environment behind the published human-label numbers (see the `constraint-
 comment in `pyproject.toml`), so resolving a training stack into it would move packages the
 alpha bootstrap runs on.
 
-**So training runs in a container, not on the host.** `ds01` is a shared bare-metal box, and
-its own workspace venv is the one described above. Launch a container with a GPU assigned:
+**So training runs in a container, not on the host** - and on `ds01` that is enforced, not
+merely advised. The login environment sets `CUDA_VISIBLE_DEVICES=` (empty) and preloads
+`libds01_gpu_notice.so`, whose message is *"Host GPU compute is disabled on this server. GPU
+workloads must run inside containers."* Do not override it: the blanking is what routes GPU
+work through the allocator that keeps users off each other's cards.
+
+Create the container with the **workspace** mounted. Note `project-launch` will not do this -
+it mounts `~/workspace/<project>`, and `~/workspace/pragmata` is a checkout of the *package*,
+not this repo. Pass the path explicitly instead:
 
 ```bash
-project-launch --guided     # select the pragmata project, 1 GPU
+dashboard gpu          # check what is free first; the box is shared
+container-create pragmata-eval-train pytorch --num-gpus=1 -w /home/shared/pragmata-workspace
+container-start pragmata-eval-train
+container-attach pragmata-eval-train      # or: docker exec -it <container> bash
 ```
 
-Inside it, the checkout appears at `/workspace`. Nothing needs adjusting for that - every path
-is resolved from the script's own location via `scripts/lib/workspace.py`, so the `make`
-targets behave identically in the container and on the host. Then build the training
-environment:
+The allocator assigns a free GPU and reports which. Inside, the checkout appears at
+`/workspace`; nothing needs adjusting for that, because every path resolves from the script's
+own location via `scripts/lib/workspace.py`, so the `make` targets behave identically there and
+on the host.
+
+Then build the training environment. **Run the installs from outside `/workspace`**: uv
+otherwise picks up this repo's `pyproject.toml` and its `constraint-dependencies` pin
+`torch==2.12.0`, and the resolution fails with *"you require torch==2.8.0 and torch==2.12.0"*.
+`--no-config` makes that explicit:
 
 ```bash
-uv pip install -e "$PRAGMATA_EVAL_SRC/..[eval]"
-uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu126
-python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+cd ~
+curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=$HOME/.local/bin:$PATH
+uv venv --python 3.12 ~/train-venv          # the base image ships 3.10; pragmata needs 3.12
+uv pip install --no-config --python ~/train-venv/bin/python \
+    torch==2.8.0 --index-url https://download.pytorch.org/whl/cu126
+uv pip install --no-config --python ~/train-venv/bin/python -r /workspace/configs/eval/train-requirements.txt
+~/train-venv/bin/python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 # expect: 2.8.0+cu126 True   <- if this says False, stop; nothing below will use the GPU
 ```
 
-Run the training commands with `PRAGMATA_EVAL_SRC` set the same way it is on the CPU VM. If
-the extra is missing, `make eval-train` exits with that instruction rather than a traceback.
+The `make` targets default to `.venv/bin/python`, which inside the container is the *host's*
+venv and cannot train. Point them at the training venv per run:
 
-**Check the GPUs are free before claiming one.** The box is shared and other people's jobs run
-on it; `nvidia-smi` shows per-GPU memory and utilisation. Take an idle one.
+```bash
+cd /workspace
+make eval-train TASK=retrieval PY=$HOME/train-venv/bin/python
+```
+
+`PRAGMATA_EVAL_SRC` must also resolve inside the container. It is not under `/workspace`, so
+either mount it too (`container-create ... -d /home/shared/pragmata-eval`) or export a path to
+a checkout that is. If the training extra is missing, `make eval-train` exits with an
+instruction rather than a traceback.
 
 ## Run order
 
@@ -93,25 +122,31 @@ one, and filters to submitted responses. Both matter:
 staffed, and is in `EXCLUDED_PROGRAMMES` for every eval output. Seven programmes contribute.
 
 **`eval-train-seqlen`** trains nothing and is worth re-running whenever the export moves
-materially, because truncation is silent. Measured against the current canonical freeze:
+materially, because truncation is silent. It runs the staged CSV through pragmata's own
+`import_eval_train_frame` and `build_tlmtc_frame`, so it measures **items** - each record's
+responses consolidated by majority, which is the grain tlmtc trains on - rather than the
+per-response rows of the CSV. Measured against the current canonical freeze:
 
-| task | rows over the 1024 default | median tokens | coverage at the chosen length |
-|---|---|---|---|
-| retrieval | 9.9% | 685 | left at the 1024 default |
-| generation | 15.6% | 681 | `sequence_length=3072` - 100% |
-| **grounding** | **100.0%** | **4,129** | `sequence_length=6144` - 85.8% |
+| task | items | median tokens | over the 1024 default | at the configured length |
+|---|---|---|---|---|
+| retrieval | 1,561 | 690 | 10.6% | left at 1024 |
+| generation | 713 | 690 | 15.8% | `3072` - 100% covered |
+| **grounding** | **447** | **4,056** | **100.0%** | `6144` - 88.1% covered |
 
-Every grounding row was being cut off at the default - the model never saw a complete input.
-Raising it further has a steep cost: 8192 would still truncate 3.9%, at more memory than a
+Every grounding item was being cut off at the default - the model never saw a complete input.
+Raising it further has a steep cost: 8192 would still truncate 3.8%, at more memory than a
 40GB A100 has at `batch_size=1`.
+
+These differ slightly from the figures in the eval report, which were taken at per-response
+grain against the superseded export. The item counts here are the honest denominator.
 
 ## What each task's configuration rests on
 
-The base model is pragmata's own default, `jhu-clsp/mmBERT-base`, and **no `checkpoint`
-override is passed anywhere**. That is deliberate: mmBERT beat `answerdotai/ModernBERT-base`
-on every task tested, most sharply on grounding, where it was part of what made training
-possible at all. The exports are substantially German, which is the likely reason a
-multilingual base wins.
+The base model is `jhu-clsp/mmBERT-base`, pinned explicitly in `_common.yaml` rather than
+left to pragmata's default, so that a default moving upstream shows up as a conflict instead of
+silently changing the model. mmBERT beat `answerdotai/ModernBERT-base` on every task tested,
+most sharply on grounding, where it was part of what made training possible at all. The exports
+are substantially German, which is the likely reason a multilingual base wins.
 
 **Retrieval** is the one result to trust outright. mmBERT + hyperparameter tuning + threshold
 optimization with `best_model_metric` pinned explicitly to `roc_auc_macro`. Pinning that
