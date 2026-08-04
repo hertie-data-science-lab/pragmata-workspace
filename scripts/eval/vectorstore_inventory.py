@@ -1,9 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# # Own uv-managed env, separate from .venv/uv.lock.
-# dependencies = ["psycopg2-binary==2.9.12"]
-# ///
+#!/usr/bin/env python3
 """Inventory the publikationsbot vector store (Postgres + pgvector).
 
 Answers two questions against the live DB: how many publications the bot has (total and
@@ -15,7 +10,7 @@ app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares the app'
 group, so `az containerapp secret show` works without a VNet).
 
 Run (needs an active `az login` in the tenant):
-    ./vectorstore_inventory.py               # counts + all metadata fields
+    .venv/bin/python scripts/eval/vectorstore_inventory.py    # counts + all metadata fields
 
 Env overrides (defaults target the dev app):
     PB_RESOURCE_GROUP, PB_APP_NAME, PB_SECRET_NAME

@@ -1,7 +1,7 @@
 # pragmata-workspace
 
 Operational glue for running the [pragmata](https://github.com/bertelsmannstift/pragmata) annotation pipeline against
-the BSt (Bertelsmann Stiftung) publikationsbot. Holds **scripts, configs, and specs** that
+the BSt (Bertelsmann Stiftung) publikationsbot. Holds scripts, configs, and specs that
 are specific to the BSt operational setup and deliberately do not belong in `pragmata`
 itself. It does **not** hold data or outputs (those stay local and gitignored, see
 [Data & secrets](docs/configuration.md#data--secrets)).
@@ -15,7 +15,7 @@ flowchart LR
   tr --> rep
 ```
 
-No stage above is hypothetical. Training and prediction live in `pragmata`
+Training and prediction live in `pragmata`
 (`pragmata eval train-evaluator|predict-labels`, `tlmtc`-backed) and run on the GPU box; what
 is still open there is the *project-side* procedure - the commit, config files and accepted
 commands - see
@@ -25,29 +25,14 @@ separate private repository, outside this workspace.
 
 ## Setup
 
-Clone, then:
+Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
+`make setup` and fill in the local configuration. The full procedure - what `make setup`
+does, why it is preferred over a bare `uv sync`, the GitHub SSH key the pinned dependency
+needs, and every file to copy and complete - is
+[implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration).
+Variable definitions and file formats are in [Configuration](docs/configuration.md).
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make setup` -
-   creates `.venv/` from `pyproject.toml` + `uv.lock`, exactly, on the Python fixed by
-   `.python-version` (uv fetches it; no system Python needed). This installs pragmata
-   itself: it is a git dependency pinned to the commit that built the live Argilla
-   instance, so there is no checkout to point at and no version to choose.
-   **Requires a GitHub SSH key with read access to `bertelsmannstift/pragmata`** - the pin
-   is a `git+ssh://` dependency, so on a machine with no key configured the sync fails
-   outright rather than degrading. Check with `ssh -T git@github.com` first.
-
-   Prefer `make setup` over a bare `uv sync`: it points uv's interpreter and wheel cache
-   at `.uv/` inside the checkout rather than at `~`, which is what lets a checkout shared
-   between several users work for all of them. The Makefile explains why; on a
-   single-user machine the two are equivalent.
-2. `cp .env.example .env` and fill in the keys (Argilla, LLM, publikationsbot, and
-   `PRAGMATA_EVAL_SRC` - the eval stage runs a *different* pragmata commit, which cannot
-   be installed alongside the pinned one). See [Configuration](docs/configuration.md).
-3. `cp configs/annotation/users.json.example configs/annotation/users.json` and
-   `cp configs/annotation/users.secrets.json.example configs/annotation/users.secrets.json`,
-   then fill in the real roster + passwords. Both stay gitignored. See
-   [Annotator roster](docs/configuration.md#annotator-roster).
-4. `make help` lists the targets; preview a run with `make plan`.
+Then `make help` lists the targets; preview a run with `make plan`.
 
 Data, logs, reports and Argilla backups are **not** committed - see
 [Data & secrets](docs/configuration.md#data--secrets) and
@@ -73,6 +58,7 @@ make annotation-import         # load one domain's dataset into Argilla (DOMAIN=
 make annotation-export         # export annotations to per-task CSVs (DOMAIN= to filter)
 make annotation-log            # append a snapshot to logs/annotation/log.jsonl
 make annotation-daily          # nightly logging: export -> log.jsonl
+make annotation-freeze         # archive the export tree + pin it for the eval reports (DATE= RUN_AT= optional, derived)
 make annotation-backup         # status-preserving Argilla backup (dump)
 make annotation-restore        # restore a backup   (DIR= required; previews unless APPLY=1)
 

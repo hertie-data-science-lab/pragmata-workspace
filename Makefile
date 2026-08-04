@@ -175,8 +175,8 @@ eval-report: ## Eval: frozen export + pinned log snapshot -> annotation_operatio
 eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)
 	$(PY) scripts/eval/score_human_annotations.py $(EVAL_ARGS)
 
-eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`; runs via uv, not the workspace venv)
-	scripts/eval/corpus_catalog.py $(EVAL_ARGS)
+eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`)
+	$(PY) scripts/eval/corpus_catalog.py $(EVAL_ARGS)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---

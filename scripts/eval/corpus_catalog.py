@@ -1,9 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# # Own uv-managed env, separate from .venv/uv.lock.
-# dependencies = ["psycopg2-binary==2.9.12", "gender-guesser==0.4.0"]
-# ///
+#!/usr/bin/env python3
 """One row per document in the publikationsbot corpus — the fairness audit's base.
 
 Columns, the author-gender collapse rule and every caveat are defined in
@@ -20,8 +15,8 @@ slot (`verf1..verf3`) as a `_raw`/`_collapsed` pair — never as a joined list, 
 compacting one skips a hole and shifts every later author left.
 
 Run (needs an active `az login` in the BSt tenant):
-    ./corpus_catalog.py                     # write the catalog CSV
-    ./corpus_catalog.py --out-dir DIR       # explicit output directory
+    make eval-catalog                                    # write the catalog CSV
+    make eval-catalog EVAL_ARGS="--out-dir DIR"          # explicit output directory
 """
 
 from __future__ import annotations
@@ -35,11 +30,10 @@ from pathlib import Path
 
 # vectorstore_inventory.py owns the DSN handling: it pulls the secret via `az`, opens a
 # read-only connection, and never echoes the credential in an error. Imported rather than
-# copied so that handling lives in one place. `uv run --script` isolates installed
-# packages, not local imports, so the dependency-free workspace lib is importable here
-# too, giving this script the same dated output dir and .provenance.json contract as its
-# four siblings. eval_common is NOT imported: it needs pandas, which this script has no
-# reason to install.
+# copied so that handling lives in one place. The workspace lib gives this script the same
+# dated output dir and .provenance.json contract as its four siblings. eval_common is NOT
+# imported: this script reads the live corpus, not a frozen export, so none of its
+# export-shaped helpers apply.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 

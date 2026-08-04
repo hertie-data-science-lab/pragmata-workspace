@@ -3,6 +3,9 @@
 configs/annotation/users.secrets.json
 # annotator roster (names); kept local, not version-controlled
 configs/annotation/users.json
+# deployment identifiers (hosts, tenant/subscription IDs, accounts); §2.1 of the
+# implementation guide relies on this pattern - the repository is public.
+*.local.md
 
 # --- python virtualenv ---
 .venv/
