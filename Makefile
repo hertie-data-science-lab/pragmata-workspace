@@ -40,6 +40,12 @@
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
 # docs/eval-data-dictionary.md for what the columns mean.
 #
+# Eval training (the synthetic evaluators; the training extra is not in uv.lock - GPU host):
+#   make eval-train-inputs                 # pool the frozen export -> data/eval-inputs/training/
+#   make eval-train-seqlen                 # diagnostic: sequence-length truncation per task
+#   make eval-train TASK=retrieval         # train one evaluator (grounding is 2+ hours)
+# See docs/eval-training.md for the per-task config and what was tried and rejected.
+#
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
 # it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
 # repro-*. Only the orchestrator (pipeline, plan) is bare. The stage targets share their
@@ -67,6 +73,14 @@ UV_PYTHON_INSTALL_DIR ?= $(CURDIR)/.uv/python
 UV_CACHE_DIR ?= $(CURDIR)/.uv/cache
 export UV_PYTHON_INSTALL_DIR UV_CACHE_DIR
 
+# The Hugging Face cache moves in-tree for the same reason, and needs it just as badly: the
+# eval-train targets download a tokenizer and a base model, and on this shared box
+# ~/.cache/huggingface was created root-owned mode 755, so no user can write it and the
+# download fails outright. In-tree it inherits the checkout's default ACL, and the base model
+# is fetched once for everyone rather than once per home directory.
+HF_HOME ?= $(CURDIR)/.hf
+export HF_HOME
+
 # Eval report output args. The scripts resolve the dated output dir themselves and drop
 # the data dictionary beside the CSVs (ws.write_csv); OUT= redirects for an off-date or
 # scratch run.
@@ -86,6 +100,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
         eval-report eval-score eval-catalog \
+        eval-train-inputs eval-train-seqlen eval-train \
         transfer-push transfer-pull transfer-verify \
         repro-pin repro-verify repro-reproduce setup help
 
@@ -177,6 +192,26 @@ eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata 
 
 eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`)
 	$(PY) scripts/eval/corpus_catalog.py $(EVAL_ARGS)
+
+# --- eval training (the synthetic evaluators; see docs/eval-training.md) ---
+#
+# Training needs the `eval` extra (pragmata[eval] -> tlmtc[train]) and a CUDA torch, neither
+# of which is in uv.lock - deliberately, since that lock freezes the environment behind the
+# published human-label numbers. So these run on the GPU host's own environment; the first
+# two are CPU-only and run anywhere.
+
+eval-train-inputs: ## Eval training: pool the frozen export per task -> data/eval-inputs/training/ (EXPORTS= to override the tree)
+	$(PY) scripts/eval/train_evaluators.py combine $(if $(EXPORTS),--exports $(EXPORTS),)
+
+eval-train-seqlen: ## Eval training: diagnostic, how much of each task's input the default sequence_length truncates
+	$(PY) scripts/eval/train_evaluators.py check-sequence-length
+
+# TASK is the whole interface on purpose: each task has one recommended config, pinned in the
+# script rather than passed here, because the three are not interchangeable knobs.
+eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<run_id>/ (TASK=retrieval|grounding|generation; grounding is 2+ hours)
+	@case "$(TASK)" in retrieval|grounding|generation) ;; *) \
+	  echo "usage: make eval-train TASK=retrieval|grounding|generation"; exit 2 ;; esac
+	$(PY) scripts/eval/train_evaluators.py train-$(TASK) $(if $(THRESHOLD_TYPE),--threshold-type $(THRESHOLD_TYPE),)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---
