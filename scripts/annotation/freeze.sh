@@ -37,6 +37,12 @@ PIN="configs/eval/freeze.conf"
 [[ -z "$DATE" || "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
   || fatal "DATE must be YYYY-MM-DD: $DATE"
 
+# Likewise: an explicit DATE that's already frozen should fail before the derivation
+# below reads every programme's meta.json and scans the log — a derived DATE isn't known
+# yet, so it gets the same check again once resolved.
+[[ -z "$DATE" || ! -e "$FROZEN_ROOT/$DATE" ]] \
+  || fatal "already frozen: ${FROZEN_ROOT#"$WORKSPACE_ROOT"/}/$DATE — pick another DATE"
+
 # A freeze cut from a dirty tree has no citable lineage of its own: every .provenance.json
 # records the workspace commit it was generated at (docs/eval.md step 1).
 [[ -z "$(git status --porcelain)" ]] \
@@ -73,8 +79,9 @@ print(resolved_date)
 print(resolved_run_at)
 PYEOF
 )" || fatal "DATE/RUN_AT could not be resolved against ${SRC#"$WORKSPACE_ROOT"/} — see above"
-resolved_date="${resolved%%$'\n'*}"
-resolved_run_at="${resolved#*$'\n'}"
+mapfile -t resolved_fields <<< "$resolved"
+resolved_date="${resolved_fields[0]}"
+resolved_run_at="${resolved_fields[1]}"
 [[ -n "$DATE" ]] || log "derived DATE=$resolved_date from the export's created_at"
 [[ -n "$RUN_AT" ]] || log "derived RUN_AT=$resolved_run_at from the export's created_at and logs/annotation/log.jsonl"
 DATE="$resolved_date"

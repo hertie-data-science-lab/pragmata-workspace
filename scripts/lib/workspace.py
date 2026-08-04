@@ -129,6 +129,30 @@ def check_snapshot(snapshot: dict) -> None:
         )
 
 
+def _first_snapshot_matching(
+    predicate, path: Path | None = None
+) -> tuple[dict, dict] | None:
+    """(snapshot, identity) for the first snapshot with a ``run_at`` predicate(...) accepts.
+
+    Streamed and parsed line by line: the log grows without rotation, and matching on the
+    raw text would couple this lookup to the writer's JSON separator convention.
+    """
+    path = _snapshot_log(path)
+    with path.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            snapshot = json.loads(line)
+            run_at = snapshot.get("run_at")
+            if not run_at or not predicate(run_at):
+                continue
+            check_snapshot(snapshot)
+            digest = hashlib.sha256(line.encode()).hexdigest()
+            return snapshot, {"run_at": run_at, "sha256": digest}
+    return None
+
+
 def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
     """(snapshot, identity) for the snapshot with this exact ``run_at``.
 
@@ -137,32 +161,21 @@ def find_snapshot(run_at: str, path: Path | None = None) -> tuple[dict, dict]:
     ``{run_at, sha256}`` where the digest covers that ONE line: the log is append-only,
     so hashing the whole file would change every night and pin nothing.
     """
-    path = _snapshot_log(path)
-    # Streamed and parsed line by line: the log grows without rotation, and matching on
-    # the raw text would couple this lookup to the writer's JSON separator convention.
-    with path.open(encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line:
-                continue
-            snapshot = json.loads(line)
-            if snapshot.get("run_at") != run_at:
-                continue
-            check_snapshot(snapshot)
-            digest = hashlib.sha256(line.encode()).hexdigest()
-            return snapshot, {"run_at": run_at, "sha256": digest}
-    raise SystemExit(
-        f"no snapshot with run_at={run_at} in {path}.\n"
-        "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
-        "another, or re-run `make annotation-log` and update the pin."
-    )
+    found = _first_snapshot_matching(lambda at: at == run_at, path)
+    if found is None:
+        raise SystemExit(
+            f"no snapshot with run_at={run_at} in {_snapshot_log(path)}.\n"
+            "The report pins its snapshot by timestamp; pass --snapshot-run-at to select "
+            "another, or re-run `make annotation-log` and update the pin."
+        )
+    return found
 
 
 # A freeze pairs one export moment with the one log snapshot taken right after it. The
 # nightly cron's actual gap is under a minute (scripts/daily.sh runs export then log in one
 # invocation), so anything past this is almost certainly not the snapshot from the same run
 # - a hand-typed RUN_AT naming the wrong day, or an export re-run without a matching log.
-MAX_EXPORT_TO_SNAPSHOT_LAG = timedelta(hours=2)
+_MAX_EXPORT_TO_SNAPSHOT_LAG = timedelta(hours=2)
 
 
 def export_created_at(export_dir: Path) -> str:
@@ -218,7 +231,7 @@ def _resolve_run_at(created_at: str, run_at: str | None) -> str:
     """The RUN_AT to pin given an export's created_at: derived if omitted, else checked.
 
     A snapshot predating the export describes the Argilla instance BEFORE these labels
-    were exported, not beside them; one lagging by more than MAX_EXPORT_TO_SNAPSHOT_LAG is
+    were exported, not beside them; one lagging by more than _MAX_EXPORT_TO_SNAPSHOT_LAG is
     implausibly far from a same-run pairing to be it by coincidence.
     """
     if run_at is None:
@@ -234,7 +247,7 @@ def _resolve_run_at(created_at: str, run_at: str | None) -> str:
             "snapshot describes the Argilla instance before these labels were exported, "
             "not beside them."
         )
-    if run_dt - created_dt > MAX_EXPORT_TO_SNAPSHOT_LAG:
+    if run_dt - created_dt > _MAX_EXPORT_TO_SNAPSHOT_LAG:
         raise SystemExit(
             f"RUN_AT={run_at} is {run_dt - created_dt} after the export "
             f"(created_at={created_at}) - too far from a same-run pairing (the nightly "
