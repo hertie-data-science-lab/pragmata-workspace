@@ -13,23 +13,22 @@ Additionally, access to `Publikationsbot` within the Bertelsmann network is requ
 
 The process is:
 
-    query generation with using structured LLM calls
-                  ↓
-    queries sent to Publikationsbot
-                  ↓
-    all queries, responses and publication/chunk data combined
-                  ↓
-    Argilla setup and unannotated data imported
-                  ↓
-    human annotation, split by domain/role 
-                  ↓
-    annotation data exported (pseudonymised)
-                  ↓
-    human annotation report deliverables scored (CPU VM)
-                  +
-    synthetic model (evaluator) training + prediction (GPU host)
-                  ↓
-    [external] full report assembled (separate private repository)
+```mermaid
+flowchart TD
+  querygen["query generation with structured LLM calls"]
+  bot["queries sent to Publikationsbot"]
+  combine["all queries, responses and publication/chunk data combined"]
+  import["Argilla setup and unannotated data imported"]
+  annotate["human annotation, split by domain/role"]
+  export["annotation data exported (pseudonymised)"]
+  score["human annotation report deliverables scored (CPU VM)"]
+  train["synthetic model (evaluator) training + prediction (GPU host)"]
+  report["full report assembled<br/>(separate private repository)"]
+
+  querygen --> bot --> combine --> import --> annotate --> export
+  export --> score --> report
+  export --> train --> report
+```
 
 The `pragmata-workspace` repository implements the full pipeline and the transfer of data between the annotation (CPU-backed) and evaluation (GPU-backed) machines. NB: the synthetic evaluator fine-tuning and prediction are implemented in `pragmata` (`pragmata eval train-evaluator|predict-labels`, backed by `tlmtc`); assembling the final report happens in a separate repository and is out of scope here.
 
@@ -168,7 +167,7 @@ This exercises Azure OpenAI, Publikationsbot and the combine stage without touch
 
 ### 5.5 Test Argilla 
 
-    .venv/bin/pragmata annotation status     # the task table, not a connection error
+    .venv/bin/pragmata annotation status     # returns task table, not a connection error
 
 ### 5.6 Test Blob Storage
 
@@ -285,8 +284,7 @@ After import, verify in Argilla that the expected workspaces and datasets exist 
 
 ## 8. Run annotation and export the labels
 
-The annotation rules are defined in the
-[pRAGmata annotation protocol](https://github.com/bertelsmannstift/pragmata/blob/main/docs/methodology/annotation-protocol.md).
+The annotation rules are defined in the [pRAGmata annotation protocol](https://github.com/bertelsmannstift/pragmata/blob/main/docs/methodology/annotation-protocol.md).
 
 Monitoring during annotation ([Annotation pipeline](annotation.md#logging--reporting)):
 
@@ -320,33 +318,54 @@ The export writes per-task CSVs under `data/annotation/exports/`, one directory 
     ├── grounding.csv     
     └── generation.csv   
 
-NB: the export tree is intended to be transient, as it is derived. The export ID is the domain, so the CSVs go to fixed paths and a later export silently replaces that domain's snapshot. The annotations live in Argilla's database and the CSVs are a projection of it, so `make annotation-export` regenerates them. Two caveats:
+NB: the export tree is intended to be transient, as it is derived. The export ID is the domain, so the CSVs go to fixed paths and a later export silently replaces that domain's snapshot. Instead, the on-disk archive is the freeze:
 
-The archive is the freeze. A dataset behind report numbers is copied to `data/annotation/exports-frozen/<date>/`, write-protected, and pushed to the Blob container:
+    make annotation-freeze 
 
-    make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<the run_at of the paired log snapshot>
+Optionally:
 
-Everything in it is a guard until the copy: clean working tree (the provenance files cite a commit), no freeze under that date already, `RUN_AT` really present in `logs/annotation/log.jsonl`, and no real names left in `exports/` - the same check `transfer-push` runs, moved ahead of the point where an immutable published copy exists. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups.
+    make annotation-freeze DATE=YYYY-MM-DD RUN_AT=<associated-log-file>
 
-**The freeze is not live until that pin is committed**, and the target deliberately stops there: a script must not make that commit, because provenance files name the commit they were generated at and history must not be rewritten afterwards. Until it is committed, another checkout still resolves the old date - which is why the report scripts refuse to run when the pin is not the newest freeze on disk. The step order matters: [Eval pipeline](eval.md#cutting-a-new-freeze).
-
-**The freeze and the bundle are separate on purpose, and cannot be merged.** The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`, answering "what exactly did we publish from". The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git, answering "has any of it drifted since". A freeze without a pin cannot be shown to be unedited; a pin without a freeze detects drift with nothing to restore. They cannot be one step because the bundle pins inputs **and** outputs together (`reproducibility/2026-07-31-eval-report/pins.sha256` holds 52 entries: 41 frozen export files plus the 11 report CSVs and their sidecars), and the outputs do not exist until the report targets have run. So `annotation-freeze` prints the `repro-pin` command rather than running it.
-
-> **"Freeze" means two things here.** An *export* freeze is the write-protected `exports-frozen/<date>/` copy above, cut by `make annotation-freeze`. A *bundle* freeze is `make repro-pin KIND=freeze`, which only marks a reproducibility bundle as a self-contained record that `repro-reproduce` never replays (as against `KIND=lineage`). `KIND=freeze` does not cut an export freeze.
+`make annotation-freeze` copies the export tree (and the associated `logs/annotation/log.jsonl` data) from `exports` into `exports-frozen/<date>`. This gives:
 
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
 
+`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, `RUN_AT` really present in `logs/annotation/log.jsonl`, and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducible bundle creaed by `make repro-pin`).
 
-What genuinely cannot be regenerated is the Argilla database itself, whose volumes and local backups share one OS disk (§2.1).
+> NB: The freeze and the reproducibility bundle are twinned but separate artefacts. The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`. The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git.
+
 
 ## 9. Transfer the export to the GPU host
 
-On the CPU VM:
+The CPU VM is used to run the pipeline from query generation through to exporting human annotated datasets. 
+
+For fine-tuning a synthetic evaluator based on human annotation - and running inference - a GPU-enabled device is required. Data transfer for the pilot was handled as follows:
+
+```mermaid
+flowchart LR
+  arg[(Argilla datasets CPU)]
+  arg -->|"make annotation-export"| exp["CSVs (CPU)"]
+  exp --> ev["scoring metrics as CSV deliverables (CPU)"]
+  exp -->|"transfer-push PREFIX=exports"| blob[("Azure Blob<br/>HTTPS, BSt-owned")]
+  blob -->|"transfer-pull PREFIX=exports"| tr["evaluator training + prediction (GPU)"]
+  tr -->|"transfer-push PREFIX=predictions / checkpoints"| blob
+  blob -->|"transfer-pull PREFIX=predictions / checkpoints"| ret["predictions + checkpoints (CPU)"]
+  ev --> rep["report<br/>(separate private repo)"]
+  ret --> rep
+```
+
+The Blob container (within the same Bertelsmann sub-net as the CPU VM) is the only thing both machines touch: the CPU VM pushes the export tree and pulls the results back; the GPU host pulls the export and pushes what it produces. 
+
+>NB: this split was an expedient choice given resource constraints and differing time requirements (the CPU VM is needed to be running over long periods for annotation to occur; the GPU device is only needed intermeittently to train and run inference). These two devices could be on the same network, or even within the same device, depending on chosen setup.
+
+To transfer data securely:
+
+On the CPU VM (human annotated data out):
 
     make transfer-push SRC=data/annotation/exports PREFIX=exports
 
-On the GPU host:
+On the GPU host (human annotated data in, HF model checkpoints and predictions out):
 
     make transfer-pull PREFIX=exports       # -> data/transfer/exports/, verified
     make transfer-verify PREFIX=exports     # re-check any time
@@ -355,25 +374,16 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
 
 ## 10. Run the evaluation
 
-Scoring human-annotated labels runs on the CPU VM. Three targets produce the report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the data dictionary beside it:
+**Scoring human-annotated labels runs on the CPU VM**. Three targets produce the report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the current data dictionary beside it:
 
     make eval-report     # annotation_operations, annotation_label_summary, retrieval_manifest
     make eval-score      # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog    # corpus_catalog.csv (needs an active `az login`)
 
-They read pinned inputs, never the live export tree, and refuse to run at all if the pin in
-`configs/eval/freeze.conf` is not the newest freeze on disk - so a freeze cut without moving
-the pin fails loudly instead of publishing the previous dataset. The pin model, the
-vocabulary and the refresh procedure are in [Eval pipeline](eval.md), and every column of
-every CSV is defined in the [data dictionary](eval-data-dictionary.md).
+They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Eval pipeline](eval.md), and every column of every CSV is defined in the [data dictionary](eval-data-dictionary.md).
 
 **Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.**
-`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` (default
-proxy `jhu-clsp/mmBERT-small`, target `jhu-clsp/mmBERT-base`) and writes a run directory, a
-model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen
-training run to an unlabelled CSV and writes probabilities and predictions. Both live behind
-the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock
-- the GPU box installs its own environment. They consume staged input by explicit path, e.g.:
+`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead  the GPU box installs its own environment. They consume staged input by explicit path, e.g.:
 
     pragmata eval train-evaluator \
       --labeled-data-path data/transfer/exports/<domain>/<task>.csv \
@@ -385,47 +395,9 @@ the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this w
       --evaluator-run-id <run-id-from-training> \
       --task <retrieval|grounding|generation>
 
-**The container is known; the environment inside it is not.** The precedent runs were made
-from a lab container image built on 2026-07-10 by a project member off the platform's PyTorch
-base - Python 3.10.12, `torch` 2.8.0+cu126, `transformers` 5.13.0, `peft` 0.19.1 - and those
-dates bracket the 12 `checkpoints/` runs of 07-13 to 07-22. But **neither `pragmata` nor
-`tlmtc` is baked into that image**, so both were installed into the running container and no
-record of how survives in the image; the `tlmtc` 0.4.0/0.4.2 in the run metadata is the only
-trace of the result. Note also that the image's CUDA 12.6 runtime exceeds the host driver's
-12.2 ceiling and works only through the container `cuda-compat` layer (§2.1) - a hand-built
-environment that installs a `torch` wheel newer than cu126 will fail to see the GPUs, exactly
-as the host `.venv` does.
+**TODO come back to this**
 
-**What is otherwise missing is the project-side procedure, not the code.**
-
-**Precedent exists, but it is not the procedure.** The Blob container's `checkpoints/`
-prefix holds 12 completed training runs from 2026-07-13 to 07-22, each with a
-`train_run_meta.json`. They pin down the shape a configuration has to reproduce: `tlmtc`
-0.4.0 and 0.4.2, `sequence_length` 1024, `input_mode: paired_text`, transfer learning with
-PEFT adapters, per-label threshold 0.5, no HPO, and the per-task label sets (3 for
-retrieval; 5 for generation - `proper_action`, `response_on_topic`, `helpful`, `incomplete`,
-`unsafe_content`). All 12 used `answerdotai/ModernBERT-base` as both proxy and target,
-overriding the pin's defaults (`jhu-clsp/mmBERT-base` / `mmBERT-small`), so a rerun that
-takes the defaults will not reproduce them.
-
-Equally, what those runs are not: there is **no grounding run at all**; every run naming an
-export names the single programme `demokratie-und-zusammenhalt` and three record no export
-id, so their input cannot be traced; all 12 predate the pseudonymised freeze the shipped
-report rests on; none records a pragmata commit, an environment or a command; and the
-container has **no `predictions/` prefix**, so predictions have never been returned and
-[§11.1](#111-return-the-evaluation-outputs)'s round trip is untested end to end.
-
-**TODO (joint):** the tested GPU-side process - the pragmata commit used on the GPU host, the
-environment installation command, the evaluation configuration files, the mapping from each
-export to the three task inputs, the per-task training commands, the prediction and scoring
-commands, expected output directories, and the conditions for accepting an evaluation
-result. `scripts/eval/score_synthetic_predictions.py` is the reserved name for scoring the
-evaluator's predictions once they exist. Until these values are filled in and run against a
-real export, this step is not reproducible from the documentation alone even though every
-command it needs exists.
-
-The final report is assembled from these outputs in a separate private repository, outside
-the scope of this guide.
+The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
 
 ## 11. Return and archive
 
@@ -441,125 +413,6 @@ On the CPU VM:
     make transfer-pull PREFIX=predictions
     make transfer-pull PREFIX=checkpoints
 
-**Checkpoints must be pulled off before the container goes away** - everything else is
-reproducible from pinned inputs and code; checkpoints are not. On the GPU host this is a
-live deadline rather than a decommissioning event: the container auto-stops after 1 h idle
-or 48 h of runtime and is removed 30 min after stopping (§2.1), so anything written inside
-the container rather than to the mounted workspace is lost on that timer. Write checkpoints
-to the mounted workspace and push them the same session.
-
 ### 11.2 Archive the completed run
 
-The workspace excludes data, secrets, logs, reports and backups from git; a completed run
-is archived outside the working repositories. Archive: the exact git commits, non-secret
-configuration, generated-question CSVs, Publikationsbot results/errors/no-retrieval files,
-combined candidate datasets, the Argilla backup, the (pseudonymised) annotation exports,
-Blob manifests and snapshot pins, evaluation configurations, training logs, predictions,
-scores, and checkpoints. The dated bundles under
-[`reproducibility/`](../reproducibility/README.md) are the committed half of this record -
-each pins its artefacts by SHA-256 and `make repro-verify` re-checks them.
-
-What the Blob container already archives, and under what convention: `exports/`,
-`exports-frozen/<date>/`, `checkpoints/<run-id>/` (a 32-hex training run id), `reports/` and
-`analysis/iaa-summary/`. The committed pins live in `reproducibility/<date>-<name>/`.
-
-**TODO (BSt):** the permanent storage location and run-directory naming convention for
-everything the container does *not* hold - the dataset-run inputs (querygen and
-Publikationsbot trees), the Argilla backup, and the evaluation configurations. The
-`argilla_backup/` directories on the VM are local recovery points, not archives. This is the
-one location §11.3 below copies each finished run into, so record it once, here.
-
-### 11.3 Clear the tree for the next run
-
-This is the other half of the cycle: the fixed output paths of §4 mean a finished run has to
-leave the tree before the next one starts. Archive first, then clear - and do not delete an
-earlier run until its data, configuration, logs and checksums are archived and the archive has
-been verified.
-
-A per-run output directory (a `RUN_ID` in the paths) would be tidier, but that means changing
-the fixed paths in code; archive-and-clear is a procedure only, so it is the one documented
-here.
-
-1. **Pin the outgoing run** while its files are still in place, so the archive is verifiable:
-
-       make repro-pin KIND=freeze NAME=dataset-run PATHS="data/querygen data/publikationsbot"
-
-   This writes `reproducibility/<today>-dataset-run/` - a `pins.sha256` listing every artefact by SHA-256, plus a README stub to complete. `KIND=freeze` marks it a self-contained record of one run rather than a lineage step that gets replayed (the default is `lineage`). The bundle is committed; the data it pins is not. See [`reproducibility/`](../reproducibility/README.md).
-
-2. **Copy the run out** to the archive location (§11.2), preserving the repo-relative paths, and keep together the four things a rerun needs:
-    1. `data/querygen/runs/`
-    2. `data/publikationsbot/` (incl the `.errors.jsonl` and `.no_retrieval.jsonl` files)
-    3. `logs/annotation/`, and
-    4. the non-secret configuration (`configs/`) plus the two git commits from §3.1.
-
-3. **Verify the copy** before touching the originals. `pins.sha256` is plain `sha256sum` format over repo-relative paths, so from the archive root:
-
-       sha256sum -c <workspace>/reproducibility/<today>-dataset-run/pins.sha256
-
-   Every line must read `OK`. (`make repro-verify PIN=<bundle>` checks the *working tree*, so it confirms the originals, not the copy - useful as the before/after pair.)
-
-4. **Decide on the planning carry-over**, because step 5 acts on the answer.
-   `data/querygen/<spec_fingerprint>.json` is not run output - it is the previous run's planning
-   summary for that spec (its redundancy patterns and diversification targets), read back and
-   fed into the next run's planning prompt. Left in place, the new run deliberately steers
-   *away* from the questions the old one asked; removed, it plans from the spec alone. Either
-   way the files are archived with the run, since they sit inside the pinned `data/querygen`
-   tree from step 1.
-
-5. **Clear only then**, and only the generated outputs. Keep the directories and their
-   committed `.gitkeep` files:
-
-       rm -rf data/querygen/runs
-       find data/publikationsbot -type f ! -name .gitkeep -delete
-       rm -f data/querygen/*.json          # only if step 4 said drop the carry-over
-
-   Leave `data/annotation/` alone - the exports, and the frozen inputs behind published
-   numbers ([Eval pipeline](eval.md#cutting-a-new-freeze)) - as well as `logs/`,
-   `argilla_backup/` and `reports/`.
-
-   Note the pin from step 1 is not an archive: it records checksums inside the repository and
-   copies nothing. Steps 2 and 3 are what actually preserve the run, and nothing enforces that
-   they happened before these deletions.
-
-Then re-run the §4 check to confirm the tree is clean.
-
-## 12. When the rerun is complete
-
-The rerun is complete when:
-
-1. all resources in the deployment inventory have been identified;
-2. both boxes and all external services are accessible;
-3. the exact code versions and environment installation commands are recorded;
-4. the previous run is archived and verified, and the output directories are clean (§11.3, §4);
-5. the small generation test succeeds;
-6. the candidate dataset imports with zero validation errors and is editorially approved
-   (§6);
-7. the records are imported into the intended Argilla destination;
-8. annotation is complete by the §8.1 rule - overlap satisfied and panels complete - and
-   exported (pseudonymised);
-9. the export is transferred and verified on the GPU host;
-10. evaluator training, prediction and scoring are completed;
-11. predictions and checkpoints are returned; and
-12. the full run is archived and its bundle pinned.
-
-The remaining documentation gaps, all marked **TODO** above. The Azure resources are now
-identified and recorded in the uncommitted `docs/deployment-inventory.local.md`; what is
-still outstanding is:
-
-- how the CPU VM is reached and re-provisioned, and where the Azure OpenAI key is held
-  (§2.1);
-- the Publikationsbot production hosting resource, its access-grant process and its approved
-  request rate (§2.1);
-- an off-box Argilla backup destination (§2.1);
-- the Blob subscription and resource group, SAS renewal ownership before the mid-2027
-  expiry, and the IP-allowlist process (§2.1);
-- how the GPU-side container is built and `pragmata[eval]`/`tlmtc` installed inside it - the
-  host itself is now documented (§2.1, §10);
-- the GitHub account or deploy key a rerun clones with (§3.2);
-- the archive location and run-naming convention for the dataset-run inputs, the Argilla
-  backup and the evaluation configurations (§11.2);
-- the editorial acceptance thresholds for a candidate dataset (§6);
-- ratification of the default treatment of panels that only ever received discards
-  (§8.1.1); and
-- the tested GPU-side evaluation process, including a first returned `predictions/` tree
-  (§10).
+TBC 
