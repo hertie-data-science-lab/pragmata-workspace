@@ -112,8 +112,17 @@ not interleave. The sequence that works:
    `make annotation-freeze DATE=<date> RUN_AT=<the run_at from step 2>`. Everything is a
    guard until the copy - clean working tree, no freeze under that date already, `RUN_AT`
    really present in the log, no real names left in `exports/` - and only then does it make
-   the read-only dated copy (`chmod u+w` parent, copy, `chmod -R a-w` the new dir,
-   `chmod a-w` the parent again) and write `configs/eval/freeze.conf`.
+   the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write
+   `configs/eval/freeze.conf`.
+
+   **The dated copy is write-protected; the `exports-frozen/` parent may not be.** `chmod`
+   is owner-only, so on a checkout shared by POSIX ACL (the Hertie GPU server) nobody can
+   lock a directory the setup account created - the target unlocks the parent only if it is
+   genuinely locked, and warns instead of failing when it cannot re-protect it. Note also
+   that a `chmod a-w` sets the ACL **mask**, which caps *every* named user: whoever cuts a
+   freeze is then the only one who can unlock it, so a freeze is superseded by a new date
+   rather than re-opened. What actually guarantees the bytes is not the write bit but the
+   refusal to overwrite an existing date, plus the bundle pins and the Blob manifest.
 4. **Commit the pin.** The target stops one step short on purpose: a script must not make
    this commit, because step 1 forbids rewriting history once provenance files name a
    commit. Until it is committed, another checkout still resolves the old date - which is
