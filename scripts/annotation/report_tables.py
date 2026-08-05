@@ -866,7 +866,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--jsonl",
-        default=ws.LOGS_DIR / "log.jsonl",
+        default=ws.SNAPSHOT_LOG,
         type=Path,
         help="history file to read (default: logs/annotation/log.jsonl)",
     )
