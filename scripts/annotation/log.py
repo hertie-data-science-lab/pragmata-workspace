@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import json
 import os
 import statistics
@@ -50,6 +51,7 @@ import tempfile
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import yaml
@@ -106,8 +108,6 @@ IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "1000"))
 # the same export yields the same interval. pragmata threads this straight into
 # numpy's default_rng. Recorded in every snapshot, and in the report .provenance.json files.
 IAA_SEED = int(os.environ.get("LOG_IAA_SEED", "0"))
-
-JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 
 # username → Argilla user_id (UUID str), populated once per run. The CSV export carries the
 # annotator *username*; we map it to the UUID so no real names appear in the output (the REST
@@ -380,6 +380,41 @@ def _parse_bool(s: str | None) -> bool | None:
     return True if s == "true" else False if s == "false" else None
 
 
+def _is_uuid(value: str) -> bool:
+    """Whether an identity has already been pseudonymised."""
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def annotator_uuid(raw_id: str, name_to_uuid: dict[str, str], where: Path) -> str:
+    """One annotator identity as an Argilla user id, or abort the run.
+
+    The throwaway export carries the Argilla *username*, and the usernames on this
+    instance are real names, so an unmapped one must never reach the snapshot or the
+    report tables built from it — a renamed or deleted account is exactly the case that
+    would otherwise pass a name straight through. Fail closed, as
+    ``pseudonymize_export.py`` does on the durable export. Values that are already UUIDs
+    pass through untouched, which is what the ``--use-export`` path (reading an
+    already-pseudonymised tree) hands us.
+    """
+    if not raw_id or _is_uuid(raw_id):
+        return raw_id
+    resolved = name_to_uuid.get(raw_id)
+    if resolved is None:
+        # Deliberately does not echo the value: keeping names out of the snapshot is the
+        # whole point, and that includes the message saying we could not map one.
+        raise SystemExit(
+            f"{where}: an annotator identity has no matching Argilla user, so it cannot "
+            "be pseudonymised.\nRefusing to write a real name into the snapshot log. "
+            "Check the roster (configs/annotation/users.json) against the instance's "
+            "user list — a renamed or deleted account looks like this."
+        )
+    return resolved
+
+
 def label_stats(
     path: Path, labels: list[str], name_to_uuid: dict[str, str]
 ) -> tuple[dict, dict]:
@@ -390,7 +425,8 @@ def label_stats(
     rollup at the domain/total level — never average per-domain prevalences.
 
     Discarded rows (``response_status == "discarded"``) feed the discard breakdown only;
-    label distribution and bias are over submitted rows. Annotators are keyed by UUID.
+    label distribution and bias are over submitted rows. Annotators are keyed by UUID; a
+    username with no matching Argilla user aborts (see :func:`annotator_uuid`).
     """
     counts = {lab: [0, 0] for lab in labels}  # [n_true, n] over submitted, non-null
     by_ann: dict[str, dict[str, list[int]]] = {}
@@ -411,8 +447,8 @@ def label_stats(
             if (row.get("notes") or "").strip():
                 n_notes += 1
             raw_id = row.get("annotator_id", "")
-            uuid = name_to_uuid.get(raw_id, raw_id)
-            ann = by_ann.setdefault(uuid, {lab: [0, 0] for lab in labels})
+            annotator = annotator_uuid(raw_id, name_to_uuid, path)
+            ann = by_ann.setdefault(annotator, {lab: [0, 0] for lab in labels})
             for lab in labels:
                 v = _parse_bool(row.get(lab))
                 if v is None:
@@ -427,7 +463,7 @@ def label_stats(
     pool_prev = {lab: per_label[lab]["prevalence"] for lab in labels}
 
     by_annotator: dict[str, dict] = {}
-    for uuid, ann in by_ann.items():
+    for annotator, ann in by_ann.items():
         out = {}
         for lab in labels:
             nt, n = ann[lab]
@@ -441,7 +477,7 @@ def label_stats(
                 "prevalence": round(prev, 4),
                 "delta_vs_pool": delta,
             }
-        by_annotator[uuid] = out
+        by_annotator[annotator] = out
 
     total = n_submitted + n_discarded
     block = {
@@ -537,7 +573,7 @@ def build_constraints(acc: dict) -> dict:
 
 
 def empty_completeness() -> dict:
-    return {"n_panels": 0, "n_complete": 0, "by_k_bucket": {}}
+    return {"n_panels": 0, "n_complete": 0}
 
 
 def add_completeness(acc: dict, c: dict | None) -> None:
@@ -545,22 +581,15 @@ def add_completeness(acc: dict, c: dict | None) -> None:
         return
     acc["n_panels"] += c.get("n_panels", 0)
     acc["n_complete"] += c.get("n_complete", 0)
-    for bucket, st in (c.get("by_k_bucket") or {}).items():
-        b = acc["by_k_bucket"].setdefault(bucket, {"n_panels": 0, "n_complete": 0})
-        b["n_panels"] += st.get("n_panels", 0)
-        b["n_complete"] += st.get("n_complete", 0)
 
 
 def build_completeness(acc: dict) -> dict | None:
     if acc["n_panels"] == 0:
         return None
-    # by_k_bucket kept as raw {n_panels, n_complete} — matches the meta-file shape; the
-    # renderer recomputes per-bucket fractions (_bucket_frac).
     return {
         "n_panels": acc["n_panels"],
         "n_complete": acc["n_complete"],
         "fraction_complete": round(acc["n_complete"] / acc["n_panels"], 4),
-        "by_k_bucket": acc["by_k_bucket"],
     }
 
 
@@ -1171,7 +1200,13 @@ def print_summary(result: dict) -> None:
 
 def append_jsonl(result: dict) -> None:
     ws.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    with JSONL_PATH.open("a") as f:
+    # Exclusive lock for the whole open→write→close. A snapshot runs to megabytes, well
+    # past the size at which a buffered append is *guaranteed* to reach the kernel as one
+    # write(), and every consumer reads this file a line at a time to resolve the freeze
+    # pin — so a manual run overlapping the 02:00 cron must not be able to split a line in
+    # two. The kernel drops the lock when the handle closes, however this process dies.
+    with ws.SNAPSHOT_LOG.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
         f.write(json.dumps(result, ensure_ascii=False) + "\n")
 
 
@@ -1287,7 +1322,7 @@ def main() -> int:
         print(
             f"log: {result['run_at']} — {len(result['domains'])} domains, "
             f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
-            f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}"
+            f"{'' if args.no_jsonl else f'; appended {ws.SNAPSHOT_LOG}'}"
         )
     return 0
 

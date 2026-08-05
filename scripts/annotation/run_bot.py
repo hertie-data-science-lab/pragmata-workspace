@@ -759,7 +759,12 @@ def main() -> int:
                 stem, tm, max_queries=args.max_per_spec, delay_s=args.delay
             )
         except Exception as exc:
+            # Counted, not just printed: a crash before process_spec's own error handling
+            # (login() against an expired az session, say) fails the whole spec, and
+            # without this the exit code below would report a bot run that did nothing at
+            # all as a success to pipeline.sh's xargs.
             print(f"  !! fatal in {stem}: {type(exc).__name__}: {exc}")
+            totals["error"] += 1
             continue
         totals["added"] += a
         totals["skipped"] += s

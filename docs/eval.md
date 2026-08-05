@@ -86,6 +86,10 @@ every export before that date carried real names in every task CSV and in the
   values or IAA pairwise keys are not UUIDs, so a tree that skipped the rewrite can neither
   leave the box nor be immortalised in a freeze. One check, `scripts/lib/check_pseudonymised.py`,
   at both boundaries.
+- `log.py` applies the same mapping to the throwaway export it reads, so the snapshot log and
+  the report tables built from it carry user ids only. It fails the same way, and for the same
+  reason: a username with no matching Argilla user - a renamed or deleted account - aborts the
+  run rather than passing a real name through.
 
 The rewrite is forward-only: `exports-frozen/2026-07-29/` predates it, still holds names,
 and stays local. Exports still count as PII either way - the free-text `notes` and
@@ -119,7 +123,10 @@ not interleave. The sequence that works:
    guard until the copy - clean working tree, no freeze under that date already, the
    resolved RUN_AT schema-current, no real names left in `exports/` - and only then does it
    make the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write
-   `configs/eval/freeze.conf`.
+   `configs/eval/freeze.conf`. It takes the same lock `export.sh` does, so it cannot copy a
+   tree the nightly cron is halfway through rewriting, and it cleans up after itself: if
+   the copy or the `chmod -R a-w` fails, the partial dated dir is removed rather than left
+   for the next run's "already frozen" guard to mistake for a real freeze.
 
    **The dated copy is write-protected; the `exports-frozen/` parent may not be.** `chmod`
    is owner-only, so on a checkout shared by POSIX ACL (the Hertie GPU server) nobody can
