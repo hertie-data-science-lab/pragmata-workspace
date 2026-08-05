@@ -150,7 +150,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    target = ec.out_dir(args.out_dir) / "retrieval_manifest.csv"
+    target = ws.stage_report_dir("eval", args.out_dir) / "retrieval_manifest.csv"
     ws.write_csv(
         target,
         rows,
