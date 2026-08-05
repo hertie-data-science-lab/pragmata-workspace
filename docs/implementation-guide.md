@@ -454,7 +454,15 @@ For training, these workspace targets carry the recommended configuration per ta
 
 The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Eval training](eval-training.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
 
-**TODO: there's no scripts yet for prediction.**
+For prediction, these targets stage the unlabelled side, apply a chosen evaluator, and turn the result into deliverables. `eval-predict` and `eval-evaluator-report PART=calibration` need the same GPU environment training does; the other three are CPU-only:
+
+    make eval-predict-inputs POPULATION=annotated       # frozen export, labels stripped -> data/eval-inputs/predict/annotated/
+    make eval-predict-inputs POPULATION=corpus          # curated corpus -> data/eval-inputs/predict/corpus/
+    make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
+    make eval-score-synthetic POPULATION=annotated      # synthetic_metric_estimates.annotated.csv
+    make eval-evaluator-report                          # evaluator_metrics.csv (PART=calibration for the other CSV)
+
+Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/`, not at the `<run_id>/` tlmtc would use: tlmtc overwrites that directory without warning, so predicting a second population with the same evaluator would silently replace the first. The populations, the run order, the transport prerequisites, and what each population's numbers may and may not be read as are in [Eval prediction](eval-prediction.md). Read the evaluator-quality caveats there before quoting any corpus-scale synthetic number.
 
 The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
 
@@ -464,13 +472,15 @@ The final report is assembled from these outputs in a separate private repositor
 
 On the GPU host, upload the evaluation outputs:
 
-    make transfer-push SRC=<prediction-tree> PREFIX=predictions
-    make transfer-push SRC=<checkpoint-tree> PREFIX=checkpoints
+    make transfer-push SRC=data/eval/prediction_outputs PREFIX=predictions
+    make transfer-push SRC=data/eval/train_outputs PREFIX=checkpoints
 
 On the CPU VM:
 
     make transfer-pull PREFIX=predictions
     make transfer-pull PREFIX=checkpoints
+
+A pull lands under `data/transfer/`, which `sync.sh` enforces. Both trees have to be copied into `data/eval/prediction_outputs/` and `data/eval/train_outputs/` before they can be scored or reported on, because that is where pragmata resolves them - see [Eval prediction](eval-prediction.md#getting-the-data-in-and-out).
 
 ### 11.2 Archive the completed run
 

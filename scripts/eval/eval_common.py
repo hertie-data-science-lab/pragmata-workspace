@@ -22,6 +22,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -31,6 +32,26 @@ import workspace as ws
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 TASKS = ("retrieval", "grounding", "generation")
+
+# pragmata's own eval tool tree. Named here rather than per script because three stages now
+# read it - training writes train_outputs/, prediction writes prediction_outputs/, scoring
+# writes scores/ - and the ownership rule in docs/eval.md is that this tree holds only what
+# pragmata put there. Workspace-produced inputs live under data/eval-inputs/.
+EVAL_TOOL_ROOT = ws.DATA_DIR / "eval"
+TRAIN_OUTPUTS = EVAL_TOOL_ROOT / "train_outputs"
+PREDICTION_OUTPUTS = EVAL_TOOL_ROOT / "prediction_outputs"
+
+# The (text, text_pair) column pair per task, mirroring pragmata's TEXT_COLUMNS_BY_TASK
+# (core/schemas/eval_input.py). Duplicated for the same reason LABELS is: the staging
+# subcommands build CSVs from exports and JSONL and must not need pragmata just to name
+# columns. tlmtc sees these renamed to text/text_pair, which is why a prediction CSV read
+# back through `eval score --prediction-id` has to be un-renamed again (pragmata's
+# _restore_pragmata_text_columns does it).
+TEXT_COLUMNS: dict[str, tuple[str, str]] = {
+    "retrieval": ("query", "chunk"),
+    "grounding": ("answer", "context_set"),
+    "generation": ("query", "answer"),
+}
 
 # Label columns per task, mirroring pragmata's LABEL_COLUMNS_BY_TASK
 # (core/schemas/eval_input.py). Duplicated deliberately: these scripts read exported
@@ -178,6 +199,76 @@ def check_freeze_current() -> None:
         "  A report built from the older tree would publish the previous dataset. Either\n"
         "  move the pin (`make annotation-freeze` writes it - and commit it), or pass\n"
         "  --exports explicitly to read a non-canonical tree on purpose."
+    )
+
+
+def resolve_exports(exports: Path) -> Path:
+    """The export tree to read, allowing for the GPU box holding it somewhere else.
+
+    `transfer-pull` writes only under data/transfer/ - it refuses any destination that would
+    escape it - so on the GPU host the canonical freeze arrives at
+    data/transfer/exports-frozen/<date>/, not at the data/annotation/exports-frozen/<date>/
+    that this module defaults to. Both are the same freeze: the date comes from the committed
+    pin either way, so there is no question of picking up different data, only of where it
+    physically sits.
+
+    Falls back rather than guessing: an explicit --exports is honoured untouched, and the
+    fallback says which tree it settled on, because "which bytes was this built from" is the
+    one thing a training or prediction input must not leave implicit.
+    """
+    if exports.is_dir():
+        return exports
+    # Only the DEFAULT falls back. An explicitly named tree that is absent is an error: the
+    # caller asked for particular bytes, and quietly using different ones instead is worse
+    # than failing.
+    if exports.resolve() != FROZEN_EXPORTS.resolve():
+        raise SystemExit(f"no export tree at {exports}")
+    staged = ws.DATA_DIR / "transfer" / "exports-frozen" / FREEZE_DATE
+    if staged.is_dir():
+        # --exports may be relative, so relative_to alone would raise: same guard as
+        # ws.provenance uses on its hashed inputs.
+        shown = exports.resolve()
+        shown = shown.relative_to(ws.ROOT) if shown.is_relative_to(ws.ROOT) else shown
+        print(
+            f"note: {shown} is absent; using the pulled tree at "
+            f"{staged.relative_to(ws.ROOT)}",
+            file=sys.stderr,
+        )
+        return staged
+    raise SystemExit(
+        f"no export tree at {exports}.\n"
+        f"  Nor a pulled copy at {staged}.\n"
+        f"  On the GPU host: make transfer-pull PREFIX=exports-frozen/{FREEZE_DATE}"
+    )
+
+
+def resolve_corpus_dir(explicit: Path | None = None) -> Path:
+    """The directory holding the curated per-programme corpus JSONL, wherever this box has it.
+
+    The same two-place rule ``resolve_exports`` applies to the export tree, for the same
+    reason: the curated corpus is produced on the CPU box under ``data/publikationsbot/`` and
+    reaches the GPU box through the Blob, where ``transfer-pull`` can only land it at
+    ``data/transfer/publikationsbot/``. An explicit path is honoured untouched.
+    """
+    if explicit is not None:
+        if not explicit.is_dir():
+            raise SystemExit(f"no corpus directory at {explicit}")
+        return explicit
+    if any(ws.OUT_DIR.glob(f"*{CURATED_SUFFIX}")):
+        return ws.OUT_DIR
+    staged = ws.DATA_DIR / "transfer" / "publikationsbot"
+    if any(staged.glob(f"*{CURATED_SUFFIX}")):
+        print(
+            f"note: no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
+            f"pulled copy at {staged.relative_to(ws.ROOT)}",
+            file=sys.stderr,
+        )
+        return staged
+    raise SystemExit(
+        f"no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
+        f"  Nor a pulled copy at {staged.relative_to(ws.ROOT)}.\n"
+        "  The curated corpus is produced on the CPU box; on the GPU host pull it first:\n"
+        "    make transfer-pull PREFIX=publikationsbot"
     )
 
 
@@ -402,3 +493,196 @@ def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
         for task, labels in per_task.items()
         for label, stats in (labels.get("per_label") or {}).items()
     }
+
+
+# --- the pragmata eval side: which module answers, which pin, which GPU, which run -------
+#
+# Shared by the three model-stage scripts (train_evaluators, predict_evaluators,
+# score_synthetic_predictions) plus evaluator_report. They live here rather than in one of
+# them because all four have to make the same choice the same way, and the choice is about
+# the environment rather than about a task's data.
+
+
+def pragmata_eval():
+    """The pragmata eval API, from wherever this environment has it.
+
+    Two environments reach this, and they supply eval differently:
+
+    - The CPU VM has ONE venv running both stages, where the installed pragmata is the
+      annotation pin - a frozen commit with no eval module at all. Eval therefore comes from
+      the PRAGMATA_EVAL_SRC checkout, shadowed onto sys.path; the in-process equivalent of the
+      PYTHONPATH score_human_annotations.py hands its subprocess.
+    - The GPU host trains and predicts inside a container against its own venv, where
+      pragmata[eval] is installed outright from configs/eval/train-requirements.txt. There is
+      only one pragmata there, so there is nothing to shadow, and PRAGMATA_EVAL_SRC generally
+      does not even exist inside the container - only the workspace is mounted.
+
+    So try the plain import first and shadow only if it has no eval module. Which one answered
+    is printed rather than inferred, and returned as well, so a run's own provenance record can
+    pin it: silently training or predicting against a different commit than the one a run claims
+    is the failure this ordering could otherwise hide.
+
+    Callers import it through here rather than at module scope so `--help` and the staging
+    subcommands cost nothing.
+    """
+    try:
+        import pragmata.api.eval as eval_api
+        from pragmata.core.schemas.annotation_task import Task
+    except ImportError:
+        # The failed attempt left the ANNOTATION pin's `pragmata` package cached in
+        # sys.modules. Adding the eval src to sys.path cannot dislodge it - the retry would
+        # resolve against the stale package object and fail identically - so drop the
+        # partially-imported tree first.
+        for name in [
+            n for n in sys.modules if n == "pragmata" or n.startswith("pragmata.")
+        ]:
+            del sys.modules[name]
+        pin = ws.eval_pragmata()
+        src = str(pin.src)
+        if sys.path[0] != src:
+            sys.path.insert(0, src)
+        try:
+            import pragmata.api.eval as eval_api
+            from pragmata.core.schemas.annotation_task import Task
+        except ImportError as exc:
+            raise SystemExit(
+                f"cannot import the eval API from {pin.src}: {exc}\n"
+                "  On the GPU host, install pragmata[eval] from\n"
+                "  configs/eval/train-requirements.txt instead - see docs/eval-training.md."
+            ) from exc
+
+    package_dir = Path(eval_api.__file__).parent.parent
+    print(f"pragmata eval API: {package_dir}", file=sys.stderr)
+    # Its parent is <checkout>/src when shadowed and site-packages when installed - the same
+    # value score_human_annotations.py records from the pin, and the shape ws.provenance's
+    # `pragmata_src` expects, which asks git which checkout that tree belongs to. The
+    # installed case belongs to none (the workspace's own repo does not count), so the sha
+    # comes out null rather than borrowed from elsewhere.
+    return eval_api, Task, package_dir.parent
+
+
+def require_gpu(*, use_cpu: bool = False) -> None:
+    """Refuse to start a run whose interpreter cannot see a GPU.
+
+    Checked up front rather than left to fail later, because every way of getting this wrong
+    surfaces a long way from its cause:
+
+    - Inside the container the `make` default is `.venv/bin/python`, which is the HOST's venv
+      on the mounted workspace. Its torch is a cu130 build the driver cannot use, so
+      is_available() is False even though nvidia-smi shows four A100s. Pass
+      PY=<training venv>/bin/python.
+    - On the host itself, GPU compute is disabled by site policy (CUDA_VISIBLE_DEVICES is
+      blanked), so no interpreter there can train or predict regardless of its torch.
+
+    Left to itself, the first symptom is a CUDA error raised inside tlmtc - for training,
+    potentially after a long tokenisation pass. ``use_cpu`` is honoured as a deliberate escape
+    hatch: nothing in configs/eval/training/ sets it, and prediction takes it from a flag.
+    """
+    if use_cpu:
+        return
+    import torch
+
+    if torch.cuda.is_available():
+        return
+    raise SystemExit(
+        f"this interpreter cannot see a GPU: torch {torch.__version__}, "
+        f"cuda.is_available() False.\n"
+        f"  CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')!r}\n"
+        "  Inside the training container, point make at the training venv:\n"
+        "    make eval-train TASK=<task> PY=~/train-venv/bin/python\n"
+        "  On the GPU host outside a container, compute is disabled by site policy - launch a\n"
+        "  container first. See docs/eval-training.md."
+    )
+
+
+def require_clean_eval_pin(pin, *, allow_dirty: bool) -> dict:
+    """git_describe() of the eval pragmata pin, refusing one that pins nothing.
+
+    No SHA is worse than a dirty one: a dirty tree at least names the commit it drifted
+    from, whereas a pin git cannot describe at all pins nothing. Both refuse here, and
+    ``allow_dirty`` is the one deliberate way past either.
+
+    Shared by the two scoring scripts, which publish numbers that have to be re-derivable
+    from a commit of pragmata as well as of this workspace.
+    """
+    described = ws.git_describe(pin.repo)
+    if described["sha"] is None and not allow_dirty:
+        raise SystemExit(
+            f"the pragmata pin at {pin.src} is not inside a git checkout of its own - the\n"
+            f"numbers could not be reproduced from any SHA. Point PRAGMATA_EVAL_SRC at a\n"
+            f"checkout's src/, or pass --allow-dirty to score anyway."
+        )
+    if described["dirty"] and not allow_dirty:
+        raise SystemExit(
+            f"pragmata pin at {pin.repo} has uncommitted changes - the numbers would not be\n"
+            f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."
+        )
+    return described
+
+
+def _json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _evaluator_run(run_id: str, meta: dict) -> SimpleNamespace:
+    """One evaluator run's identity, from BOTH sidecars a completed run leaves behind.
+
+    The two say different things and callers need both. pragmata's
+    ``pragmata_train.meta.json`` carries run_id, task and a timestamp - which is what run
+    selection turns on. tlmtc's ``train_run_meta.json`` carries the model side, of which
+    ``label_names`` is the load-bearing field downstream: grounding trains on three of its five
+    labels, so what a prediction can possibly contain (and therefore whether it is scoreable at
+    all) is decided there rather than by the task. Absent rather than empty when the file is
+    missing, so a caller can tell "no labels" from "cannot say".
+    """
+    run_dir = TRAIN_OUTPUTS / run_id
+    tlmtc_meta_path = run_dir / "train_run_meta.json"
+    tlmtc_meta = _json(tlmtc_meta_path) if tlmtc_meta_path.is_file() else {}
+    return SimpleNamespace(
+        run_id=run_id,
+        run_dir=run_dir,
+        meta=meta,
+        tlmtc_meta=tlmtc_meta,
+        label_names=tlmtc_meta.get("label_names"),
+    )
+
+
+def resolve_evaluator_run(task: str, run_id: str | None = None) -> SimpleNamespace:
+    """The evaluator training run to use for a task: run_id, run_dir, both metas, label_names.
+
+    Reads ``pragmata_train.meta.json`` directly rather than through pragmata, so the
+    CPU-only consumers (evaluator_report's metrics table) need no eval module at all. It is
+    the same file and the same rule pragmata's ``resolve_eval_train_run_id`` applies - latest
+    by ``created_at`` with the run id as a deterministic tie-break, and an explicit run id
+    checked against the task it was trained for. ``predict_labels`` re-resolves it anyway, so
+    this is a pre-flight rather than a substitute: it lets a run print and record which
+    evaluator it settled on BEFORE loading a model.
+    """
+    if run_id is not None:
+        meta_path = TRAIN_OUTPUTS / run_id / "pragmata_train.meta.json"
+        if not meta_path.is_file():
+            raise SystemExit(
+                f"no evaluator run {run_id!r}: {meta_path} does not exist.\n"
+                "  Trained runs live under data/eval/train_outputs/<run_id>/; on the CPU box\n"
+                "  pull them first (make transfer-pull PREFIX=checkpoints)."
+            )
+        meta = _json(meta_path)
+        if meta.get("task") != task:
+            raise SystemExit(
+                f"evaluator {run_id!r} was trained for task={meta.get('task')!r}, not {task!r}."
+            )
+        return _evaluator_run(run_id, meta)
+
+    candidates = []
+    for meta_path in sorted(TRAIN_OUTPUTS.glob("*/pragmata_train.meta.json")):
+        meta = _json(meta_path)
+        if meta.get("task") == task:
+            candidates.append((meta.get("created_at", ""), meta_path.parent.name, meta))
+    if not candidates:
+        raise SystemExit(
+            f"no trained evaluator for task={task!r} under "
+            f"{TRAIN_OUTPUTS.relative_to(ws.ROOT)}.\n"
+            "  Train one (make eval-train TASK=<task>) or pull the checkpoints."
+        )
+    _created_at, resolved, meta = max(candidates)
+    return _evaluator_run(resolved, meta)

@@ -2,8 +2,9 @@
 """Corpus metrics from the human-labelled annotations.
 
 Columns and caveats are defined in `docs/eval-data-dictionary.md`
-(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, is reserved for
-the evaluator-model run and does not exist yet.
+(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, scores the same
+metric taxonomy on an evaluator model's predictions and reuses this module's row builders, so
+the two CSVs stay column-for-column comparable.
 
 Pools the frozen canonical export across programmes, runs `pragmata eval score` once per
 task, and collects every per-metric estimate into one tidy CSV. Pooling is also what makes
@@ -346,21 +347,7 @@ def main() -> int:
     args = ap.parse_args()
 
     pin = ws.eval_pragmata()
-    pragmata_git = ws.git_describe(pin.repo)
-    # No SHA is worse than a dirty one: a dirty tree at least names the commit it drifted
-    # from, whereas a pin git cannot describe at all pins nothing. Both refuse here, and
-    # --allow-dirty is the one deliberate way past either.
-    if pragmata_git["sha"] is None and not args.allow_dirty:
-        raise SystemExit(
-            f"the pragmata pin at {pin.src} is not inside a git checkout of its own — the\n"
-            f"numbers could not be reproduced from any SHA. Point PRAGMATA_EVAL_SRC at a\n"
-            f"checkout's src/, or pass --allow-dirty to score anyway."
-        )
-    if pragmata_git["dirty"] and not args.allow_dirty:
-        raise SystemExit(
-            f"pragmata pin at {pin.repo} has uncommitted changes — the numbers would not be\n"
-            f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."
-        )
+    ec.require_clean_eval_pin(pin, allow_dirty=args.allow_dirty)
 
     policy = policy_name(args)
     filtered_root = FILTERED_ROOT / policy

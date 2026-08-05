@@ -235,6 +235,159 @@ coalesces their extra responses into one item, exactly as it does when passing d
   this store holds.
 
 
+## `synthetic_metric_estimates.csv`
+
+Written as `synthetic_metric_estimates.<population>.csv`, one file per predicted population.
+
+- **Purpose:** the same corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a
+  *synthetic evaluator's* predictions instead of on human labels. Produced by the same
+  `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of
+  `--path`.
+- **Grain:** one row per task x metric, over one predicted population.
+
+Every column means exactly what it means in
+[`eval_metric_estimates.csv`](#eval_metric_estimatescsv) - the row builder is literally shared -
+with two differences and three additions:
+
+| Column | Definition |
+|---|---|
+| *(the `alpha_*` four)* | **Absent by definition.** A prediction has one label per item, so there is no annotator disagreement to measure and no calibration population to measure it on. What replaces them is not in this file: it is the evaluator's own quality, in `evaluator_metrics.csv`. |
+| `policy` | The same two-part slug shape, with `pred-` as the first part: `pred-complete` (the reportable one) or `pred-allpanels`. `calib-`/`prod-` cannot apply - predictions carry no annotator, so nothing was double-annotated. |
+| `source_labels` | Unchanged in meaning: which label(s) the *metric's formula* reads. It is what says whether a metric rests on a label this evaluator was trained for at all. |
+| `evaluator_run_id` | The training run whose model produced the predictions. Joins to `evaluator_metrics.csv`'s `training`, and to that run's `train_provenance.workspace.json`. |
+| `prediction_id` | The prediction directory these numbers were scored from, `<evaluator_run_id>-<population>`. What `eval score --prediction-id` was given. |
+| `population` | Which unlabelled rows were predicted: `annotated` (the frozen export with labels stripped - the rows the human metrics describe) or `corpus` (the curated corpus, most of which was never annotated). |
+| `status` | As in the human CSV, plus **`evaluator_labels_incomplete`**: the evaluator does not predict a label pragmata's score contract requires, so the metric was not computed. This is grounding, always - see below. |
+
+**Caveats.**
+
+- **Read this file with `evaluator_metrics.csv` open.** A corpus rate produced by a model whose
+  AUC is near chance is not a measurement. The intervals here cover sampling uncertainty over
+  queries *only* - they say nothing about the evaluator being wrong, which is the dominant
+  source of error for two of the three tasks.
+- **`population = annotated` is largely in-sample.** Each evaluator's train and validation
+  splits are roughly three quarters of exactly these items (retrieval 1,152 of 1,561; grounding
+  335 of 447; generation 530 of 713). A synthetic estimate on this population is therefore
+  optimistic about the evaluator by an unknown amount. It is the right population for "does the
+  evaluator reproduce the human metric" and the wrong one for "how good is the evaluator".
+- **`population = corpus` has no human baseline at all**, and for **grounding and generation it
+  carries the evaluator-quality caveat in full**: generation's evaluator shows majority-class
+  collapse on its two highest-prevalence labels (F1 0.93 against an AUC of 0.53), and
+  grounding's is directional at best on two of its three trained labels. Read those corpus rates
+  as an indication of what a better evaluator would be measuring.
+- **Grounding rows are always `n = 0`.** Its evaluator trains on three of five labels, and
+  pragmata's grounding score schema requires all five (it is built from the label map at import
+  time, so the narrowing that makes training possible cannot reach it). The rows are written
+  explicitly rather than omitted, so the gap is visible; inventing the two missing columns would
+  be fabricating labels.
+- **Retrieval's population differs sharply between the two files.** `--skip-incomplete-panels`
+  drops 283 of 464 panels on the `annotated` population, exactly as it does for the human run,
+  because annotation coverage is partial. Corpus panels are complete by construction (every
+  chunk of a record is staged), so a corpus run drops none and `n_panels_skipped` is 0. The two
+  `n` values are not comparable without reading `n_panels_skipped` beside them.
+
+## `evaluator_metrics.csv`
+
+- **Purpose:** how good each synthetic evaluator is, per label. The file to read beside any
+  `synthetic_metric_estimates.*.csv` number.
+- **Grain:** one row per task x label x training run, on **that run's own held-out test split**.
+
+| Column | Definition |
+|---|---|
+| `task` | `retrieval`, `grounding` or `generation`. |
+| `label` | One of the task's label columns - but only the ones this run actually trained. |
+| `training` | The evaluator training run id (e.g. `a1b33eec8c9c41f181c61cbd8400913a`). Opaque on purpose: it is the join key to that run's own records - `train_provenance.workspace.json` beside its checkpoints, and the prediction directories named after it - where a friendly name would identify a configuration rather than the run that produced these numbers. |
+| `roc_auc` | Area under the ROC curve for this label, as `tlmtc` reported it. The discrimination measure to trust: it is threshold-independent, where `f1`/`precision`/`recall` all depend on the run's decision threshold. |
+| `accuracy` | Fraction of test rows classified correctly. **Derived, not persisted** - see below. Blank on degenerate labels. |
+| `f1`, `precision`, `recall` | At the run's own persisted decision threshold, as `tlmtc` reported them. |
+| `n` | Rows in the run's held-out test split (`data/test.parquet`) - 409 retrieval, 112 grounding, 183 generation. The same value on every row of a task, because every label is scored on the same split. |
+
+**How `accuracy` is derived.** `tlmtc` persists `f1`, `precision`, `recall`, `roc_auc`,
+`pr_auc`, `true_prevalence` and `pred_prevalence` per label, and *not* accuracy. The four
+underlined quantities pin the whole 2x2 table on a population of known size, so the
+reconstruction is exact rather than approximate:
+
+```
+P  = true_prevalence * n      TP = recall * P       FP = TP / precision - TP
+FN = P - TP                   TN = n - TP - FP - FN
+accuracy = (TP + TN) / n
+```
+
+Every one of those is a count of test rows and must come out whole; each is checked to within
+0.01 rows and the run **aborts** on a miss, because publishing a plausible accuracy derived from
+the wrong model of these metrics is worse than failing. The derivation and the tolerance are also
+written into the `*.provenance.json`, since a derived column that appears in no input is the one
+thing a reader of the CSV cannot check.
+
+**Caveats.**
+
+- **`accuracy` is blank where `precision = 0`.** Every `f1 = 0.000000` row is that case: the
+  evaluator predicted the label positive for no test row at all, so precision is 0/0 and the
+  `FP` step divides by zero. Accuracy *is* still determined there (no positive predictions means
+  `FP = TP = 0`, so it equals `1 - true_prevalence`), and it is deliberately left blank anyway -
+  filled in, it reads as performance, when what it measures is the prevalence of the negative
+  class. The blank plus the three zeros beside it say what happened. In the current runs that is
+  `grounding/contradicted_claim_present`, `grounding/fabricated_source` and
+  `generation/unsafe_content`.
+- **Grounding contributes three labels, not five.** `support_present` and `source_cited` have
+  too few negative items for any split ratio to give `tlmtc` full class support, so they are not
+  trained and have no row here. Their absence is recorded in the `*.provenance.json`
+  (`labels_not_trained`) rather than written as blank rows, because a blank row in a metrics
+  table reads as a measurement of zero. See [Eval training](eval-training.md).
+- **`accuracy` is a weak summary on skewed labels, and most of these are skewed.**
+  `generation/response_on_topic` has `true_prevalence` 0.93: always predicting positive scores
+  0.93. Compare `roc_auc` (0.53) for what the model actually discriminates.
+- **`n` is small.** 112 grounding test rows means a single flipped prediction moves a rate by
+  ~0.9 points, and the two labels with 2-4 test positives move AUC by 0.2-0.3. Treat those as
+  directional.
+- These are the *evaluator's* metrics, not the corpus's. Nothing here describes the
+  publikationsbot; it describes how well a model reproduces human labels on held-out annotated
+  data.
+
+## `evaluator_calibration.csv`
+
+- **Purpose:** whether an evaluator's stated probabilities mean what they say - the reliability
+  data behind a calibration curve.
+- **Grain:** one row per task x label x probability bin, on **that run's own held-out test
+  split**. Bins with no rows in them are omitted, so a task x label has at most 10 rows and
+  usually fewer.
+
+| Column | Definition |
+|---|---|
+| `task` | `retrieval`, `grounding` or `generation`. |
+| `label` | One of the run's trained labels (grounding: three of five, as above). |
+| `prob_bin` | One of ten fixed-width bins over the predicted probability: `[0.0,0.1)`, `[0.1,0.2)`, ... `[0.9,1.0]`. Fixed rather than quantile bins, because the question is whether a stated probability is accurate - a claim about the value, not about its rank - and because fixed edges let two runs' rows line up. The top bin is closed so a probability of exactly 1.0 has somewhere to go. |
+| `mean_pred` | Mean predicted probability of the rows in this bin. Plot against `frac_true`; a perfectly calibrated model puts every point on the diagonal. |
+| `frac_true` | Fraction of rows in this bin whose held-out label is actually positive. |
+| `n` | Rows in this bin. **Load-bearing - see the caveat.** |
+
+**Caveats.**
+
+- **`n` is the first column to read, not the last.** The test splits are 409 / 112 / 183 rows,
+  spread over up to 10 bins per label. In the current runs retrieval's bins hold 9-70 rows
+  (median 41), which supports a curve; grounding's one usable label spreads 112 rows over ten
+  bins and half of them hold 1-3 (median 3), which does not. A `frac_true` computed on 3 rows can
+  only take four values: such a point is noise, not miscalibration. Read bins under roughly 20
+  rows as part of a trend, never individually.
+- **Empty bins are skipped, not written as zeros.** A row of zeros would read as "the model was
+  right 0% of the time here", where an absent row is the absence of evidence it actually is. So a
+  label whose predictions never leave the bottom bin has exactly one row - which is what
+  majority-class collapse looks like here, and is itself the finding:
+  `grounding/contradicted_claim_present`, `grounding/fabricated_source` and
+  `generation/unsafe_content` each produce a single `[0.0,0.1)` row covering the whole split.
+- **The probabilities are re-predicted, not read from a training artifact.** `tlmtc` persists
+  aggregate and per-label metrics, not the per-row scores behind them, so each run is applied
+  again to its own test split through the ordinary prediction path
+  (`predict_evaluators.py`, `population=testsplit`). The probabilities are joined back to the
+  held-out labels on a row-index column carried through prediction - not zipped by position -
+  and the join is checked to cover every test row exactly once.
+- **Reproducibility.** `tlmtc` inference is deterministic given the same model artifacts and
+  batching, so a re-run reproduces these bins; `mean_pred` may move in the last decimal with a
+  different `BATCH_SIZE` (floating-point accumulation), which does not move any bin membership.
+- Calibration is a property of the *scores*, not of the decision. A well-calibrated model can
+  still have a badly chosen threshold, and vice versa: read this beside `evaluator_metrics.csv`,
+  where `roc_auc` is threshold-free and `f1`/`precision`/`recall` are not.
+
 ## Appendix - Implications for editing this doc (pipeline deps)
 >3 points in the pipeline depend on this md by path and by hash:
 >
