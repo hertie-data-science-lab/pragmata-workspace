@@ -392,7 +392,7 @@ exports before it logs. Override either on purpose:
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
 
-`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, an explicit `RUN_AT` that pairs with the export (rather than merely existing in `logs/annotation/log.jsonl` - one that predates the export or lags it implausibly is refused), and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducibility bundle created by `make repro-pin`).
+`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, a `RUN_AT` that pairs with the export, derived or explicit (rather than merely existing in `logs/annotation/log.jsonl` - one that predates the export or lags it implausibly is refused), and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducibility bundle created by `make repro-pin`).
 
 > NB: The freeze and the reproducibility bundle are twinned but separate artefacts. The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`. The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git.
 

@@ -13,10 +13,13 @@ repo-root-relative paths in `sha256sum` format.
 `reproduce` always composes the whole lineage chain in date order — a lineage bundle is
 only meaningful in sequence, so replaying a prefix would land on a state that was never
 live. BUNDLE names the bundle you are replaying toward, and is what the `kind:` check is
-applied to; it does not select how much of the chain is composed.
+applied to; it does not select how much of the chain is composed. `--apply` needs a
+`--mode`: the prune reduces a superset, so something has to rebuild one first.
 
-`verify` exit codes: 0 all OK, 2 any mismatch, 3 absent only. A mismatch outranks an
-absence — missing bytes can be fetched, changed bytes mean the pin no longer holds.
+`verify` exit codes: 0 all OK, 2 any mismatch, 3 absent only — judged across every bundle
+checked, not per bundle. A mismatch outranks an absence: missing bytes can be fetched,
+changed bytes mean the pin no longer holds. Checking nothing (no bundles at all, or a
+bundle whose pins.sha256 is empty) is a failure, never a pass.
 """
 
 from __future__ import annotations
@@ -45,7 +48,13 @@ KINDS = ("lineage", "freeze")
 
 
 def bundles() -> list[Path]:
-    """Every bundle, in lineage order — the dir names start with an ISO date."""
+    """Every bundle, in lineage order — the dir names start with an ISO date.
+
+    Empty rather than an error when there are none: the callers say what "none" means
+    for what they are doing.
+    """
+    if not BUNDLES.is_dir():
+        return []
     return sorted(p for p in BUNDLES.iterdir() if (p / "README.md").exists())
 
 
@@ -192,10 +201,23 @@ beside `kind:` — `repro-verify` prints it whenever a pin comes out ABSENT.
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    worst = 0
-    for bundle in [bundle_dir(args.bundle)] if args.bundle else bundles():
+    targets = [bundle_dir(args.bundle)] if args.bundle else bundles()
+    if not targets:
+        raise SystemExit(
+            f"no bundles under {BUNDLES.relative_to(ws.ROOT)}/ — verify checked nothing, "
+            "which is not the same as everything being OK. A bundle is a directory with a "
+            "README.md; create one with `make repro-pin`."
+        )
+    any_mismatch = any_absent = False
+    for bundle in targets:
+        pins = read_pins(bundle)
+        if not pins:
+            # Verifying nothing must not read as verifying successfully.
+            print(f"== {bundle.name}: {PINS} is empty — pins nothing, verifies nothing")
+            any_mismatch = True
+            continue
         ok = mismatch = absent = 0
-        for digest, rel in read_pins(bundle):
+        for digest, rel in pins:
             path = ws.ROOT / rel
             if not path.exists():
                 state, absent = "ABSENT", absent + 1
@@ -208,8 +230,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
         if absent:
             hint = header(bundle, "fetch") or f"see {bundle.name}/README.md"
             print(f"   absent artefacts are not in git — fetch: {hint}")
-        worst = max(worst, 2 if mismatch else 3 if absent else 0)
-    return worst
+        any_mismatch = any_mismatch or bool(mismatch)
+        any_absent = any_absent or bool(absent)
+    # Across every bundle checked, not per bundle: one mismatch anywhere outranks any
+    # number of absences elsewhere, or a bundle full of external pins would mask it.
+    return 2 if any_mismatch else 3 if any_absent else 0
 
 
 # --- reproduce ---------------------------------------------------------------------
@@ -259,6 +284,12 @@ def cmd_reproduce(args: argparse.Namespace) -> int:
             f"{bundle.name} is status: retired — it is excluded from the composition, so "
             "replaying toward it would move live away from where it is. See its README."
         )
+    if args.apply and not args.mode:
+        raise SystemExit(
+            "--apply needs --mode structure|responses: the prune reduces a SUPERSET to the "
+            "keep-lists, so applying without rebuilding one first would delete live records "
+            "down to a state the lineage never described. Drop --apply to preview instead."
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         keep_lists = Path(tmp)
@@ -269,8 +300,10 @@ def cmd_reproduce(args: argparse.Namespace) -> int:
         print(
             "== composed keep-lists: every lineage bundle in date order, latest wins =="
         )
+        # Same filter as the composing loop: a retired FREEZE was never in the
+        # composition to begin with, so reporting it as skipped from one is noise.
         for skipped in bundles():
-            if retired(skipped):
+            if kind(skipped) == "lineage" and retired(skipped):
                 print(f"  skipped, status: retired -> {skipped.name}")
         for name, chain in sorted(seen.items()):
             if len(chain) > 1:
@@ -352,7 +385,11 @@ def main() -> int:
         help="how to rebuild the superset before pruning: re-import, or restore a backup",
     )
     p.add_argument("--backup", help="backup dir to restore, for --mode responses")
-    p.add_argument("--apply", action="store_true", help="mutate; default preview only")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="mutate (needs --mode); default preview only",
+    )
     p.set_defaults(fn=cmd_reproduce)
 
     args = ap.parse_args()

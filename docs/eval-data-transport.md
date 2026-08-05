@@ -53,7 +53,7 @@ accepts any.
 | `make` target | `sync.sh` equivalent | Effect |
 | --- | --- | --- |
 | `make transfer-push SRC=<d> PREFIX=<p>` | `sync.sh push <d> <p>` | upload tree `<d>` to `<p>/` + write its manifest, print a snapshot pin |
-| `make transfer-pull PREFIX=<p>` | `sync.sh pull <p>` | download `<p>/` into `data/transfer/<p>/`, then verify |
+| `make transfer-pull PREFIX=<p>` | `sync.sh pull <p>` | download `<p>/` into `data/transfer/<p>/` (replacing it), then verify |
 | `make transfer-verify PREFIX=<p>` | `sync.sh verify <p>` | re-check `data/transfer/<p>/` against its manifest, no download |
 
 All three require explicit arguments: `transfer-push` needs `SRC=` (source tree) and `PREFIX=`
@@ -65,8 +65,15 @@ lands at `data/transfer/<prefix>/` - there is no separate destination knob.
 
 Every `push` writes a sorted per-file `sha256` manifest to `<prefix>/MANIFEST.sha256` and
 prints a one-line **snapshot pin** (a single hash for the whole tree) for a future
-reproducibility bundle. Every `pull` re-runs `sha256sum -c` on the receiving end and fails
+reproducibility bundle. An empty source tree is refused rather than pushed: a manifest of
+nothing pins nothing. Every `pull` re-runs `sha256sum -c` on the receiving end and fails
 loudly on any mismatch, so a truncated or corrupted transfer can never pass silently.
+
+A `pull` **replaces** `data/transfer/<prefix>/` rather than downloading over the top of it,
+so a file deleted at the source cannot survive locally and pass verification — `sha256sum
+-c` only checks the files the manifest lists. The download lands in a staging directory
+beside it and is swapped in once complete, so a failed pull leaves the previous tree where
+it was. `verify` runs on the local tree alone: no `EVAL_BLOB_*` credentials, no `az`.
 
 ## The staging boundary
 

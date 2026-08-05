@@ -22,7 +22,7 @@ Usage:
   scripts/eval/score_human_annotations.py                        # the reportable policy
   scripts/eval/score_human_annotations.py --exclude-calibration  # production-only run
   scripts/eval/score_human_annotations.py --all-panels           # no completeness filter
-  scripts/eval/score_human_annotations.py --allow-dirty          # allow a dirty pin
+  scripts/eval/score_human_annotations.py --allow-dirty          # dirty/unpinned pragmata
 """
 
 from __future__ import annotations
@@ -305,13 +305,22 @@ def main() -> int:
     ap.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="Score even if the pragmata pin has uncommitted changes.",
+        help="Score even if the pragmata pin is dirty or names no commit at all.",
     )
     args = ap.parse_args()
 
     pin = ws.eval_pragmata()
     pragmata_git = ws.git_describe(pin.repo)
-    if pragmata_git.get("dirty") and not args.allow_dirty:
+    # No SHA is worse than a dirty one: a dirty tree at least names the commit it drifted
+    # from, whereas a pin git cannot describe at all pins nothing. Both refuse here, and
+    # --allow-dirty is the one deliberate way past either.
+    if pragmata_git["sha"] is None and not args.allow_dirty:
+        raise SystemExit(
+            f"the pragmata pin at {pin.src} is not inside a git checkout of its own — the\n"
+            f"numbers could not be reproduced from any SHA. Point PRAGMATA_EVAL_SRC at a\n"
+            f"checkout's src/, or pass --allow-dirty to score anyway."
+        )
+    if pragmata_git["dirty"] and not args.allow_dirty:
         raise SystemExit(
             f"pragmata pin at {pin.repo} has uncommitted changes — the numbers would not be\n"
             f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."

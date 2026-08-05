@@ -33,7 +33,9 @@ redefine the terms anywhere else.
 
 **A `.provenance.json` records identity, not explanation**: script, workspace SHA,
 pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's
-hash. What a number means lives in the dictionary the hash pins.
+hash. What a number means lives in the dictionary the hash pins. Every input the script
+declared is listed, including one that was not there when it ran - as
+`"sha256": null, "missing": true`, never by omission.
 
 ## The three pins
 
@@ -118,8 +120,11 @@ not interleave. The sequence that works:
    DATE and RUN_AT both derive from the export tree's own `created_at` - DATE from its UTC
    calendar date, RUN_AT from the first log snapshot taken after it, since the run always
    exports before it logs. Pass `DATE=<date>` or `RUN_AT=<run_at>` to override either;
-   an explicit RUN_AT is checked against the same pairing rather than only for existing in
-   the log, refusing one that predates the export or lags it implausibly. Everything is a
+   the pairing is checked either way, rather than only for existing in the log - an
+   explicit RUN_AT that predates the export is refused, and a RUN_AT of either origin that
+   lags it implausibly (the nightly gap is under a minute) is refused too, since the first
+   snapshot after an export whose own was never logged is simply the next night's.
+   Everything is a
    guard until the copy - clean working tree, no freeze under that date already, the
    resolved RUN_AT schema-current, no real names left in `exports/` - and only then does it
    make the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write

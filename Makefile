@@ -223,11 +223,11 @@ transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= de
 
 transfer-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-pull PREFIX=<prefix>"; exit 2; }
-	bash scripts/transfer/sync.sh pull $(PREFIX)
+	bash scripts/transfer/sync.sh pull "$(PREFIX)"
 
 transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
-	bash scripts/transfer/sync.sh verify $(PREFIX)
+	bash scripts/transfer/sync.sh verify "$(PREFIX)"
 
 # --- reproducibility (dated bundles; see reproducibility/README.md for the contract) ---
 

@@ -135,8 +135,9 @@ def _pragmata_eval():
     print(f"pragmata eval API: {package_dir}", file=sys.stderr)
     # Its parent is <checkout>/src when shadowed and site-packages when installed - the same
     # value score_human_annotations.py records from the pin, and the shape ws.provenance's
-    # `pragmata_src` expects, since that git-describes the directory ABOVE it. The installed
-    # case has no repo above it, so the sha comes out null rather than borrowed from elsewhere.
+    # `pragmata_src` expects, which asks git which checkout that tree belongs to. The
+    # installed case belongs to none (the workspace's own repo does not count), so the sha
+    # comes out null rather than borrowed from elsewhere.
     return eval_api, Task, package_dir.parent
 
 
@@ -377,9 +378,10 @@ def combine(exports: Path) -> int:
         # and the code that built it. output_sha256 is the CSV's own bytes rather than its
         # inputs', which is what lets `train` refuse a CSV that has drifted from the record
         # beside it - see _training_csv. contributing_programmes is narrower than programmes
-        # for the same reason: ws.provenance silently drops an input path that does not exist,
-        # so a programme with no rows for this task would otherwise be listed as if it had
-        # supplied some.
+        # for a related reason: `inputs` names every per-programme CSV that was looked for
+        # (a missing one is recorded as such, not dropped), and an export that exists but
+        # holds no submitted rows for this task is not distinguishable there at all - so
+        # the programmes that actually supplied rows are listed separately.
         prov = ws.provenance(
             script="scripts/eval/train_evaluators.py",
             inputs=[exports / p / f"{task}.csv" for p in programmes],
