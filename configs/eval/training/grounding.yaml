@@ -1,0 +1,34 @@
+# Grounding evaluator - trainable only with two unusable labels dropped and a long sequence.
+# Deep-merged over _common.yaml. See docs/eval-training.md.
+#
+# The two-label drop (support_present, source_cited) is NOT configured here: pragmata's
+# EvalTrainSettings forbids extra keys, and narrowing the label set means reassigning
+# LABEL_COLUMNS_BY_TASK, which no config field expresses. It lives in GROUNDING_TRAIN_LABELS in
+# scripts/eval/train_evaluators.py, with the item counts that force it.
+#
+# Note what that reassignment does NOT do. GROUNDING_TRAIN_SCHEMA is built from the same mapping
+# at module import time, so it has already frozen all five labels and the narrowing cannot
+# reach it: the staged CSV must still CARRY support_present and source_cited or the input
+# validation rejects it. Only core/eval/transforms.py re-reads the mapping at call time, so what
+# the narrowing actually removes is the two labels' presence in the training targets - not their
+# presence in the input contract.
+
+task: grounding
+
+# The default 1024 truncated 100% of grounding items - the model never saw a complete input.
+# Median need is ~4,056 tokens; 6144 covers 88.1%. 8192 would still cut 3.8% and does not fit
+# in 40GB at batch_size 1.
+sequence_length: 6144
+
+train_kwargs:
+  # Required at this sequence length: batch_size 4 exhausted a 40GB A100 in testing. This is
+  # what makes the run slow (2+ hours). Check `nvidia-smi` headroom before trying 2.
+  batch_size: 1
+
+  # Both tested on this exact config, neither helped:
+  #   hyperparameter_tuning: macro AUC flat within noise, f1_macro worse.
+  #   threshold_optimization: pred_prevalence 0.87-1.0 against a true 0.28 - the degenerate
+  #     "predict positive almost everywhere" pattern, not a real precision/recall trade.
+  # Set false explicitly rather than omitted, so the decision is visible rather than a default.
+  hyperparameter_tuning: false
+  threshold_optimization: false

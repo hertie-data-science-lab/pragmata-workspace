@@ -12,6 +12,9 @@ configs/annotation/users.json
 # uv's interpreter + wheel cache, kept in-tree so a checkout shared between users
 # does not depend on any one user's home (see the exports in the Makefile).
 .uv/
+# Hugging Face cache (tokenizers + base models for the eval-train targets), in-tree for
+# the same reason - and because ~/.cache/huggingface is root-owned on the shared box.
+.hf/
 
 # --- data, outputs, run state (not version-controlled) ---
 # Tracked scaffolds (README/.gitkeep) inside these dirs are force-added.
@@ -23,6 +26,8 @@ argilla_backup/
 tmp/
 *.log
 .pipeline.lock
+# GPU-container idle-timeout keep-alive; docs/eval-training.md tells operators to create it.
+.keep-alive
 
 # --- python caches ---
 __pycache__/

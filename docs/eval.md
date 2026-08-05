@@ -1,11 +1,11 @@
 # Eval pipeline
 
-The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Two of its
-three parts are wired up in this workspace: **data transport**
-([Eval data transport](eval-data-transport.md)) and **scoring human labels** (this page).
-**Training and prediction** (`pragmata eval train-evaluator|predict-labels`) are implemented
-in `pragmata` and run on the GPU box, but have no workspace-side glue - see
-[No workspace glue yet](#no-workspace-glue-yet).
+The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Three of its
+parts are wired up in this workspace: **data transport**
+([Eval data transport](eval-data-transport.md)), **scoring human labels** (this page), and
+**training the evaluators** ([Eval training](eval-training.md)). **Prediction**
+(`pragmata eval predict-labels`) is implemented in `pragmata` and runs on the GPU box, but
+still has no workspace-side glue - see [What is still missing](#what-is-still-missing).
 
 ## Deliverables
 
@@ -21,8 +21,10 @@ redirect). Every CSV ships with a `.provenance.json` file, and the
 | `make eval-score` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
 | `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
 
-`scripts/eval/` also holds `vectorstore_inventory.py` (aggregate corpus counts, to stdout)
-and `eval_common.py` (shared vocabulary and filters, not runnable).
+`scripts/eval/` also holds `train_evaluators.py` (the training stage, see
+[Eval training](eval-training.md) - it produces models rather than report CSVs, so it is not
+in the table above), `vectorstore_inventory.py` (aggregate corpus counts, to stdout) and
+`eval_common.py` (shared vocabulary and filters, not runnable).
 
 **Vocabulary.** `response`, `record`, `item`, `panel` and `query group` are defined in the
 [data dictionary](eval-data-dictionary.md), together with every column of every CSV.
@@ -143,14 +145,24 @@ not interleave. The sequence that works:
 If the eval pragmata pin moves (e.g. upstream PRs land in modified form), the numbers must
 be **re-derived** under the new pin, not assumed to carry over.
 
-## No workspace glue yet
+## What is still missing
 
-`pragmata eval train-evaluator|predict-labels` are implemented in the pragmata repo, behind
-the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), and run on the GPU box against staged
-export CSVs. What does not exist is the workspace side: no make targets, no eval configs
-(`configs/eval/` holds the freeze pin and nothing else), no tested procedure - see
-[implementation guide §10](implementation-guide.md#10-run-the-evaluation) for the open list.
-When that glue lands it mirrors the annotation pipeline (`scripts/eval/` ↔
-`scripts/annotation/`, `configs/eval/` ↔ `configs/annotation/`) and writes to `data/eval/`.
-`score_synthetic_predictions.py` is the reserved name for scoring the evaluator model's
-predictions - the twin of `score_human_annotations.py` - and is deliberately not stubbed.
+**Training now has workspace glue** - `scripts/eval/train_evaluators.py` behind
+`make eval-train-inputs`, `make eval-train-seqlen` and `make eval-train TASK=<task>`, with
+the recommended configuration per task and the diagnostics behind it. It writes to
+`data/eval/train_outputs/` and stages its pooled inputs in `data/eval-inputs/training/`,
+matching the ownership rule above. See [Eval training](eval-training.md).
+
+**Prediction does not.** `pragmata eval predict-labels` applies a chosen training run to an
+unlabelled CSV, behind the same `eval` extra, but nothing in this workspace calls it: no
+target, no staging convention for the unlabelled side, no tested procedure - see
+[implementation guide §10](implementation-guide.md#10-run-the-evaluation).
+`score_synthetic_predictions.py` is the reserved name for scoring what it produces - the twin
+of `score_human_annotations.py` - and is deliberately not stubbed.
+
+Training's parameters live in `configs/eval/training/` - a shared `_common.yaml` deep-merged
+with one file per task, the same shape as `configs/annotation/querygen_specs/`. They are
+committed as data rather than held in the script because they are pins behind published
+numbers: every metric in the eval report was produced at them, so each is documented beside
+itself and a change shows up in a diff as a change to the pin it is. Prediction has no configs
+under `configs/eval/`, for the same reason it has no glue - there is nothing yet to configure.

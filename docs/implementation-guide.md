@@ -444,19 +444,17 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
 They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Eval pipeline](eval.md), and every column of every CSV is defined in the [data dictionary](eval-data-dictionary.md).
 
 **Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.**
-`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead  the GPU box installs its own environment. They consume staged input by explicit path, e.g.:
+`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead the GPU box installs its own environment. 
 
-    pragmata eval train-evaluator \
-      --labeled-data-path data/transfer/exports/<domain>/<task>.csv \
-      --task <retrieval|grounding|generation> \
-      --config <evaluation-config>
+For training, these workspace targets carry the recommended configuration per task, pool the frozen export into the staged input, and resolve the eval pragmata pin:
 
-    pragmata eval predict-labels \
-      --unlabeled-data-path <unlabelled-csv> \
-      --evaluator-run-id <run-id-from-training> \
-      --task <retrieval|grounding|generation>
+    make eval-train-inputs                  # frozen export -> data/eval-inputs/training/<task>.csv
+    make eval-train-seqlen                  # diagnostic: sequence-length truncation per task
+    make eval-train TASK=retrieval          # then grounding (2+ hours), then generation
 
-**TODO come back to this**
+The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Eval training](eval-training.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
+
+**TODO: there's no scripts yet for prediction.**
 
 The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
 
