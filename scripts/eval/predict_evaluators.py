@@ -7,13 +7,16 @@ population it describes. Inference needs the same environment training does, so 
 on the GPU box; the staging subcommand is CPU-only. See
 [Eval prediction](../../docs/eval-prediction.md).
 
-Two populations, answering different questions:
+Two populations answer the published questions, and a third is internal:
 
 - `annotated` - the same rows the human-label metrics were scored on, pooled from the frozen
   canonical export with the labels stripped. Predicting these is what makes evaluator output
   comparable against a human baseline at all.
 - `corpus` - the curated corpus, most of which nobody annotated. Predicting these gives
   corpus-scale prevalence estimates, with no baseline to check them against.
+- `testsplit` - a run's own held-out split, staged by `evaluator_report.py calibration` rather
+  than by `predict-inputs`, and re-predicted only for the per-item probabilities the
+  reliability curves need. A manual re-run must name the run the split was staged from.
 
 Prediction has no YAML configs, deliberately: population and evaluator run id are CLI
 arguments, because until the final run there are no published numbers for a pin to stand
@@ -559,6 +562,26 @@ def staged_csv(task: str, population: str) -> tuple[Path, dict]:
     return path, sidecar
 
 
+def check_testsplit_run(sidecar: dict, csv_path: Path, evaluator_run_id: str) -> None:
+    """Refuse a testsplit CSV staged from a different run than the one predicting it.
+
+    A test split belongs to exactly one training run - it is that run's held-out quarter -
+    so applying run B to a CSV staged from run A's parquet would produce a directory that
+    looks like B's calibration data and is not. The calibration flow never hits this (it
+    stages and predicts inside one process), but the staged file outlives that process,
+    and the sidecar names its run precisely so a later caller can be checked against it.
+    """
+    staged_run = sidecar.get("evaluator_run_id")
+    if staged_run != evaluator_run_id:
+        raise SystemExit(
+            f"{csv_path.relative_to(ws.ROOT)} is run {staged_run!r}'s test split, but the\n"
+            f"  prediction was asked for run {evaluator_run_id!r}. A test split belongs to\n"
+            f"  the run that held it out - predicting it with another run would produce a\n"
+            f"  directory that reads as that run's calibration data and is not.\n"
+            "  It is staged per run by scripts/eval/evaluator_report.py calibration."
+        )
+
+
 def _predict(eval_api, **kwargs):
     """Call predict_labels, turning a missing training extra into an instruction.
 
@@ -619,6 +642,12 @@ def predict(
     # than inferred from the absence of a flag.
     origin = "given" if evaluator_run_id else "resolved as the latest for this task"
     print(f"evaluator run: {run.run_id} ({origin})", file=sys.stderr)
+
+    # Before the GPU check, because the sidecar decides it on its own - and before the
+    # collision guard, which would happily accept the directory a mismatch produces: it is
+    # named after the predicting run and would hold another run's split.
+    if population == "testsplit":
+        check_testsplit_run(sidecar, csv_path, run.run_id)
 
     final_dir = ec.PREDICTION_OUTPUTS / f"{run.run_id}-{population}"
     if final_dir.exists() and not overwrite:
@@ -710,6 +739,10 @@ def predict(
             key: sidecar.get(key)
             for key in (
                 "freeze_date",
+                # The staged split's own run, not this prediction's - the guard above has
+                # just established they are the same one, and recording it is what lets a
+                # testsplit directory say whose split it holds without the sidecar beside it.
+                "evaluator_run_id",
                 "corpus_sources",
                 "n_records_valid",
                 "n_records_rejected",
@@ -767,7 +800,15 @@ def main() -> int:
     )
     predict_parser.add_argument("task", choices=list(ec.TASKS))
     predict_parser.add_argument(
-        "--population", choices=list(PREDICT_POPULATIONS), required=True
+        "--population",
+        choices=list(PREDICT_POPULATIONS),
+        required=True,
+        help=(
+            "annotated|corpus are staged by predict-inputs. testsplit is internal: "
+            "evaluator_report.py calibration stages a run's own held-out split and predicts "
+            "it in one pass, so a manual re-run must pass the --evaluator-run-id that split "
+            "was staged from."
+        ),
     )
     predict_parser.add_argument(
         "--evaluator-run-id",

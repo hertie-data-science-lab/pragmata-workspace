@@ -30,9 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -184,65 +182,21 @@ def unscoreable_labels(prediction_dir: Path, task: str) -> list[str]:
 def run_score(pin, prediction_id: str, task: str, score_id: str, args) -> Path:
     """Invoke `pragmata eval score --prediction-id` on a prediction dir; return the report path.
 
-    Runs the workspace venv's own CLI with the eval pin's src on PYTHONPATH, which shadows the
-    installed annotation pragmata - a frozen demo commit with no eval module. The same call
-    shape `score_human_annotations.run_score` uses, with `--prediction-id` in place of
-    `--path`: pragmata resolves that to the run's `predictions.csv`, records
+    The subprocess mechanics - PYTHONPATH shadow, base_dir, the stale-report mtime guard -
+    live in ec.run_score_cli, shared with the human scorer. `--prediction-id` in place of
+    `--path` is the substance: pragmata resolves it to the run's `predictions.csv`, records
     `source.kind=model_prediction` on the report, and - because of that kind - renames tlmtc's
     generic `text`/`text_pair` columns back to the task's own before validating. Passing
     `--path predictions.csv` instead would skip exactly that step and fail the score contract.
     """
-    import os
-
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(pin.src)
-    command = [
-        str(pin.bin),
-        "eval",
-        "score",
-        "--prediction-id",
-        prediction_id,
-        "--task",
+    return ec.run_score_cli(
+        pin,
+        ["--prediction-id", prediction_id],
         task,
-        # base_dir is pragmata's tool-root PARENT - tools write <base_dir>/{annotation,eval}
-        # as siblings - so this must be data/, the same value predict wrote its output under.
-        "--base-dir",
-        str(ws.DATA_DIR),
-        "--score-id",
         score_id,
-        "--ci",
-        str(args.ci),
-        "--n-resamples",
-        str(args.n_resamples),
-        "--seed",
-        str(args.seed),
-        "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
-    ]
-    # Read the clock before the run, not after: the report path below is reconstructed from
-    # pragmata's layout rather than reported by the CLI, and score_id is reused run after run.
-    # A file older than the subprocess cannot be its output - see the human scorer's own note.
-    started = time.time()
-    result = subprocess.run(
-        command, env=env, capture_output=True, text=True, check=False
+        args,
+        context=f"{score_id}/{task} (prediction {prediction_id})",
     )
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
-        raise SystemExit(
-            f"eval score failed for {score_id}/{task} (prediction {prediction_id}):\n  "
-            + "\n  ".join(tail)
-        )
-    report_path = ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
-    if not report_path.exists() or report_path.stat().st_mtime < started:
-        why = "no such file" if not report_path.exists() else "it predates the run"
-        raise SystemExit(
-            f"eval score reported success for {score_id}/{task}, but the report it should\n"
-            f"  have written was not written by it ({why}):\n"
-            f"    {report_path}\n"
-            "  That path is reconstructed from pragmata's output layout, not reported by\n"
-            "  the CLI. If the layout has moved, fix run_score() rather than publishing\n"
-            "  whatever file happens to sit there."
-        )
-    return report_path
 
 
 def main() -> int:

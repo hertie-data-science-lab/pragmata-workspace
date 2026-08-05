@@ -303,13 +303,13 @@ with two differences and three additions:
 | `n` | Rows in the run's held-out test split (`data/test.parquet`) - 409 retrieval, 112 grounding, 183 generation. The same value on every row of a task, because every label is scored on the same split. |
 
 **How `accuracy` is derived.** `tlmtc` persists `f1`, `precision`, `recall`, `roc_auc`,
-`pr_auc`, `true_prevalence` and `pred_prevalence` per label, and *not* accuracy. The four
-underlined quantities pin the whole 2x2 table on a population of known size, so the
-reconstruction is exact rather than approximate:
+`pr_auc`, `true_prevalence` and `pred_prevalence` per label, and *not* accuracy. Three of
+those (`true_prevalence`, `recall`, `pred_prevalence`), with the split size `n`, pin the
+whole 2x2 table, so the reconstruction is exact rather than approximate:
 
 ```
-P  = true_prevalence * n      TP = recall * P       FP = TP / precision - TP
-FN = P - TP                   TN = n - TP - FP - FN
+P  = true_prevalence * n      TP = recall * P       PP = pred_prevalence * n
+FP = PP - TP                  FN = P - TP           TN = n - TP - FP - FN
 accuracy = (TP + TN) / n
 ```
 
@@ -321,12 +321,13 @@ thing a reader of the CSV cannot check.
 
 **Caveats.**
 
-- **`accuracy` is blank where `precision = 0`.** Every `f1 = 0.000000` row is that case: the
-  evaluator predicted the label positive for no test row at all, so precision is 0/0 and the
-  `FP` step divides by zero. Accuracy *is* still determined there (no positive predictions means
-  `FP = TP = 0`, so it equals `1 - true_prevalence`), and it is deliberately left blank anyway -
-  filled in, it reads as performance, when what it measures is the prevalence of the negative
-  class. The blank plus the three zeros beside it say what happened. In the current runs that is
+- **`accuracy` is blank where `pred_prevalence = 0`** - the evaluator never predicts the label
+  positive. (Not keyed on `precision = 0`, which is ambiguous: precision also reads 0.0 when the
+  model makes positive predictions that are all wrong, and there accuracy is computed normally.)
+  Where nothing is predicted positive, accuracy *is* still determined (`TP = FP = 0`, so it
+  equals `1 - true_prevalence`), and it is deliberately left blank anyway - filled in, it reads
+  as performance, when what it measures is the prevalence of the negative class. The blank plus
+  the `f1`/`precision`/`recall` zeros beside it say what happened. In the current runs that is
   `grounding/contradicted_claim_present`, `grounding/fabricated_source` and
   `generation/unsafe_content`.
 - **Grounding contributes three labels, not five.** `support_present` and `source_cited` have
@@ -365,10 +366,10 @@ thing a reader of the CSV cannot check.
 
 - **`n` is the first column to read, not the last.** The test splits are 409 / 112 / 183 rows,
   spread over up to 10 bins per label. In the current runs retrieval's bins hold 9-70 rows
-  (median 41), which supports a curve; grounding's one usable label spreads 112 rows over ten
-  bins and half of them hold 1-3 (median 3), which does not. A `frac_true` computed on 3 rows can
-  only take four values: such a point is noise, not miscalibration. Read bins under roughly 20
-  rows as part of a trend, never individually.
+  (median 41.5), which supports a curve; grounding's one usable label spreads 112 rows over ten
+  bins and seven of them hold 1-3 rows (median 3), which does not. A `frac_true` computed on 3
+  rows can only take four values: such a point is noise, not miscalibration. Read bins under
+  roughly 20 rows as part of a trend, never individually.
 - **Empty bins are skipped, not written as zeros.** A row of zeros would read as "the model was
   right 0% of the time here", where an absent row is the absence of evidence it actually is. So a
   label whose predictions never leave the bottom bin has exactly one row - which is what

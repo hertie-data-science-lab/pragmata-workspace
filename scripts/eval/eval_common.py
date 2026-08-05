@@ -620,6 +620,74 @@ def require_clean_eval_pin(pin, *, allow_dirty: bool) -> dict:
     return described
 
 
+def run_score_cli(
+    pin, input_args: list[str], task: str, score_id: str, args, context: str
+) -> Path:
+    """Invoke `pragmata eval score` and return its report JSON path, freshness-checked.
+
+    Shared by both scoring scripts - the human one passes ``["--path", <csv>]``, the
+    synthetic one ``["--prediction-id", <id>]`` - so the load-bearing parts live exactly
+    once: the PYTHONPATH shadow (the workspace venv's CLI with the eval pin's src
+    shadowing the installed annotation pragmata, a frozen demo commit with no eval
+    module), the base_dir choice (pragmata's tool-root PARENT, so data/, matching the
+    existing data/annotation/ tree), and the mtime guard.
+
+    The guard: the report path below is reconstructed from pragmata's output layout
+    rather than reported by the CLI, and score_id is a slug reused run after run. If
+    that layout ever moves while the CLI still exits 0, the guessed path would resolve
+    to the PREVIOUS run's file and its stale numbers would be published under this
+    run's provenance. A file older than the subprocess cannot be its output, so the
+    clock is read before the run and the report must postdate it.
+    """
+    import subprocess
+    import time
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(pin.src)
+    command = [
+        str(pin.bin),
+        "eval",
+        "score",
+        *input_args,
+        "--task",
+        task,
+        "--base-dir",
+        str(ws.DATA_DIR),
+        "--score-id",
+        score_id,
+        "--ci",
+        str(args.ci),
+        "--n-resamples",
+        str(args.n_resamples),
+        "--seed",
+        str(args.seed),
+        # Panel completeness is pragmata's job (#305): skip records n_panels_skipped
+        # on the report; --all-panels accepts the bias instead.
+        "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
+    ]
+    started = time.time()
+    # check=False: the returncode is handled explicitly, to surface the CLI's own
+    # error tail rather than a bare CalledProcessError.
+    result = subprocess.run(
+        command, env=env, capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
+        raise SystemExit(f"eval score failed for {context}:\n  " + "\n  ".join(tail))
+    report_path = ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
+    if not report_path.exists() or report_path.stat().st_mtime < started:
+        why = "no such file" if not report_path.exists() else "it predates the run"
+        raise SystemExit(
+            f"eval score reported success for {context}, but the report it should\n"
+            f"  have written was not written by it ({why}):\n"
+            f"    {report_path}\n"
+            "  That path is reconstructed from pragmata's output layout, not reported by\n"
+            "  the CLI. If the layout has moved, fix run_score_cli() rather than\n"
+            "  publishing whatever file happens to sit there."
+        )
+    return report_path
+
+
 def _json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 

@@ -87,7 +87,11 @@ fatal.
 
 A third population, `testsplit`, exists but is not staged by `eval-predict-inputs`:
 `evaluator_report.py calibration` stages one per run from that run's own held-out split, which
-is a property of a training run rather than of the corpus.
+is a property of a training run rather than of the corpus. `make eval-predict
+POPULATION=testsplit` accepts it, so that pass can be repeated by hand, but `RUN_ID` must then
+name the run the split was staged from: a split belongs to the run that held it out, and
+predicting it with a different evaluator would fill that evaluator's directory with another
+run's calibration data.
 
 ## Provenance and the freshness rule
 
@@ -100,7 +104,8 @@ bytes. **`eval-predict` refuses to start unless that record is present, names th
 being asked for, and matches the CSV on disk.** For the `annotated` population it must also
 name the freeze `configs/eval/freeze.conf` currently pins: without that check the pin can move
 while a stale CSV is predicted on silently, since nothing else downstream re-reads where the
-staged rows came from.
+staged rows came from. For `testsplit` it must name the evaluator run being applied, which is
+the check the paragraph above describes.
 
 The corpus population has no freeze to check, so its record carries the equivalent: each source
 JSONL's `sha256` beside the pin for it in

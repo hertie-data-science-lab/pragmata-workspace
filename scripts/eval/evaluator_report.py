@@ -119,29 +119,34 @@ def _derived_accuracy(stats: dict, n: int, task: str, label: str) -> tuple[str, 
     """(accuracy, note) for one label, reconstructed from the metrics tlmtc does persist.
 
     **Accuracy is not in `label_metrics.json`**, so it is derived rather than read. The
-    reconstruction is exact, not an approximation, because the four persisted quantities pin
-    the whole 2x2 table on a population of known size:
+    reconstruction is exact, not an approximation, because the persisted quantities pin the
+    whole 2x2 table on a population of known size:
 
         P  = true_prevalence * n          positives in the test split
         TP = recall * P                   recall = TP / P
-        FP = TP / precision - TP          precision = TP / (TP + FP)
+        PP = pred_prevalence * n          rows the evaluator called positive
+        FP = PP - TP
         FN = P - TP
         TN = n - TP - FP - FN
         accuracy = (TP + TN) / n
 
-    Every one of those must come out a whole number, since they are counts of test rows, and
-    each is checked against INTEGER_TOLERANCE. A miss means the metrics were not computed the
-    way this algebra assumes - a different denominator, a different split - and publishing a
+    FP comes from `pred_prevalence` rather than from precision (`TP / precision - TP`), for
+    two reasons. Division by a rounded ratio is the shakier arithmetic; and precision is 0.0
+    both when the evaluator called nothing positive (0/0, reported as 0) and when everything
+    it called positive was wrong (a genuine zero) - two states this table must not conflate,
+    which `pred_prevalence` tells apart directly.
+
+    Every count must come out a whole number, since they are counts of test rows, and each is
+    checked against INTEGER_TOLERANCE. A miss means the metrics were not computed the way
+    this algebra assumes - a different denominator, a different split - and publishing a
     plausible-looking accuracy derived from the wrong model of them is worse than failing, so
     it aborts naming the label and the residual.
 
-    The degenerate case is `precision == 0`, which every f1-0.0 label here is: the evaluator
-    predicted the label positive for nothing at all, so precision is 0/0 and the FP step
-    divides by zero. Accuracy IS still determined there (no positive predictions means FP = 0
-    and TP = 0, so accuracy = 1 - true_prevalence), but it is left blank deliberately: an
-    accuracy filled in for a label the model never predicts reads as performance, when what it
-    measures is the prevalence of the negative class. The blank plus the f1/precision/recall
-    zeros beside it say what happened.
+    The one blank is `pred_prevalence == 0`: the evaluator never predicts the label positive.
+    Accuracy IS still determined there (TP = FP = 0, so accuracy = 1 - true_prevalence), but
+    it is left blank deliberately: an accuracy filled in for a label the model never predicts
+    reads as performance, when what it measures is the prevalence of the negative class. The
+    blank plus the f1/precision/recall zeros beside it say what happened.
     """
     prevalence = float(stats["true_prevalence"])
     positives = prevalence * n
@@ -164,13 +169,13 @@ def _derived_accuracy(stats: dict, n: int, task: str, label: str) -> tuple[str, 
     positives = _check(positives, "true_prevalence * n")
     true_positives = _check(float(stats["recall"]) * positives, "recall * positives")
 
-    precision = float(stats["precision"])
-    if precision == 0:
-        return "", "degenerate: no positive predictions, precision is 0/0"
-
-    false_positives = _check(
-        true_positives / precision - true_positives, "false positives"
+    predicted_positives = _check(
+        float(stats["pred_prevalence"]) * n, "pred_prevalence * n"
     )
+    if predicted_positives == 0:
+        return "", "degenerate: the evaluator never predicts this label positive"
+
+    false_positives = _check(predicted_positives - true_positives, "false positives")
     false_negatives = _check(positives - true_positives, "false negatives")
     true_negatives = _check(
         n - true_positives - false_positives - false_negatives, "true negatives"
@@ -244,15 +249,15 @@ def metrics(run_ids: dict[str, str], out_dir: Path | None) -> int:
             # is not in any input is the one thing a reader of the CSV cannot check.
             accuracy_derivation=(
                 "not persisted by tlmtc; reconstructed from the same run's "
-                "true_prevalence, recall and precision over n test rows: "
-                "P=true_prevalence*n, TP=recall*P, FP=TP/precision-TP, FN=P-TP, "
-                "TN=n-TP-FP-FN, accuracy=(TP+TN)/n. Every count is checked to be "
-                f"whole within {INTEGER_TOLERANCE} test rows or the run aborts."
+                "true_prevalence, recall and pred_prevalence over n test rows: "
+                "P=true_prevalence*n, TP=recall*P, PP=pred_prevalence*n, FP=PP-TP, "
+                "FN=P-TP, TN=n-TP-FP-FN, accuracy=(TP+TN)/n. Every count is checked "
+                f"to be whole within {INTEGER_TOLERANCE} test rows or the run aborts."
             ),
             accuracy_blank_reason=(
-                "precision == 0 (the evaluator predicted the label positive for no test "
-                "row), where FP=TP/precision is 0/0. Left blank rather than filled with "
-                "1-true_prevalence, which would read as performance."
+                "pred_prevalence == 0 (the evaluator never predicts this label "
+                "positive). Accuracy is determined there (1-true_prevalence) but left "
+                "blank rather than filled in, which would read as performance."
             ),
             accuracy_blank_labels=sorted(notes),
             # Recorded rather than implied by absent rows: "this evaluator does not cover the
