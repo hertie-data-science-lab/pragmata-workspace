@@ -573,7 +573,7 @@ def build_constraints(acc: dict) -> dict:
 
 
 def empty_completeness() -> dict:
-    return {"n_panels": 0, "n_complete": 0, "by_k_bucket": {}}
+    return {"n_panels": 0, "n_complete": 0}
 
 
 def add_completeness(acc: dict, c: dict | None) -> None:
@@ -581,22 +581,15 @@ def add_completeness(acc: dict, c: dict | None) -> None:
         return
     acc["n_panels"] += c.get("n_panels", 0)
     acc["n_complete"] += c.get("n_complete", 0)
-    for bucket, st in (c.get("by_k_bucket") or {}).items():
-        b = acc["by_k_bucket"].setdefault(bucket, {"n_panels": 0, "n_complete": 0})
-        b["n_panels"] += st.get("n_panels", 0)
-        b["n_complete"] += st.get("n_complete", 0)
 
 
 def build_completeness(acc: dict) -> dict | None:
     if acc["n_panels"] == 0:
         return None
-    # by_k_bucket kept as raw {n_panels, n_complete} — matches the meta-file shape; the
-    # renderer recomputes per-bucket fractions (_bucket_frac).
     return {
         "n_panels": acc["n_panels"],
         "n_complete": acc["n_complete"],
         "fraction_complete": round(acc["n_complete"] / acc["n_panels"], 4),
-        "by_k_bucket": acc["by_k_bucket"],
     }
 
 
