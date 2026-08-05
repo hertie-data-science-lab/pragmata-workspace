@@ -4,9 +4,24 @@ Evaluation-stage configs. Mirrors `configs/annotation/`.
   `make annotation-freeze` and read by `scripts/eval/eval_common.py`.
 - `training/` — one YAML per task for `make eval-train`, plus a shared `_common.yaml`
   deep-merged underneath it, exactly as `annotation/querygen_specs/_runtime.yaml` composes
-  with each spec. The keys are `pragmata`'s own `EvalTrainSettings` fields, so the files are
-  validated by it directly (and `extra="forbid"`, so a typo fails loudly). See
-  [eval training](../../docs/eval-training.md).
+  with each spec. See [eval training](../../docs/eval-training.md).
+
+**How much of this is validated, exactly.** The merged mapping is passed to
+`pragmata.api.eval.train_evaluator` as keyword arguments, so the two levels behave differently:
+
+- **Top-level keys** (`checkpoint`, `sequence_length`, `scale_learning_rate`, ...) are that
+  function's own parameters. A typo fails loudly, but as a `TypeError` on an unexpected keyword
+  argument rather than as a `pydantic` validation error - `EvalTrainSettings` never sees the
+  stray key, because the call site builds its override dict from the fixed signature. Values
+  that reach the model are type-checked by it.
+- **`train_kwargs` is an unvalidated passthrough** - `dict[str, Any]`, forwarded verbatim to
+  `tlmtc.train_tlmtc`. `pragmata` checks only that it does not shadow an argument it manages
+  itself (`checkpoint`, `sequence_length`, and the rest). Nothing here knows which keys `tlmtc`
+  reads, so a key it ignores is accepted in silence and the run reports no error.
+
+That silence is why `make eval-train` echoes the whole merged config to stderr at run start and
+records it in `train_provenance.workspace.json` inside the run directory: a setting that did
+nothing is at least visible beside the metrics it did not affect.
 
 The values in `training/` are **pins behind published numbers, not operator knobs**: every
 metric in the eval report was produced at them, so changing one invalidates comparison and
@@ -15,6 +30,8 @@ were tested and did not help.
 
 Two things deliberately stay out of these files: `base_dir` and `labeled_data_path`, which are
 machine-dependent and passed as overrides, and grounding's label narrowing, which reassigns a
-`pragmata` module mapping and has no config field to live in.
+`pragmata` module mapping and has no config field to live in. The narrowing reaches the training
+targets only - the two dropped columns are still required in the staged CSV, because the input
+schema was built from that mapping at import time. See `grounding.yaml`'s own header.
 
 Prediction has no workspace glue at all yet, so nothing here configures it (`docs/eval.md`).

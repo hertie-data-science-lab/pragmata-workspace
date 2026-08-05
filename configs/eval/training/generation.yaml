@@ -5,8 +5,10 @@
 # Majority-class collapse persists on proper_action and response_on_topic regardless of what
 # is set here: they read F1 0.94 and 0.88 while their AUC sits at 0.55-0.57, i.e. the model is
 # still largely predicting the majority class. The cause is upstream of any setting in this
-# file - minority-class scarcity (16 negative examples for response_on_topic in the whole
-# training set) compounded by annotator agreement at or near zero for these labels.
+# file - minority-class scarcity (29 negative ITEMS for response_on_topic in the whole training
+# set of 713, from 33 negative response rows) compounded by annotator agreement at or near zero
+# for these labels. Items are the grain that matters: tlmtc consolidates each item's responses
+# by majority before it splits. `make eval-train-seqlen` prints these item counts.
 
 task: generation
 

@@ -3,8 +3,15 @@
 #
 # The two-label drop (support_present, source_cited) is NOT configured here: pragmata's
 # EvalTrainSettings forbids extra keys, and narrowing the label set means reassigning
-# LABEL_COLUMNS_BY_TASK before the schema is read. It lives in GROUNDING_TRAIN_LABELS in
-# scripts/eval/train_evaluators.py, with the counts that force it.
+# LABEL_COLUMNS_BY_TASK, which no config field expresses. It lives in GROUNDING_TRAIN_LABELS in
+# scripts/eval/train_evaluators.py, with the item counts that force it.
+#
+# Note what that reassignment does NOT do. GROUNDING_TRAIN_SCHEMA is built from the same mapping
+# at module import time, so it has already frozen all five labels and the narrowing cannot
+# reach it: the staged CSV must still CARRY support_present and source_cited or the input
+# validation rejects it. Only core/eval/transforms.py re-reads the mapping at call time, so what
+# the narrowing actually removes is the two labels' presence in the training targets - not their
+# presence in the input contract.
 
 task: grounding
 

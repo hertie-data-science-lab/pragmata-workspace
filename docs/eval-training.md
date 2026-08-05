@@ -6,10 +6,12 @@ human annotations, then applied to unlabelled data by `pragmata eval predict-lab
 
 `scripts/eval/train_evaluators.py` drives it; the recommended configuration per task lives in
 [`configs/eval/training/`](../configs/eval/training/) as a shared `_common.yaml` deep-merged
-with one file per task, exactly as `querygen_specs/_runtime.yaml` composes with each spec. The
-keys are pragmata's own `EvalTrainSettings` fields, so pragmata validates them directly. The
-training itself runs on the GPU host: its dependencies are deliberately outside this
-workspace's lock, see [The environment](#the-environment).
+with one file per task, exactly as `querygen_specs/_runtime.yaml` composes with each spec. How
+much of that is actually validated is
+[spelled out beside the files](../configs/eval/README.md) - the top level is, `train_kwargs` is
+a verbatim passthrough to tlmtc and is not. The training itself runs on the GPU host: its
+dependencies are deliberately outside this workspace's lock, see
+[The environment](#the-environment).
 
 | Target | Does | Where it runs |
 |---|---|---|
@@ -70,7 +72,7 @@ on the host.
 
 Then build the training environment. **Run the installs from outside `/workspace`**: uv
 otherwise picks up this repo's `pyproject.toml` and its `constraint-dependencies` pin
-`torch==2.12.0`, and the resolution fails with *"you require torch==2.8.0 and torch==2.12.0"*.
+`torch==2.12.0`, and the resolution fails with *"you require torch==2.9.1 and torch==2.12.0"*.
 `--no-config` makes that explicit:
 
 ```bash
@@ -88,8 +90,10 @@ uv pip install --no-config --python ~/train-venv/bin/python \
 **torch goes first, and from the cu128 index.** Installing `tlmtc[train]` first pulls the
 default PyPI torch, which is a cu130 build the driver cannot use - the smoke test then says
 `False` and nothing trains. The full transitive pin set is
-[`configs/eval/train-requirements.txt`](../configs/eval/train-requirements.txt), 153 packages
-frozen from a verified container.
+[`configs/eval/train-requirements.txt`](../configs/eval/train-requirements.txt), 134 packages
+frozen from a verified container. It carries the cu128 `--extra-index-url` itself, so it also
+resolves standalone - the separate torch step above is about install *order*, not about reaching
+the index.
 
 Two notes on the version. cu128 wheels run on a CUDA 12.2 driver through CUDA 12.x
 minor-version compatibility - verified on `ds01`, real GPU matmul included. And 2.9 is the
@@ -105,19 +109,29 @@ cd /workspace
 make eval-train TASK=retrieval PY=$HOME/train-venv/bin/python
 ```
 
-`PRAGMATA_EVAL_SRC` must also resolve inside the container. It is not under `/workspace`, so
-either mount it too (`container-create ... -d /home/shared/pragmata-eval`) or export a path to
-a checkout that is. If the training extra is missing, `make eval-train` exits with an
-instruction rather than a traceback.
+**`PRAGMATA_EVAL_SRC` is not needed inside the container**, and generally will not exist there -
+it is not under `/workspace`, and only the workspace is mounted. It does not have to: the
+training venv installs `pragmata[eval]` outright at the eval pin, which
+`train-requirements.txt` pins by commit, so there is one pragmata and nothing to shadow. The
+script tries a plain `import pragmata.api.eval` first and falls back to the `PRAGMATA_EVAL_SRC`
+checkout only when that import finds no eval module - which is the CPU VM's situation, where
+the installed pragmata is the frozen annotation pin. Either way it prints which one answered, so
+a run log names the commit it trained against rather than leaving it to be inferred. If the
+training extra is missing altogether, `make eval-train` exits with an instruction rather than a
+traceback.
 
 ## Run order
 
 ```bash
-make transfer-pull PREFIX=exports-frozen/<FREEZE_DATE>   # if the tree is not already local
-make eval-train-inputs                                  # -> data/eval-inputs/training/
-make eval-train-seqlen                                   # confirm the truncation picture holds
-make eval-train TASK=retrieval                           # then grounding, then generation
+make transfer-pull PREFIX=exports-frozen/<FREEZE_DATE>  # if the tree is not already local
+make eval-train-inputs                                 # -> data/eval-inputs/training/
+make eval-train-seqlen                                 # confirm the truncation picture holds
+make eval-train TASK=retrieval PY=$HOME/train-venv/bin/python   # then grounding, generation
 ```
+
+Only the last line needs `PY=`. The two before it are CPU-only, so the default `.venv/bin/python`
+runs them wherever they are invoked; `eval-train` is the one that would otherwise reach for the
+host's venv and fail the GPU check.
 
 **Where the export tree is read from differs by box, and `eval-train-inputs` handles it.**
 `transfer-pull` writes only under `data/transfer/` - it refuses any destination that would
@@ -163,6 +177,11 @@ Raising it further has a steep cost: 8192 would still truncate 3.8%, at more mem
 These differ slightly from the figures in the eval report, which were taken at per-response
 grain against the superseded export. The item counts here are the honest denominator.
 
+It prints per-label positive/negative counts at that same item grain too, and it is the only
+target that can: `eval-train-inputs` counts response rows, and the gap between the two is what
+decides whether a label is trainable at all. For grounding it also reports the two labels the
+run drops, marked as such - their floor is the thing a future export has to lift.
+
 ## What each task's configuration rests on
 
 The base model is `jhu-clsp/mmBERT-base`, pinned explicitly in `_common.yaml` rather than
@@ -177,22 +196,33 @@ metric is load-bearing rather than cosmetic: `threshold_optimization` otherwise 
 checkpoint selection from AUC to F1 silently, which is exactly what made the same setting
 degenerate on the other two tasks. `--threshold-type` selects global (default,
 `roc_auc_macro` 0.769) or label-specific (0.752, but `f1_macro` 0.720 against 0.704) - both
-are legitimate, global leads on the primary metric.
+are legitimate, global leads on the primary metric. It applies to retrieval only: `tlmtc` reads
+`threshold_type` only when `threshold_optimization` is on, so passing it for grounding or
+generation is refused up front rather than accepted and quietly dropped.
 
 **Grounding** trains on three of its five labels. `support_present` and `source_cited` have
 too few negative examples for any split ratio to give `tlmtc` full class support per label
-across train/val/test, so it refuses the run outright:
+across train/val/test, so it refuses the run outright. The counts that decide this are at
+**item** grain - 447 grounding items, each one record's responses consolidated by majority,
+which is what `tlmtc` splits:
 
-| label | positive | negative |
-|---|---|---|
-| `support_present` | 672 | **2** |
-| `source_cited` | 669 | **5** |
+| label | positive items | negative items | (response rows) |
+|---|---|---|---|
+| `support_present` | 445 | **2** | 672 / 2 |
+| `source_cited` | 446 | **1** | 669 / 5 |
+
+So the splitter has two negative examples for `support_present` and **one** for `source_cited`,
+not two and five: the response-row counts are the larger, friendlier-looking numbers, and they
+are not the constraint. `make eval-train-seqlen` prints the item counts and
+`make eval-train-inputs` the row ones, so re-check both when the export moves.
 
 This is a data floor, not a tuning problem - a later export added grounding rows and not one
-new negative for either label. `make eval-train-inputs` prints these counts, so re-check them
-when the export moves. Note the consequence: the dropped pair is exactly what
+new negative for either label. Note the consequence: the dropped pair is exactly what
 `grounding_presence_rate` and `citation_presence_rate` rest on in the human-label scoring, so
-the trained evaluator covers strictly less than those metrics do.
+the trained evaluator covers strictly less than those metrics do. Note also what the drop does
+*not* change - both columns are still required in the staged CSV, because pragmata's grounding
+input schema was built from the full label set at import time and the narrowing cannot reach it.
+The two labels leave the training targets, not the input contract.
 
 Of the three trained labels, only `unsupported_claim_present` has enough test support (31
 positives) to trust. The other two land 2-4 test positives, where a single flipped prediction
@@ -204,9 +234,9 @@ recommended for use. `sequence_length=3072` gave a small real gain, but majority
 collapse persists on the two highest-prevalence labels: `proper_action` and
 `response_on_topic` read F1 0.94 and 0.88 while their AUC sits at 0.55-0.57, meaning the model
 is still largely predicting the majority class. The cause is upstream of any model choice -
-minority-class scarcity (16 negative examples for `response_on_topic` in the whole training
-set) compounded by annotator agreement at or near zero for these labels - and is not fixable
-by further pipeline work.
+minority-class scarcity (29 negative items for `response_on_topic` out of 713, from 33 negative
+response rows) compounded by annotator agreement at or near zero for these labels - and is not
+fixable by further pipeline work.
 
 ## What not to reuse
 
@@ -233,7 +263,8 @@ stop:
 
 ```bash
 touch /workspace/.keep-alive    # avoid the idle auto-stop during a long run
-nohup make eval-train TASK=grounding > logs/eval-train-grounding-$(date +%Y%m%d_%H%M).log 2>&1 &
+nohup make eval-train TASK=grounding PY=$HOME/train-venv/bin/python \
+  > logs/eval-train-grounding-$(date +%Y%m%d_%H%M).log 2>&1 &
 disown
 ```
 
@@ -252,8 +283,30 @@ and went with the container - see below.
 
 ## Provenance
 
-`data/eval-inputs/training/<task>.csv` ships a `.provenance.json` naming the export rows and
-the code that pooled them, the same convention the report CSVs use.
+Two records, one per side of the staging boundary, and they are load-bearing rather than
+decorative - the second is checked, not just written.
+
+`data/eval-inputs/training/<task>.csv` ships a `.provenance.json` naming the export rows and the
+code that pooled them, the same convention the report CSVs use, plus the freeze date it was
+pooled under, the programmes that actually contributed rows for that task, and `output_sha256` -
+the CSV's own bytes. **`make eval-train` refuses to start unless that record is present, names
+the freeze `configs/eval/freeze.conf` currently pins, and matches the CSV on disk.** Without
+that check the freeze pin can move while a stale CSV trains on silently: nothing else downstream
+re-reads where the staged rows came from. The same check gates `make eval-train-seqlen`, whose
+answer a stale CSV falsifies in exactly the same way.
+
+Each training run then writes `train_provenance.workspace.json` into its own run directory
+(`data/eval/train_outputs/<run_id>/`), so the record travels with the checkpoints when they are
+pushed off the box. The `.workspace.` infix marks it as this repository's file in a tree pragmata
+otherwise owns. It records the workspace git sha and dirty flag, the resolved pragmata eval
+source, the staged CSV with its sha256, the freeze date it was pooled under, the **full merged
+configuration as resolved** - including a `--threshold-type` override - and, for grounding, the
+narrowed label tuple the run actually trained on. The two sidecars already in that directory
+cover the other side and not this one: `pragmata_train.meta.json` carries `run_id`, task and a
+timestamp, and tlmtc's `train_run_meta.json` carries the model-side settings it received
+(checkpoint, sequence length, label names, threshold type). Neither names which CSV, which
+freeze, or which commit of this workspace produced the metrics. The same configuration is
+echoed to stderr at run start, which puts it in the nohup log too.
 
 **The report's published numbers are not reproducible from this repository, and the model
 figures quoted above are the report's rather than a re-run's** (the truncation table is a

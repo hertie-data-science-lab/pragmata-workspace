@@ -160,7 +160,9 @@ target, no staging convention for the unlabelled side, no tested procedure - see
 `score_synthetic_predictions.py` is the reserved name for scoring what it produces - the twin
 of `score_human_annotations.py` - and is deliberately not stubbed.
 
-Neither stage has configs under `configs/eval/`. That is a deliberate choice rather than an
-omission for training: its parameters are pins behind published numbers rather than operator
-knobs, so they live in the script where a change shows up in a diff. Revisit it if the tasks
-ever need per-run variation.
+Training's parameters live in `configs/eval/training/` - a shared `_common.yaml` deep-merged
+with one file per task, the same shape as `configs/annotation/querygen_specs/`. They are
+committed as data rather than held in the script because they are pins behind published
+numbers: every metric in the eval report was produced at them, so each is documented beside
+itself and a change shows up in a diff as a change to the pin it is. Prediction has no configs
+under `configs/eval/`, for the same reason it has no glue - there is nothing yet to configure.

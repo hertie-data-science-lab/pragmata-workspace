@@ -8,6 +8,12 @@ task: retrieval
 sequence_length: 1024
 
 train_kwargs:
+  # No batch_size here, deliberately - unlike grounding and generation, which pin one. With
+  # hyperparameter_tuning on, batch size is one of the dimensions the search selects, so a pin
+  # would either be overridden or would constrain the search that produced the published
+  # numbers. The chosen value is recorded per run in logs/best_hyperparameters.json and in
+  # evaluation/hyperparameters_table.html; the run behind the report picked 16.
+
   # Both of these help retrieval and neither helps the other two tasks. Retrieval has enough
   # underlying signal for a threshold optimiser to redistribute; grounding and generation do
   # not, and there the same setting collapses into predicting positive almost everywhere.

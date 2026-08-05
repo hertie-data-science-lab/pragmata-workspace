@@ -16,6 +16,14 @@
 checkpoint: jhu-clsp/mmBERT-base
 proxy_checkpoint: jhu-clsp/mmBERT-small
 
+# Whether tlmtc rescales a proxy-tuned learning rate for the target checkpoint. It only bites
+# where a proxy tuning happened at all, i.e. under hyperparameter_tuning, so in practice this
+# is retrieval's setting; the other two never produce a proxy-tuned rate to scale. Pinned at
+# pragmata's own default for the same reason `checkpoint` is - stated explicitly, so an upstream
+# change to the default surfaces here as a conflict rather than quietly moving retrieval's
+# learning rate.
+scale_learning_rate: true
+
 train_kwargs:
   # GPU-only: the training extra is not in uv.lock and the CPU VM cannot run this at all.
   use_cpu: false
