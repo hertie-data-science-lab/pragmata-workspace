@@ -1,11 +1,11 @@
 # pragmata-workspace
 
 Operational glue for running the [pragmata](https://github.com/bertelsmannstift/pragmata) annotation pipeline against
-the BSt (Bertelsmann Stiftung) publikationsbot. Holds scripts, configs, and specs that
-are specific to the BSt operational setup and deliberately do not belong in `pragmata`
-itself. It does **not** hold data or outputs (those stay local and gitignored, see
-[Data & secrets](docs/configuration.md#data--secrets)).
+the BSt (Bertelsmann Stiftung) publikationsbot. 
 
+Holds scripts, configs, and specs that are specific to the BSt operational setup. It does **not** hold data, logs or outputs (those stay local and gitignored, see [Data & secrets](docs/configuration.md#data--secrets)). The final report is assembled from the scored deliverables and the evaluator's predictions in a separate private repository, outside this workspace.
+
+**High level pipeline:**
 ```mermaid
 flowchart LR
   qg[querygen] --> bot[publikationsbot] --> comb[combine] --> imp["setup + import"] --> arg[(Argilla datasets)]
@@ -15,33 +15,13 @@ flowchart LR
   tr --> rep
 ```
 
-Training and prediction live in `pragmata` (`pragmata eval train-evaluator|predict-labels`,
-`tlmtc`-backed) and run on the GPU box. **Training** has a project-side procedure -
-`make eval-train TASK=<task>`, one recommended configuration per task, in
-[Eval training](docs/eval-training.md). **Prediction** does not yet: see
-[implementation guide §10](docs/implementation-guide.md#10-run-the-evaluation). The final
-report is assembled from the scored deliverables and the evaluator's predictions in a
-separate private repository, outside this workspace.
-
-> **Start here: the [IMPLEMENTATION GUIDE](docs/implementation-guide.md).** It walks the whole
-> pipeline end to end - produce, annotate and evaluate a dataset from a fresh machine - and
-> cross-references out to the topic docs for detail. The rest of this README is reference for
-> readers who already know the shape of the pipeline.
+> **Start here: [Implementation Guide](docs/implementation-guide.md)**.
+>
+> Walks the whole pipeline end to end - produce, annotate and evaluate a dataset from a fresh machine. Includes both generic overview of how the run the pipeline on a fresh RAG system, as well as pilot-specific implementation & reproducibility details.
 
 ## Setup
 
-Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
-`make setup` and fill in the local configuration. The full procedure is
-[implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration);
-variable definitions and file formats are in [Configuration](docs/configuration.md); and the
-pilot's own identifiers and env values are in the git-excluded
-`docs/deployment-inventory.local.md`.
-
-Then `make help` lists the targets; preview a run with `make plan`.
-
-Data, logs, reports and Argilla backups are **not** committed - see
-[Data & secrets](docs/configuration.md#data--secrets) and
-[Reproducibility](docs/reproducibility.md).
+Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make setup` and fill in the local configuration. The full procedure is in the [implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration); variable definitions and file formats are in [Configuration](docs/configuration.md); and the pilot's own identifiers and env values are in the git-excluded `docs/deployment-inventory.local.md`.
 
 ## Make targets
 
@@ -49,17 +29,17 @@ Data, logs, reports and Argilla backups are **not** committed - see
 runnable directly), taking `VAR=value` overrides.
 
 ```
-# Dataset build pipeline  (ends at the Argilla import)
+# Dataset build pipeline  
 make pipeline                  # run a slice: FROM= TO= ONLY= FILTER= JOBS=  (no args = full run)
 make plan                      # preview a slice without running it  (same vars as pipeline)
 make querygen-run              # generate synthetic queries          (SPECS=a,b to filter)
 make bot-run                   # query publikationsbot for answers   (SPEC=x to filter)
 make bot-probe                 # one-query bot smoke test, writes no JSONL
 make combine-run               # assemble the import-ready dataset   (DOMAINS="a b")
-make annotation-setup          # provision Argilla workspaces + users (DOMAIN= required)
-make annotation-import         # load one domain's dataset into Argilla (DOMAIN= required)
 
 # Annotation ops
+make annotation-setup          # provision Argilla workspaces + users (DOMAIN= required)
+make annotation-import         # load one domain's dataset into Argilla (DOMAIN= required)
 make annotation-export         # export annotations to per-task CSVs (DOMAIN= to filter)
 make annotation-log            # append a snapshot to logs/annotation/log.jsonl
 make annotation-daily          # nightly logging: export -> log.jsonl
@@ -98,8 +78,7 @@ make help                      # list every target
 
 ## Documentation
 
-- **[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end
-  handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine.
+>[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system.
   Everything below is reference detail it cross-references.
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
   backup/restore.
@@ -108,7 +87,7 @@ make help                      # list every target
 - [Eval training](docs/eval-training.md) - training the synthetic evaluators: the recommended
   config per task, why the training extra stays out of the lock, and what was tried and
   rejected.
-- [Eval data transport](docs/eval-data-transport.md) - moving exports, predictions and
+- [Data transport](docs/eval-data-transport.md) - moving exports, predictions and
   checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
 - [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data &
@@ -123,10 +102,5 @@ reproducibility/       committed lineage records (one dated bundle per operation
 scripts/               committed pipeline code (pipeline.sh, daily.sh, annotation/, eval/, lib/, transfer/)
 data/  logs/  reports/ pipeline I/O and outputs (gitignored except README + .gitkeep)
 argilla_backup/        status-preserving Argilla dumps (gitignored, local/external)
-tmp/                   one-off local scratch (gitignored)
+docs/
 ```
-
-Each top-level directory has its own README with the detail. All scripts share conventions
-via `scripts/lib/` (workspace-root resolution, `.env` + `configs/settings.conf` loading,
-stderr logging, disk/env guards) - see `scripts/lib/common.sh` (shell) and
-`scripts/lib/workspace.py` (python).
