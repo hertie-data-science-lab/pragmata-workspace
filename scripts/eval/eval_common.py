@@ -457,27 +457,66 @@ def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[~all_calibration]
 
 
+_CONSOLIDATE: tuple | None = None
+
+
+def _pragmata_consolidate() -> tuple:
+    """pragmata's majority consolidator and its Task enum, cached.
+
+    Resolved through pragmata_eval() - the ONE shadow-import dance this module has -
+    and then imported plainly, because whichever pragmata answered that call is the one
+    sys.modules now holds. Cached separately because every eval script imports this
+    module for its vocabulary, importing pragmata costs seconds, and only the one
+    caller below needs it.
+
+    Shadowing swaps the whole `pragmata` package for the rest of the process. That is
+    safe for the one script that gets here: annotation_tables.py binds the annotation
+    pin's IAA primitives at module import, before any row is read, and those bound
+    objects keep working. A caller that imported pragmata lazily AFTER consolidating
+    would silently get the other pin.
+    """
+    global _CONSOLIDATE
+    if _CONSOLIDATE is not None:
+        return _CONSOLIDATE
+    _eval_api, Task, _src_root = pragmata_eval()
+    from pragmata.core.eval.transforms import consolidate_labels_by_majority
+
+    _CONSOLIDATE = (consolidate_labels_by_majority, Task)
+    return _CONSOLIDATE
+
+
 def consolidated_prevalence(
     frame: pd.DataFrame, task: str, label: str
 ) -> tuple[int, int]:
     """(n_items, n_true) for one label, majority-consolidated per item.
 
-    Follows pragmata's consolidate_labels_by_majority: a strict majority decides the
-    item's label; an exact tie falls back to the first row's value in file order. So the
-    count is of annotated items, not of responses, and n_true counts items whose
-    consolidated label is true - the same numbers eval score would ingest. Named
-    `n_items` in the label table and `n_items_annotated` in the operations table (the
+    Consolidation IS pragmata's `consolidate_labels_by_majority` — the same function eval
+    train and score ingestion run — rather than a local restatement of it, so these are the
+    numbers eval would ingest by construction rather than by resemblance. The count is
+    therefore of annotated items, not of responses, and n_true counts items whose
+    consolidated label is true.
+
+    Ties are pragmata's semantics because pragmata decides them: a strict majority (> half
+    positive) sets a label independently; an exact 50/50 takes the value from the row that
+    matches every strict-majority label, falling back to the group's first row only when no
+    row does. A reimplementation that took the first row's value unconditionally agrees on
+    every tie in the 2026-07-30 freeze and is free to diverge on the next export.
+
+    Named `n_items` in the label table and `n_items_annotated` in the operations table (the
     same count at the same grain); see the data dictionary.
     """
     if frame.empty:
         return 0, 0
-    keys = list(ITEM_KEYS[task])
-    grouped = frame.groupby(keys, sort=False)[label].agg(["sum", "count", "first"])
-    positive = grouped["sum"] * 2
-    consolidated = (positive > grouped["count"]) | (
-        (positive == grouped["count"]) & grouped["first"].astype(bool)
-    )
-    return len(grouped), int(consolidated.sum())
+    consolidate, Task = _pragmata_consolidate()
+    # Int labels are the contract, not a workaround: eval score coerces them through
+    # pandera and eval train casts them outright, both before consolidating. The export
+    # CSVs spell them True/False, which pandas reads as bool - and writing a resolved 0
+    # back into a bool column is a hard TypeError in pandas 3. Cast, and let a null label
+    # in a submitted response fail here rather than be silently counted.
+    labelled = frame.astype({column: "int64" for column in LABELS[task]})
+    # One row per item out, in first-occurrence order.
+    consolidated = consolidate(labelled, task=Task(task))
+    return len(consolidated), int(consolidated[label].sum())
 
 
 def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:

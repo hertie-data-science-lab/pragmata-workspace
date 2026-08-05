@@ -33,9 +33,10 @@ conventions:
 
 `scripts/eval/` also holds `train_evaluators.py` and `predict_evaluators.py` (the training and
 prediction stages - they produce models and predictions rather than report CSVs, so they are not
-in the tables above), `vectorstore_inventory.py` (aggregate corpus counts, to stdout) and
-`eval_common.py` (shared vocabulary, filters, and the pragmata/GPU/run resolution the four
-model-stage scripts share; not runnable).
+in the tables above) and two modules that are imported rather than run: `eval_common.py`
+(shared vocabulary, filters, and the pragmata/GPU/run resolution the four model-stage scripts
+share) and `vectorstore_inventory.py` (the vector store's DSN and connection handling, which
+`corpus_catalog.py` imports).
 
 **Vocabulary.** `response`, `record`, `item`, `panel` and `query group` are defined in the
 [data dictionary](eval-data-dictionary.md), together with every column of every CSV.
