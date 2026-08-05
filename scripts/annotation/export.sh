@@ -31,6 +31,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
 require_env ARGILLA_API_URL ARGILLA_API_KEY
 
+# One export or freeze at a time. freeze.sh copies this tree wholesale while export
+# rewrites it in place and pseudonymises it afterwards, so an overlap could freeze a
+# half-written or still-named tree. Same mechanism as pipeline.sh: flock on a held fd, so
+# the kernel releases it however the process dies — no pid file, nothing to clean up.
+exec 9>".export.lock"
+flock -n 9 || fatal "an export or freeze is already running" 3
+
 # Every configs/annotation/domains/*.yaml stem — the domain list, and the set the
 # stray-dir check below validates the exports tree against.
 mapfile -t all_stems < <(config_stems configs/annotation/domains)

@@ -26,6 +26,15 @@ cd_root
 DATE="${1:-}"
 RUN_AT="${2:-}"
 
+# One export or freeze at a time. daily.sh's 02:00 cron rewrites data/annotation/exports/
+# in place and pseudonymises it afterwards, so a freeze that overlapped it could copy a
+# half-rewritten or not-yet-pseudonymised tree into an immutable dated directory. Held
+# before the guards below, because they read that same tree. Same mechanism and same
+# lock file as export.sh (and pipeline.sh's own): flock on a held fd, released by the
+# kernel however the process dies.
+exec 9>".export.lock"
+flock -n 9 || fatal "an export or freeze is already running" 3
+
 SRC="$DATA_DIR/annotation/exports"
 FROZEN_ROOT="$DATA_DIR/annotation/exports-frozen"
 PIN="configs/eval/freeze.conf"

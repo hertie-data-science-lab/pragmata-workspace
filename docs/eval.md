@@ -123,7 +123,10 @@ not interleave. The sequence that works:
    guard until the copy - clean working tree, no freeze under that date already, the
    resolved RUN_AT schema-current, no real names left in `exports/` - and only then does it
    make the read-only dated copy (copy, then `chmod -R a-w` the new dir) and write
-   `configs/eval/freeze.conf`.
+   `configs/eval/freeze.conf`. It takes the same lock `export.sh` does, so it cannot copy a
+   tree the nightly cron is halfway through rewriting, and it cleans up after itself: if
+   the copy or the `chmod -R a-w` fails, the partial dated dir is removed rather than left
+   for the next run's "already frozen" guard to mistake for a real freeze.
 
    **The dated copy is write-protected; the `exports-frozen/` parent may not be.** `chmod`
    is owner-only, so on a checkout shared by POSIX ACL (the Hertie GPU server) nobody can

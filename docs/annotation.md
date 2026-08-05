@@ -54,6 +54,8 @@ Two halves, deliberately split:
 - **Logging** is automatic and daily. The nightly job - `scripts/daily.sh` (`make annotation-daily`) -
   chains `export.sh` (submitted annotations → per-domain CSVs) then `log.py --use-export`
   (live counts + IAA + cadence → append one snapshot to `logs/annotation/log.jsonl`).
+  `export.sh` and `annotation-freeze` share a lock (`.export.lock`), so a freeze can never
+  copy a tree the cron is halfway through rewriting; whichever runs second exits 3.
 - **Reporting** is manual (`make annotation-report`): render the latest snapshot into
   `reports/annotation/<date>/` - `report_tables.py` writes `report.md` (pure data tables),
   `plot_summary.py` writes the PNGs, and `_latest` is repointed to the newest.
