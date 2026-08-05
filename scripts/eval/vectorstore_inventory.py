@@ -36,8 +36,9 @@ SECRET_NAME = os.environ.get("PB_SECRET_NAME", "publikationsbot-vectorstore-uri"
 # counts/fields reports below still enumerate every collection.
 MAIN_COLLECTION = os.environ.get("PB_MAIN_COLLECTION", "azureopenaiembeddings")
 
-# German library/ILS metadata keys -> English meaning. Keys not listed here fall
-# back to "(unknown)" so a schema change surfaces loudly rather than silently.
+# German library/ILS metadata keys -> English meaning. Keys not listed here are printed
+# as "(unknown)" in the fields report, so a new key shows up as an unglossed line for a
+# reader to notice — this report is read by a person, and nothing here fails on it.
 FIELD_GLOSSARY = {
     "hst": "Title (main title)",
     "hst_zu": "Subtitle",
@@ -175,10 +176,13 @@ def report_fields(cur) -> None:
             print(f"  {key:<24} {FIELD_GLOSSARY.get(key, '(unknown)')}")
 
 
-def main() -> None:
-    argparse.ArgumentParser(
+def main() -> int:
+    # No options of its own; the parser is here for --help (which prints the module
+    # docstring) and to reject a mistyped argument instead of ignoring it.
+    ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    ).parse_args()
+    )
+    ap.parse_args()
 
     conn = connect(fetch_dsn())
     try:
@@ -187,7 +191,8 @@ def main() -> None:
         report_fields(cur)
     finally:
         conn.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

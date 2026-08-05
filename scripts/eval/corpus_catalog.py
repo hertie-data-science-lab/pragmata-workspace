@@ -84,10 +84,13 @@ COLUMNS = [
     "extent",
     "extent_pages",
     "n_chunks",
-    # Author gender — see the module docstring for what these can and cannot mean.
-    # Every column here is independent: each _raw holds gender-guesser's own verdict and
-    # each _collapsed holds OUR decision about it. Nothing is a restatement of another
-    # column, so no consumer has to guess which of two spellings of one number to trust.
+    # Author gender — see the module docstring for what these can and cannot mean. Each
+    # _raw holds gender-guesser's own verdict and each _collapsed holds OUR decision about
+    # it, per author slot, so the slots stay aligned to verf1..verf3. The one derived
+    # column is `is_institutional`, which is exactly
+    # `author_gender_collapsed == "institutional"`; it is kept because a boolean the
+    # fairness audit can filter on reads better than a string comparison, and because the
+    # two are computed from the same `parsed` list and so cannot drift apart.
     "n_authors",
     "is_institutional",
     "author1_gender_raw",
@@ -126,12 +129,14 @@ def parse_year(raw: str | None) -> str:
 def parse_pages(raw: str | None) -> str:
     """Page count from a German extent string, or empty.
 
-    "231 Seiten", "ca. 100 S.", "XII, 340 Seiten" — takes the largest number found,
-    since roman-numeral front matter and volume numbers otherwise win over the page
-    count. An extent with no letters at all ("2013", "04/2010") is a year or an
+    "231 Seiten", "ca. 100 S.", "XII, 340 Seiten" — takes the largest ARABIC number
+    found. Roman-numeral front matter is not parsed at all: `\\d+` cannot see "XII", which
+    is what makes taking the max safe rather than clever - where an extent carries several
+    numbers (volume or medium counts alongside the pagination) the page count is the
+    largest of them, so a first-match parser would return the qualifier instead. An extent
+    with no letters at all ("2013", "04/2010") is a year or an
     issue/year, not a page count, and returns blank - the only two such rows in the
-    corpus were exactly that. The raw string is kept in `extent` so
-    this is auditable.
+    corpus were exactly that. The raw string is kept in `extent` so this is auditable.
     """
     if not raw or not re.search(r"[A-Za-z]", str(raw)):
         return ""
@@ -179,7 +184,11 @@ def fetch_documents(cur) -> list[dict]:
 
     Aggregated in the DB rather than in Python: the collection holds ~545k chunk rows
     and only the ~doc-level rollup is wanted. Metadata is taken with max(), which is
-    an arbitrary-but-deterministic pick if a document's chunks ever disagree.
+    an arbitrary-but-deterministic pick if a document's chunks ever disagree — and it is
+    arbitrary PER COLUMN, so a multi-chunk document whose chunks disagree on two fields
+    can end up with a row that mixes values from different chunks. Harmless while the
+    ingest writes identical bibliographic metadata to every chunk of a document, which is
+    what it does; worth knowing if a row ever looks internally inconsistent.
     """
     cur.execute(
         """
