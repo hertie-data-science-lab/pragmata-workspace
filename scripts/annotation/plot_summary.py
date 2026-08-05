@@ -121,6 +121,11 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     return True
 
 
+# Local rather than imported, deliberately. pragmata has this same interval as
+# `core.annotation.uncertainty.wilson_interval`, but only on the EVAL pin: the installed
+# annotation pin (94e8219) carries no uncertainty module at all, and PRAGMATA_EVAL_SRC is
+# scoped to scripts/eval/ (see .env.example), so importing it here would make an annotation
+# plot depend on the eval checkout. Revisit when the annotation pin moves past 2684b1e.
 def _wilson_ci(n_true: int, n: int, z: float = 1.96) -> tuple[float, float]:
     """95% Wilson score interval for a binomial proportion. Robust at the
     extreme prevalences (near 0/1) where the labels of interest actually sit,
