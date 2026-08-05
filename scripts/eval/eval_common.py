@@ -55,8 +55,9 @@ LABELS: dict[str, tuple[str, ...]] = {
 
 # The columns identifying one ITEM — one record's responses majority-consolidated, the
 # grain eval ingests. Matches pragmata's _DUPLICATE_KEY_COLUMNS_BY_TASK
-# (core/eval/transforms.py). A retrieval record is one chunk, so a query's panel fans out
-# into one row per chunk; a grounding or generation record is one query.
+# (core/eval/transforms.py). `record_uuid` is the QUERY (for retrieval, its whole panel),
+# so a retrieval item is one (record_uuid, chunk_id) pair and a query's panel fans out
+# into one row per chunk; a grounding or generation item is one query.
 ITEM_KEYS: dict[str, tuple[str, ...]] = {
     "retrieval": ("record_uuid", "chunk_id"),
     "grounding": ("record_uuid",),
@@ -111,12 +112,12 @@ CURATED_SUFFIX = "_combined.curated.jsonl"
 EXCLUDED_PROGRAMMES = frozenset({"zentrum-fuer-datenmanagement"})
 
 
-def add_common_args(parser, *, default_exports: Path | None = None) -> None:
+def add_common_args(parser) -> None:
     """Register the arguments every eval report script shares."""
     parser.add_argument(
         "--exports",
         type=Path,
-        default=default_exports or FROZEN_EXPORTS,
+        default=FROZEN_EXPORTS,
         help="Annotation export tree to read (default: the frozen canonical export).",
     )
     parser.add_argument(
@@ -134,15 +135,6 @@ def add_snapshot_arg(parser) -> None:
         default=CANONICAL_SNAPSHOT_RUN_AT,
         help="run_at of the log snapshot to read (default: the canonical one).",
     )
-
-
-def out_dir(explicit: Path | None) -> Path:
-    """Resolve the eval report output directory, creating it.
-
-    Thin alias over ws.stage_report_dir so corpus_catalog.py, which cannot import this
-    pandas-dependent module, still resolves the same directory from the same clock.
-    """
-    return ws.stage_report_dir("eval", explicit)
 
 
 FREEZE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -178,7 +170,7 @@ def check_freeze_current() -> None:
     old date.
     """
     newest = newest_freeze()
-    if newest is None or newest == FREEZE_DATE:
+    if newest == FREEZE_DATE:
         return
     raise SystemExit(
         f"stale freeze pin: {FREEZE_CONF.relative_to(ws.ROOT)} names {FREEZE_DATE}, but "
@@ -213,10 +205,12 @@ def programmes(exports: Path) -> list[str]:
 
 
 # Columns every filter and metric below depends on. Asserted once at read time so a
-# rename upstream fails loudly here, instead of being absorbed by each filter's
-# "column absent -> pass everything through" guard. That failure mode is the dangerous
-# one: a missing `panel_complete` would silently score partial retrieval panels, which
-# is the exact defect this pipeline exists to prevent.
+# rename upstream fails loudly here rather than one filter at a time. The dangerous one
+# is `n_retrieved_chunks`: it carries the query's true K, and it is what pragmata's
+# --skip-incomplete-panels compares the distinct labelled chunk_ids against, so losing it
+# would silently score partial retrieval panels — the exact defect this pipeline exists
+# to prevent. (`panel_complete` is deliberately NOT here: the export writes the flag, but
+# nothing downstream reads it — pragmata derives completeness itself.)
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
         "record_uuid",
@@ -226,24 +220,23 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "chunk_id",
         "chunk_rank",
         "n_retrieved_chunks",
-        "panel_complete",
     ),
     "grounding": ("record_uuid", "annotator_id", "response_status", "calibration"),
     "generation": ("record_uuid", "annotator_id", "response_status", "calibration"),
 }
 
-# Columns the filters read as booleans, which must also be non-null. A blank cell makes
-# pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to TRUE,
-# because bool(nan) is truthy - silently, with no error. The consequences invert the
-# filters: a blank `calibration` marks a production query as calibration and drops it
-# from the corpus, and a blank `panel_complete` lets an incomplete panel through the
-# STRICT filter. Labels are deliberately NOT here: a discarded response legitimately
-# has none.
+# Columns the filters read as booleans or counts, which must also be non-null. A blank
+# cell makes pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to
+# TRUE, because bool(nan) is truthy - silently, with no error. The consequence inverts
+# the filter: a blank `calibration` marks a production query as calibration and drops it
+# from the corpus. A blank `n_retrieved_chunks` is the same shape of problem one layer
+# down - pragmata cannot compare a panel's labelled chunks against an unknown K, so the
+# panel escapes the completeness check. Labels are deliberately NOT here: a discarded
+# response legitimately has none.
 NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
         "response_status",
         "calibration",
-        "panel_complete",
         "n_retrieved_chunks",
     ),
     "grounding": ("response_status", "calibration"),
@@ -328,25 +321,6 @@ def panel_totals(exports: Path, programme: str) -> tuple[int, int]:
     return int(summary.get("n_panels", 0)), int(summary.get("n_complete", 0))
 
 
-def load_iaa(exports: Path, programme: str) -> dict[tuple[str, str], dict]:
-    """(task, label) -> agreement stats from a programme's ``iaa/report.json``.
-
-    Every entry describes CALIBRATION items only: pragmata's IAA runner keeps
-    ``calibration == True`` submitted rows and drops production, because agreement is
-    only meaningful on overlapped records. So an alpha attached to a production metric
-    is evidence about the labelling scheme, not about those specific rows.
-    """
-    path = exports / programme / "iaa" / "report.json"
-    if not path.exists():
-        return {}
-    report = json.loads(path.read_text())
-    return {
-        (block["task"], label["label"]): label
-        for block in report.get("tasks", [])
-        for label in block.get("labels", [])
-    }
-
-
 def submitted(frame: pd.DataFrame) -> pd.DataFrame:
     """Keep only submitted responses.
 
@@ -354,14 +328,14 @@ def submitted(frame: pd.DataFrame) -> pd.DataFrame:
     discarded rows: exports run with include_discarded=true, a discarded response is
     an abstention with no labels, and a null label would silently poison a mean.
     """
-    if frame.empty or "response_status" not in frame.columns:
+    if frame.empty:
         return frame
     return frame[frame["response_status"] == "submitted"]
 
 
 def keep_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
     """Keep calibration ROWS only — the population every IAA alpha describes."""
-    if frame.empty or "calibration" not in frame.columns:
+    if frame.empty:
         return frame.iloc[0:0]
     return frame[frame["calibration"].astype(bool)]
 
@@ -369,26 +343,23 @@ def keep_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
 def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
     """Drop queries that are ENTIRELY calibration. The correct filter for scoring.
 
-    ``calibration`` is a per-record flag, and at retrieval grain a record is one
-    *chunk*, not one query — so calibration marks which chunks were given extra
-    annotators for overlap. Panels are routinely mixed: every programme has 16-30
-    retrieval panels holding both, e.g. a demokratie panel with K=7 where ranks 1-6
-    are production and rank 7 is double-annotated calibration.
+    ``calibration`` is a per-record flag, and a retrieval record is one *chunk* of a
+    query's panel — ``record_uuid`` names the query, ``chunk_id`` the chunk within it —
+    so calibration marks which chunks were given extra annotators for overlap. Panels
+    are routinely mixed: every programme has 16-30 retrieval panels holding both, e.g. a
+    demokratie panel with K=7 where ranks 1-6 are production and rank 7 is
+    double-annotated calibration.
 
     Filtering calibration at ROW grain therefore deletes individual chunks out of
     otherwise-complete panels and silently breaks the @K denominators — a mixed panel
-    would score precision over 6 of 7 chunks. Filtering at QUERY grain instead keeps
+    would score precision over 6 of 7 chunks. Grouping on ``record_uuid`` instead keeps
     every panel whole and only removes queries that are wholly calibration (0-13 per
     programme), which are the genuine calibration items.
 
     Grounding and generation carry one record per query, so their records are never
     mixed and this reduces to the plain row filter — one rule covers all three tasks.
     """
-    if (
-        frame.empty
-        or "calibration" not in frame.columns
-        or "record_uuid" not in frame.columns
-    ):
+    if frame.empty:
         return frame
     calibration = frame["calibration"].astype(bool)
     all_calibration = calibration.groupby(frame["record_uuid"]).transform("all")
@@ -407,7 +378,7 @@ def consolidated_prevalence(
     `n_items` in the label table and `n_items_annotated` in the operations table (the
     same count at the same grain); see the data dictionary.
     """
-    if frame.empty or label not in frame.columns:
+    if frame.empty:
         return 0, 0
     keys = list(ITEM_KEYS[task])
     grouped = frame.groupby(keys, sort=False)[label].agg(["sum", "count", "first"])

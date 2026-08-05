@@ -83,7 +83,7 @@ coalesces their extra responses into one item, exactly as it does when passing d
 | `alpha` | Krippendorff's alpha on the calibration overlap. |
 | `alpha_ci_low`, `alpha_ci_high` | Bootstrap confidence interval for `alpha`. |
 | `n_items_calibration` | Items alpha was actually computed on - the calibration overlap, typically ~30, **not** `n_items`. |
-| `degenerate_calibration` | True where the label never varies in the pairable overlap. |
+| `degenerate_calibration` | True where the label never varies in the pairable overlap; False where it does vary. **Blank where there is no pairable overlap at all** - nothing was measured, which is what the blank `alpha` beside it says too. |
 
 **Caveats.**
 
@@ -91,10 +91,16 @@ coalesces their extra responses into one item, exactly as it does when passing d
   `pct_agree` and `n_items_calibration` describe the *calibration overlap only*. 
 - **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient
   to compute one - too few annotators saw the same records.
+- `alpha`, `pct_agree`, `n_items_calibration` and the interval are **recomputed from the
+  frozen export CSVs** as the report is built, with pragmata's own IAA implementation - not
+  read out of the export's `iaa/report.json`. That file records no seed, and a re-export
+  overwrites the CSVs beside it without regenerating it, so its interval could neither be
+  re-derived nor be trusted to describe the rows in this table.
 - `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only
-  `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with a fixed seed
-  (both recorded in the `*-provenance.json`). So the point estimate moves only when the underlying
-  calibration data does, while the bounds also move if those parameters change.
+  `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with seed 0 at the
+  0.95 level (all three recorded in the `*-provenance.json`). So the point estimate moves
+  only when the underlying calibration data does, while the bounds also move if those
+  parameters change - and, being seeded, they re-derive exactly from the same tree.
 - **`alpha = 1.0` with `degenerate_calibration = True` is not evidence of reliability.**
   Alpha is `1 - Do/De` and is undefined when expected disagreement is zero (the label never
   varies in the overlap); pragmata returns 1.0 there by convention.

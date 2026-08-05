@@ -16,7 +16,8 @@ would silently produce @K metrics over partial chunk sets. The filter is therefo
 here, explicitly and in version control: submitted responses only, and for retrieval
 `--skip-incomplete-panels` (pragmata #305), which records the drop as `n_panels_skipped`.
 Calibration items stay in — majority consolidation coalesces them exactly as when
-training; `--exclude-calibration` drops wholly-calibration queries at query grain.
+training; `--exclude-calibration` drops wholly-calibration queries at query grain, which
+keeps the calibration chunks of mixed retrieval panels (see `policy_name`).
 
 Usage:
   scripts/eval/score_human_annotations.py                        # the reportable policy
@@ -117,7 +118,19 @@ FILTERED_ROOT = ws.DATA_DIR / "eval-inputs"
 
 
 def policy_name(args) -> str:
-    """Short slug naming the filter combination, used in paths and in every row."""
+    """Short slug naming the filter combination, used in paths and in every row.
+
+    ``prod-*`` is shorthand, not a guarantee of a calibration-free population. The filter
+    it names works at QUERY grain (see ec.drop_calibration_queries), so it removes only
+    wholly-calibration queries; the calibration CHUNKS of a mixed retrieval panel stay in,
+    because dropping them would break their panel's @K denominators. In the frozen
+    2026-07-30 tree that leaves 476 of 1836 submitted retrieval rows — roughly a quarter —
+    calibration even under ``prod-*``. Grounding and generation, one record per query, are
+    genuinely calibration-free there.
+
+    The slugs are published schema (the `policy` column, and the filename suffix), so they
+    are described rather than renamed.
+    """
     return "-".join(
         [
             "prod" if args.exclude_calibration else "calib",
@@ -174,6 +187,7 @@ def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
     beyond the annotation side, is a workspace dependency in pyproject.toml.
     """
     import os
+    import time
 
     env = dict(os.environ)
     env["PYTHONPATH"] = str(pin.src)
@@ -203,6 +217,13 @@ def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
         # on the report; --all-panels accepts the bias instead.
         "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
     ]
+    # Read back before the run, not after: the report path below is reconstructed from
+    # pragmata's layout rather than reported by the CLI, and score_id is the policy slug,
+    # which is reused run after run. If that layout ever moves while the CLI still exits
+    # 0, the guessed path would resolve to the PREVIOUS run's file and its stale numbers
+    # would be published under this run's provenance. A file older than the subprocess
+    # cannot be its output.
+    started = time.time()
     # check=False: the returncode is handled explicitly below, to surface the CLI's own
     # error tail rather than a bare CalledProcessError.
     result = subprocess.run(
@@ -213,7 +234,18 @@ def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
         raise SystemExit(
             f"eval score failed for {score_id}/{task}:\n  " + "\n  ".join(tail)
         )
-    return ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
+    report_path = ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
+    if not report_path.exists() or report_path.stat().st_mtime < started:
+        why = "no such file" if not report_path.exists() else "it predates the run"
+        raise SystemExit(
+            f"eval score reported success for {score_id}/{task}, but the report it should\n"
+            f"  have written was not written by it ({why}):\n"
+            f"    {report_path}\n"
+            "  That path is reconstructed from pragmata's output layout, not reported by\n"
+            "  the CLI. If the layout has moved, fix run_score() rather than publishing\n"
+            "  whatever file happens to sit there."
+        )
+    return report_path
 
 
 def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list[dict]:
@@ -224,7 +256,10 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
             continue
         if value is None:
             # conditional_fabrication_rate is None when no query cited a source, i.e.
-            # the conditional is undefined rather than zero.
+            # the conditional is undefined rather than zero. source_labels is still
+            # filled: which labels the metric WOULD rest on is a property of the metric,
+            # not of this run, and empty_rows() fills it on its n=0 rows for the same
+            # reason. Blanking it here made one undefined row look different in kind.
             rows.append(
                 {
                     "task": task,
@@ -233,6 +268,7 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
                     "n_examples": report.get("n_examples", ""),
                     "ci_level": report.get("ci_level", ""),
                     "status": "undefined_no_denominator",
+                    "source_labels": ";".join(METRIC_LABELS.get(metric, ())),
                 }
             )
             continue
@@ -370,7 +406,9 @@ def main() -> int:
     # runs with different flags would otherwise overwrite each other at one path, and
     # the difference would only be visible inside the file.
     suffix = "" if policy == DEFAULT_POLICY else f".{policy}"
-    target = ec.out_dir(args.out_dir) / f"eval_metric_estimates{suffix}.csv"
+    target = (
+        ws.stage_report_dir("eval", args.out_dir) / f"eval_metric_estimates{suffix}.csv"
+    )
     ws.write_csv(
         target,
         rows,
@@ -386,7 +424,8 @@ def main() -> int:
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             filters={
                 "response_status": "submitted",
-                "calibration": "excluded (query grain)"
+                "calibration": "wholly-calibration queries dropped (query grain); "
+                "calibration chunks inside mixed retrieval panels kept"
                 if args.exclude_calibration
                 else "included",
                 "retrieval_panels": (
