@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import json
 import os
 import statistics
@@ -107,8 +108,6 @@ IAA_RESAMPLES = int(os.environ.get("LOG_IAA_RESAMPLES", "1000"))
 # the same export yields the same interval. pragmata threads this straight into
 # numpy's default_rng. Recorded in every snapshot, and in the report .provenance.json files.
 IAA_SEED = int(os.environ.get("LOG_IAA_SEED", "0"))
-
-JSONL_PATH = ws.LOGS_DIR / "log.jsonl"
 
 # username → Argilla user_id (UUID str), populated once per run. The CSV export carries the
 # annotator *username*; we map it to the UUID so no real names appear in the output (the REST
@@ -1208,7 +1207,13 @@ def print_summary(result: dict) -> None:
 
 def append_jsonl(result: dict) -> None:
     ws.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    with JSONL_PATH.open("a") as f:
+    # Exclusive lock for the whole open→write→close. A snapshot runs to megabytes, well
+    # past the size at which a buffered append is *guaranteed* to reach the kernel as one
+    # write(), and every consumer reads this file a line at a time to resolve the freeze
+    # pin — so a manual run overlapping the 02:00 cron must not be able to split a line in
+    # two. The kernel drops the lock when the handle closes, however this process dies.
+    with ws.SNAPSHOT_LOG.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
         f.write(json.dumps(result, ensure_ascii=False) + "\n")
 
 
@@ -1324,7 +1329,7 @@ def main() -> int:
         print(
             f"log: {result['run_at']} — {len(result['domains'])} domains, "
             f"{c['submitted_responses']} submitted, {c['completed_records']} completed"
-            f"{'' if args.no_jsonl else f'; appended {JSONL_PATH}'}"
+            f"{'' if args.no_jsonl else f'; appended {ws.SNAPSHOT_LOG}'}"
         )
     return 0
 
