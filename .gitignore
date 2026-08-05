@@ -8,7 +8,8 @@ configs/annotation/users.json
 *.local.md
 
 # --- python virtualenv ---
-.venv/
+# No trailing slash: also matches a .venv symlink (one was accidentally committed once).
+.venv
 # uv's interpreter + wheel cache, kept in-tree so a checkout shared between users
 # does not depend on any one user's home (see the exports in the Makefile).
 .uv/
@@ -55,7 +56,7 @@ build/
 .ruff_cache/
 .coverage
 htmlcov/
-.venv/
+.venv
 venv/
 
 # Environment
