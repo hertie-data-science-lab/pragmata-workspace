@@ -207,19 +207,21 @@ def overall_counts(total: dict) -> str:
 
 
 def progress_by_domain(domains: dict, total: dict) -> str:
-    """Per-domain progress in one table: record-level counts (items submitted, records
-    completed) with the retrieval panel-completeness columns appended. A panel is one
+    """Per-domain progress in one table: record counts and the responses submitted
+    against them, with the retrieval panel-completeness columns appended. A panel is one
     query's k-chunk set, complete only when every chunk is annotated (stricter than a
     record); panel cells are '-' for domains the snapshot carries no completeness for."""
     items = sorted(
         domains.items(), key=lambda kv: (-kv[1]["count"]["submitted_responses"], kv[0])
     )
-    # A vertical divider (_SEP) opens each column group - items | records | panels | ann -
-    # and the per-group completion column is bolded as the figure that matters most.
+    # A vertical divider (_SEP) opens each column group - records | responses | panels |
+    # ann - and the per-group completion column is bolded as the figure that matters most.
+    # The units are the glossary's: `total_records`/`completed_records` count records,
+    # `submitted_responses` counts responses (one annotator's submission on one record).
     headers = [
         "Domain",
-        ("Total (items)", _SEP),
-        "Subm. (items)",
+        ("Total (records)", _SEP),
+        "Subm. (responses)",
         ("Compl. (records)", _SEP),
         "% Compl. (records)",
         ("Compl. (panels)", _SEP),
