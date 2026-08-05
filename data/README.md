@@ -17,9 +17,18 @@ data/
 │   │                    by transfer-push and consumers read exports/*/ as the domain list
 │   └── exports-frozen/  read-only (chmod a-w) freezes, one dir per <date>: the pinned
 │                        inputs behind published numbers; see docs/eval.md
-├── eval/                pragmata eval tool outputs (checkpoints, predictions, scores)
-├── eval-inputs/         workspace-staged CSVs handed to `eval score --path`; kept out of
-│                        eval/ so that tree holds only what pragmata wrote
+├── eval/                pragmata eval tool outputs; only what pragmata wrote, plus the two
+│   │                    *.workspace.json provenance records named in docs/eval.md
+│   ├── train_outputs/       one dir per evaluator training run, named <run_id>
+│   ├── prediction_outputs/  one dir per prediction, named <run_id>-<population>: tlmtc names
+│   │                        it <run_id> and overwrites, see docs/eval-prediction.md
+│   └── scores/              one dir per score run, named <score_id>
+├── eval-inputs/         workspace-staged CSVs handed to the eval tool; kept out of eval/ so
+│   │                    that tree holds only what pragmata wrote. Each ships a
+│   │                    .provenance.json the consumer checks before running
+│   ├── <policy>/            filtered CSVs for `eval score --path` (calib-complete, ...)
+│   ├── training/            pooled labelled CSVs for `eval train-evaluator`
+│   └── predict/<population>/ unlabelled CSVs for `eval predict-labels`
 └── transfer/            Blob staging for eval data (see transfer/README.md); moves via Blob, not git
 ```
 

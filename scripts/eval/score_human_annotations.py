@@ -2,8 +2,9 @@
 """Corpus metrics from the human-labelled annotations.
 
 Columns and caveats are defined in `docs/eval-data-dictionary.md`
-(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, is reserved for
-the evaluator-model run and does not exist yet.
+(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, scores the same
+metric taxonomy on an evaluator model's predictions and reuses this module's row builders, so
+the two CSVs stay column-for-column comparable.
 
 Pools the frozen canonical export across programmes, runs `pragmata eval score` once per
 task, and collects every per-metric estimate into one tidy CSV. Pooling is also what makes
@@ -30,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -181,71 +181,19 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
 def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
     """Invoke `pragmata eval score` on a filtered CSV; return the report JSON path.
 
-    Runs the workspace venv's own CLI with the eval pin's src on PYTHONPATH, which
-    shadows the installed annotation pragmata - a frozen demo commit with no eval
-    module. One venv serves both: pandera, the only thing the eval module needs
-    beyond the annotation side, is a workspace dependency in pyproject.toml.
+    The subprocess mechanics - PYTHONPATH shadow, base_dir, the stale-report mtime
+    guard - live in ec.run_score_cli, shared with the synthetic scorer. One venv
+    serves both pragmata halves: pandera, the only thing the eval module needs beyond
+    the annotation side, is a workspace dependency in pyproject.toml.
     """
-    import os
-    import time
-
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(pin.src)
-    command = [
-        str(pin.bin),
-        "eval",
-        "score",
-        "--path",
-        str(csv_path),
-        "--task",
+    return ec.run_score_cli(
+        pin,
+        ["--path", str(csv_path)],
         task,
-        # base_dir defaults to the process cwd. It is pragmata's tool-root PARENT —
-        # tools write <base_dir>/{annotation,querygen,eval} as siblings — so this must
-        # be data/, matching the existing data/annotation/ tree. Passing the repo root
-        # instead scatters an eval/ tree beside the source.
-        "--base-dir",
-        str(ws.DATA_DIR),
-        "--score-id",
         score_id,
-        "--ci",
-        str(args.ci),
-        "--n-resamples",
-        str(args.n_resamples),
-        "--seed",
-        str(args.seed),
-        # Panel completeness is pragmata's job (#305): skip records n_panels_skipped
-        # on the report; --all-panels accepts the bias instead.
-        "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
-    ]
-    # Read back before the run, not after: the report path below is reconstructed from
-    # pragmata's layout rather than reported by the CLI, and score_id is the policy slug,
-    # which is reused run after run. If that layout ever moves while the CLI still exits
-    # 0, the guessed path would resolve to the PREVIOUS run's file and its stale numbers
-    # would be published under this run's provenance. A file older than the subprocess
-    # cannot be its output.
-    started = time.time()
-    # check=False: the returncode is handled explicitly below, to surface the CLI's own
-    # error tail rather than a bare CalledProcessError.
-    result = subprocess.run(
-        command, env=env, capture_output=True, text=True, check=False
+        args,
+        context=f"{score_id}/{task}",
     )
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
-        raise SystemExit(
-            f"eval score failed for {score_id}/{task}:\n  " + "\n  ".join(tail)
-        )
-    report_path = ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
-    if not report_path.exists() or report_path.stat().st_mtime < started:
-        why = "no such file" if not report_path.exists() else "it predates the run"
-        raise SystemExit(
-            f"eval score reported success for {score_id}/{task}, but the report it should\n"
-            f"  have written was not written by it ({why}):\n"
-            f"    {report_path}\n"
-            "  That path is reconstructed from pragmata's output layout, not reported by\n"
-            "  the CLI. If the layout has moved, fix run_score() rather than publishing\n"
-            "  whatever file happens to sit there."
-        )
-    return report_path
 
 
 def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list[dict]:
@@ -346,21 +294,7 @@ def main() -> int:
     args = ap.parse_args()
 
     pin = ws.eval_pragmata()
-    pragmata_git = ws.git_describe(pin.repo)
-    # No SHA is worse than a dirty one: a dirty tree at least names the commit it drifted
-    # from, whereas a pin git cannot describe at all pins nothing. Both refuse here, and
-    # --allow-dirty is the one deliberate way past either.
-    if pragmata_git["sha"] is None and not args.allow_dirty:
-        raise SystemExit(
-            f"the pragmata pin at {pin.src} is not inside a git checkout of its own — the\n"
-            f"numbers could not be reproduced from any SHA. Point PRAGMATA_EVAL_SRC at a\n"
-            f"checkout's src/, or pass --allow-dirty to score anyway."
-        )
-    if pragmata_git["dirty"] and not args.allow_dirty:
-        raise SystemExit(
-            f"pragmata pin at {pin.repo} has uncommitted changes — the numbers would not be\n"
-            f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."
-        )
+    ec.require_clean_eval_pin(pin, allow_dirty=args.allow_dirty)
 
     policy = policy_name(args)
     filtered_root = FILTERED_ROOT / policy

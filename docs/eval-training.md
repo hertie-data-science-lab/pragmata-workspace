@@ -2,7 +2,8 @@
 
 Training the synthetic evaluators - the third part of the [eval pipeline](eval.md), beside
 data transport and scoring human labels. One evaluator per task is fine-tuned on the pooled
-human annotations, then applied to unlabelled data by `pragmata eval predict-labels`.
+human annotations; applying it is the fourth part, [Eval prediction](eval-prediction.md),
+which runs in this same environment.
 
 `scripts/eval/train_evaluators.py` drives it; the recommended configuration per task lives in
 [`configs/eval/training/`](../configs/eval/training/) as a shared `_common.yaml` deep-merged
@@ -279,7 +280,10 @@ make transfer-push SRC=data/eval/train_outputs PREFIX=checkpoints
 ```
 
 This is not optional housekeeping. The runs behind the report's own numbers were never pushed,
-and went with the container - see below.
+and went with the container - see below. Note that a pull lands at
+`data/transfer/checkpoints/` and has to be copied into `data/eval/train_outputs/` before
+anything can resolve a run from it; see
+[Eval prediction](eval-prediction.md#getting-the-data-in-and-out).
 
 ## Provenance
 
