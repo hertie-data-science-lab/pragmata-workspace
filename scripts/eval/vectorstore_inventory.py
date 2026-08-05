@@ -1,24 +1,26 @@
-#!/usr/bin/env python3
-"""Inventory the publikationsbot vector store (Postgres + pgvector).
+"""Connection handling for the publikationsbot vector store (Postgres + pgvector).
 
-Answers two questions against the live DB: how many publications the bot has (total and
-per-collection doc counts), and what all the metadata fields are (union of jsonb keys,
-with a glossary). Also the home of the DSN/connection helpers `corpus_catalog.py` imports.
+Not runnable: this is the module `corpus_catalog.py` imports for `fetch_dsn()`, `connect()`
+and the DB coordinates, so the credential-hiding error paths exist once rather than being
+copied into the script that reads the store.
 
 The connection string is NOT stored here: it is pulled at runtime from the dev container
 app's `publikationsbot-vectorstore-uri` secret via `az` (this VM shares the app's resource
-group, so `az containerapp secret show` works without a VNet).
+group, so `az containerapp secret show` works without a VNet), which needs an active
+`az login` in the tenant.
 
-Run (needs an active `az login` in the tenant):
-    .venv/bin/python scripts/eval/vectorstore_inventory.py    # counts + all metadata fields
+The name is wider than what is left. It also used to print an inventory - per-collection
+document counts and the union of metadata keys, with a glossary - which is gone: it was
+wired to no Makefile target and wrote no artifact, so nothing a report cites could come
+from it. `corpus_catalog.csv` carries the corpus at document grain, and its
+`.provenance.json` pins what that count was taken from.
 
 Env overrides (defaults target the dev app):
-    PB_RESOURCE_GROUP, PB_APP_NAME, PB_SECRET_NAME
+    PB_RESOURCE_GROUP, PB_APP_NAME, PB_SECRET_NAME, PB_MAIN_COLLECTION
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import subprocess
@@ -31,44 +33,9 @@ RESOURCE_GROUP = os.environ.get("PB_RESOURCE_GROUP", "rg-chatbot-dev-sweden-001"
 APP_NAME = os.environ.get("PB_APP_NAME", "publikationsbot-backend-dev")
 SECRET_NAME = os.environ.get("PB_SECRET_NAME", "publikationsbot-vectorstore-uri")
 
-# The collection holding the publications corpus. Per-document work (corpus_catalog.py)
-# is restricted to it, since author fields don't exist in the other collections; the
-# counts/fields reports below still enumerate every collection.
+# The collection holding the publications corpus. Per-document work (corpus_catalog.py) is
+# restricted to it, since author fields don't exist in the other collections.
 MAIN_COLLECTION = os.environ.get("PB_MAIN_COLLECTION", "azureopenaiembeddings")
-
-# German library/ILS metadata keys -> English meaning. Keys not listed here are printed
-# as "(unknown)" in the fields report, so a new key shows up as an unglossed line for a
-# reader to notice — this report is read by a person, and nothing here fails on it.
-FIELD_GLOSSARY = {
-    "hst": "Title (main title)",
-    "hst_zu": "Subtitle",
-    "jahr": "Year",
-    "verl": "Publisher",
-    "ort": "Place of publication",
-    "umf": "Extent (page count)",
-    "pers1": "Author (display form)",
-    "verf1": "Author 1",
-    "verf2": "Author 2",
-    "verf3": "Author 3",
-    "doi": "DOI",
-    "url_doi": "DOI URL",
-    "url_bibliothekskatalog": "Library catalog URL",
-    "mediennr": "Media/item number",
-    "mediengrp": "Media group/type code",
-    "doc_id": "Document ID",
-    "id": "ID",
-    "filename": "Filename",
-    "source": "Source file",
-    "filepath_internal": "Internal file path",
-    "headline": "Headline",
-    "Code": "Code (internal classification)",
-    # richtlinienradar-only keys (a different tool's collection):
-    "ansprechpartner": "Contact person",
-    "bereich": "Area/domain",
-    "converter": "Converter",
-    "export_type": "Export type",
-    "url": "URL",
-}
 
 
 def fetch_dsn() -> str:
@@ -115,84 +82,3 @@ def connect(dsn: str):
         sys.exit(f"FATAL: could not connect to the vector store ({type(e).__name__}).")
     conn.set_session(readonly=True, autocommit=True)
     return conn
-
-
-def banner(title: str, gap: bool = False) -> None:
-    if gap:
-        print()
-    print("=" * 60)
-    print(title)
-    print("=" * 60)
-
-
-def report_counts(cur) -> None:
-    banner("PUBLICATION COUNTS")
-
-    cur.execute("SELECT count(*), count(DISTINCT id) FROM public.publications;")
-    total, distinct = cur.fetchone()
-    print(f"\npublications table:  {total} rows  ({distinct} distinct id)")
-
-    cur.execute(
-        """
-        SELECT c.name,
-               count(e.id)                              AS chunk_rows,
-               count(DISTINCT e.cmetadata->>'doc_id')   AS distinct_docs
-        FROM public.langchain_pg_collection c
-        LEFT JOIN public.langchain_pg_embedding e ON e.collection_id = c.uuid
-        GROUP BY c.name
-        ORDER BY c.name;
-        """
-    )
-    print("\nembedding collections:")
-    print(f"  {'collection':<40} {'chunks':>9} {'docs':>7}")
-    for name, chunks, docs in cur.fetchall():
-        print(f"  {name:<40} {chunks:>9} {docs:>7}")
-    print(
-        "\n=> The publications corpus total is the distinct-doc count of the main\n"
-        "   collection, which cross-checks against the publications table above."
-    )
-
-
-def report_fields(cur) -> None:
-    banner("METADATA FIELDS (union of jsonb keys, per collection)", gap=True)
-
-    # DISTINCT in the DB: without it, jsonb_object_keys() explodes every one of
-    # ~545k rows into one row per key (~8M rows) shipped over the wire only to
-    # be deduped here. The answer is ~30 (collection, key) pairs.
-    cur.execute(
-        """
-        SELECT DISTINCT c.name, jsonb_object_keys(e.cmetadata) AS key
-        FROM public.langchain_pg_collection c
-        JOIN public.langchain_pg_embedding e ON e.collection_id = c.uuid;
-        """
-    )
-    by_coll: dict[str, set[str]] = {}
-    for name, key in cur.fetchall():
-        by_coll.setdefault(name, set()).add(key)
-
-    for name, keys in sorted(by_coll.items()):
-        print(f"\n{name}  ({len(keys)} fields):")
-        for key in sorted(keys):
-            print(f"  {key:<24} {FIELD_GLOSSARY.get(key, '(unknown)')}")
-
-
-def main() -> int:
-    # No options of its own; the parser is here for --help (which prints the module
-    # docstring) and to reject a mistyped argument instead of ignoring it.
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    ap.parse_args()
-
-    conn = connect(fetch_dsn())
-    try:
-        cur = conn.cursor()
-        report_counts(cur)
-        report_fields(cur)
-    finally:
-        conn.close()
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

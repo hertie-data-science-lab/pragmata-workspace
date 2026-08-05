@@ -23,8 +23,9 @@ redirect). Every CSV ships with a `.provenance.json` file, and the
 
 `scripts/eval/` also holds `train_evaluators.py` (the training stage, see
 [Eval training](eval-training.md) - it produces models rather than report CSVs, so it is not
-in the table above), `vectorstore_inventory.py` (aggregate corpus counts, to stdout) and
-`eval_common.py` (shared vocabulary and filters, not runnable).
+in the table above) and two modules that are imported rather than run: `eval_common.py`
+(shared vocabulary and filters) and `vectorstore_inventory.py` (the vector store's DSN and
+connection handling, which `corpus_catalog.py` imports).
 
 **Vocabulary.** `response`, `record`, `item`, `panel` and `query group` are defined in the
 [data dictionary](eval-data-dictionary.md), together with every column of every CSV.
