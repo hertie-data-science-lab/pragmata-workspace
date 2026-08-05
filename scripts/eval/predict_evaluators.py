@@ -111,10 +111,6 @@ PAIR_FIELDS = ("query", "answer", "context_set", "language")
 CHUNK_FIELDS = ("chunk_id", "doc_id", "chunk_rank", "text")
 
 
-def _sidecar_path(csv_path: Path) -> Path:
-    return csv_path.with_suffix(".csv.provenance.json")
-
-
 def write_staged(csv_path: Path, frame: pd.DataFrame, prov_fields: dict) -> None:
     """Write one staged CSV plus the provenance sidecar the freshness guard reads.
 
@@ -123,7 +119,7 @@ def write_staged(csv_path: Path, frame: pd.DataFrame, prov_fields: dict) -> None
     all three.
 
     ``output_sha256`` is the CSV's own bytes rather than its inputs', which is what lets
-    `predict` refuse a CSV that has drifted from the record beside it - see _staged_csv. The
+    `predict` refuse a CSV that has drifted from the record beside it - see staged_csv. The
     sidecar is computed after the write for that reason, and the whole pair is written
     together so a half-staged population cannot pass the guard.
     """
@@ -136,7 +132,7 @@ def write_staged(csv_path: Path, frame: pd.DataFrame, prov_fields: dict) -> None
         columns=list(frame.columns),
         **prov_fields,
     )
-    _sidecar_path(csv_path).write_text(
+    ec.sidecar_path(csv_path).write_text(
         json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
@@ -506,60 +502,30 @@ def staged_csv(task: str, population: str) -> tuple[Path, dict]:
     """The staged CSV for a (task, population) and its sidecar, checked against the pin.
 
     The same discipline train_evaluators._training_csv applies, and for the same reason:
-    existence is not enough, and the gap is silent. `predict-inputs` pools whatever freeze the
-    pin named when it ran; the pin then moves, and nothing downstream re-reads the CSV's
-    origin - a run would predict on the previous export and say nothing. So the sidecar is
-    required, it must name the population being asked for, and its recorded sha256 must match
-    the bytes on disk. The last check also catches a half-written CSV from an interrupted
-    staging run, and a hand-edited one.
+    existence is not enough, and the gap is a silent one. ec.require_fresh_staged_csv owns
+    that rule and its reasoning; this names the layout, the command that rebuilds each
+    population, and the two conditions particular to prediction.
+
+    The population is checked against the sidecar because prediction stages one directory per
+    population, and the directory name alone is not evidence of what is in it.
 
     The freeze check applies to the annotated population only, because it is the only one
     pooled from the export. The corpus population's own provenance is the per-source sha256s
     and the curation-pin comparison in its sidecar, which staging records and this echoes.
+    `testsplit` is staged per run rather than by a make target, so its hint says so.
     """
     path = PREDICT_INPUTS / population / f"{task}.csv"
-    sidecar_path = _sidecar_path(path)
     rebuild = (
         f"  Run `make eval-predict-inputs POPULATION={population}`."
         if population in STAGED_POPULATIONS
         else "  It is staged per run by scripts/eval/evaluator_report.py calibration."
     )
-    if not path.exists():
-        raise SystemExit(f"no staged CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")
-    if not sidecar_path.exists():
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} has no {sidecar_path.name} beside it, so what it\n"
-            f"  was staged from cannot be established.\n{rebuild}"
-        )
-    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-
-    staged_population = sidecar.get("population")
-    if staged_population != population:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} was staged as population "
-            f"{staged_population!r}, not {population!r}.\n"
-            f"  The directory and its sidecar disagree, so neither names the rows.\n{rebuild}"
-        )
-
-    if population == "annotated":
-        staged_freeze = sidecar.get("freeze_date")
-        if staged_freeze != ec.FREEZE_DATE:
-            raise SystemExit(
-                f"{path.relative_to(ws.ROOT)} was pooled from freeze {staged_freeze!r}, but\n"
-                f"  configs/eval/freeze.conf now pins {ec.FREEZE_DATE!r}. Predicting it would\n"
-                f"  publish the previous dataset under the current pin.\n{rebuild}"
-            )
-
-    recorded = sidecar.get("output_sha256")
-    actual = ws.sha256_file(path)
-    if recorded != actual:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} does not match its sidecar.\n"
-            f"  recorded {recorded}\n"
-            f"  on disk  {actual}\n"
-            f"  The file changed after staging, or the staging run did not finish.\n{rebuild}"
-        )
-    return path, sidecar
+    return path, ec.require_fresh_staged_csv(
+        path,
+        rebuild=rebuild,
+        population=population,
+        check_freeze=population == "annotated",
+    )
 
 
 def check_testsplit_run(sidecar: dict, csv_path: Path, evaluator_run_id: str) -> None:

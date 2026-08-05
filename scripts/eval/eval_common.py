@@ -495,6 +495,98 @@ def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
     }
 
 
+# --- staged inputs: the freshness guard both model stages apply --------------------------
+
+
+def sidecar_path(csv_path: Path) -> Path:
+    """The provenance sidecar beside a staged CSV: ``<name>.csv.provenance.json``.
+
+    Named once, here, because the writers and the guard below have to agree on it: a
+    sidecar written under a name the guard does not look for would read as a missing
+    sidecar, and one looked for under a name nothing writes would refuse every file.
+    """
+    return csv_path.with_suffix(".csv.provenance.json")
+
+
+def require_fresh_staged_csv(
+    path: Path,
+    *,
+    rebuild: str,
+    population: str | None = None,
+    check_freeze: bool,
+) -> dict:
+    """Refuse a staged CSV that has drifted from its sidecar or the pin; return the sidecar.
+
+    Shared by both model stages - train_evaluators._training_csv and
+    predict_evaluators.staged_csv are thin wrappers naming their own layout - because the
+    gap is the same one on either side, and it is a silent one. Staging pools whatever
+    freeze the pin named when it ran; the pin then moves, and nothing downstream re-reads
+    the CSV's origin, so a run would train or predict on the previous export and say
+    nothing. Hence: the sidecar is required, it must name the population asked for where
+    there is one, its freeze_date must be the freeze this process resolved, and its
+    recorded sha256 must match the bytes on disk. That last check also catches a
+    half-written CSV from an interrupted staging run, and a hand-edited one.
+
+    The order is deliberate: the sha256 is the only check that reads the whole file (the
+    training CSVs run to tens of MB), so it is reached only by a CSV that is otherwise in
+    order.
+
+    Three things are the caller's rather than this function's, because they differ by
+    stage rather than by rule:
+
+    - ``rebuild``, the hint appended to every refusal. It names the command that would
+      restage THIS file; a guard that says only "stale" leaves the operator to work out
+      which staging target owns the path.
+    - ``population``, checked against the sidecar when given. Prediction stages one
+      directory per population and the directory name alone is not evidence of what is in
+      it; training has one pooled CSV per task and no such key.
+    - ``check_freeze``. Every training input is pooled from the frozen export, so a moved
+      pin always makes it the previous dataset; on the prediction side only the annotated
+      population is, the corpus population being pinned by the per-source sha256s and the
+      curation-pin comparison in its own sidecar instead.
+    """
+    if not path.exists():
+        raise SystemExit(f"no staged CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")
+    sidecar_file = sidecar_path(path)
+    if not sidecar_file.exists():
+        raise SystemExit(
+            f"{path.relative_to(ws.ROOT)} has no {sidecar_file.name} beside it, so what it\n"
+            f"  was staged from cannot be established.\n{rebuild}"
+        )
+    sidecar = json.loads(sidecar_file.read_text(encoding="utf-8"))
+
+    if population is not None:
+        staged_population = sidecar.get("population")
+        if staged_population != population:
+            raise SystemExit(
+                f"{path.relative_to(ws.ROOT)} was staged as population "
+                f"{staged_population!r}, not {population!r}.\n"
+                "  The directory and its sidecar disagree, so neither names the rows.\n"
+                f"{rebuild}"
+            )
+
+    if check_freeze:
+        staged_freeze = sidecar.get("freeze_date")
+        if staged_freeze != FREEZE_DATE:
+            raise SystemExit(
+                f"{path.relative_to(ws.ROOT)} was pooled from freeze {staged_freeze!r}, but\n"
+                f"  configs/eval/freeze.conf now pins {FREEZE_DATE!r}. Using it would\n"
+                f"  publish the previous dataset under the current pin.\n{rebuild}"
+            )
+
+    recorded = sidecar.get("output_sha256")
+    actual = ws.sha256_file(path)
+    if recorded != actual:
+        raise SystemExit(
+            f"{path.relative_to(ws.ROOT)} does not match its sidecar.\n"
+            f"  recorded {recorded}\n"
+            f"  on disk  {actual}\n"
+            f"  The file changed after staging, or the staging run did not finish.\n"
+            f"{rebuild}"
+        )
+    return sidecar
+
+
 # --- the pragmata eval side: which module answers, which pin, which GPU, which run -------
 #
 # Shared by the three model-stage scripts (train_evaluators, predict_evaluators,

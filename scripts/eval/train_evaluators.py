@@ -170,46 +170,22 @@ def _narrow_grounding_labels(task: str) -> tuple[str, ...] | None:
 def _training_csv(task: str) -> tuple[Path, dict]:
     """The staged pooled CSV for a task and its provenance sidecar, checked against the pin.
 
-    Existence is not enough, and that gap is a silent one. `combine` pools whatever freeze the
-    pin named when it ran; the pin then moves, and nothing downstream re-reads the CSV's origin
-    - a run would train on the previous export and say nothing. So the sidecar is required, its
-    freeze_date must be the freeze this process resolved, and its recorded sha256 must match
-    the bytes on disk. The last check also catches a half-written CSV from an interrupted
-    staging run, and a hand-edited one.
+    Existence is not enough, and that gap is a silent one: `combine` pools whatever freeze the
+    pin named when it ran, and nothing downstream re-reads the CSV's origin afterwards.
+    ec.require_fresh_staged_csv owns that rule and its reasoning; this names the layout and
+    the target that rebuilds it. The freeze check is unconditional, because every training
+    input is pooled from the frozen export - a moved pin always makes this CSV the previous
+    dataset.
 
     Applied to the diagnostic as well as to training: `check-sequence-length` exists to say
     what the next run will tokenise, and a stale CSV makes that answer wrong in the same way.
     """
     path = TRAINING_INPUTS / f"{task}.csv"
-    sidecar_path = path.with_suffix(".csv.provenance.json")
-    rebuild = "  Run `make eval-train-inputs` - it pools the frozen export per task."
-    if not path.exists():
-        raise SystemExit(f"no training CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")
-    if not sidecar_path.exists():
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} has no {sidecar_path.name} beside it, so which\n"
-            f"  export it was pooled from cannot be established.\n{rebuild}"
-        )
-    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-
-    staged_freeze = sidecar.get("freeze_date")
-    if staged_freeze != ec.FREEZE_DATE:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} was pooled from freeze {staged_freeze!r}, but\n"
-            f"  configs/eval/freeze.conf now pins {ec.FREEZE_DATE!r}. Training it would\n"
-            f"  publish the previous dataset under the current pin.\n{rebuild}"
-        )
-
-    recorded = sidecar.get("output_sha256")
-    actual = ws.sha256_file(path)
-    if recorded != actual:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} does not match its sidecar.\n"
-            f"  recorded {recorded}\n"
-            f"  on disk  {actual}\n"
-            f"  The file changed after staging, or the staging run did not finish.\n{rebuild}"
-        )
-    return path, sidecar
+    return path, ec.require_fresh_staged_csv(
+        path,
+        rebuild="  Run `make eval-train-inputs` - it pools the frozen export per task.",
+        check_freeze=True,
+    )
 
 
 def combine(exports: Path) -> int:
@@ -296,7 +272,7 @@ def combine(exports: Path) -> int:
             row_filter="submitted",
             output_sha256=ws.sha256_file(target),
         )
-        target.with_suffix(".csv.provenance.json").write_text(
+        ec.sidecar_path(target).write_text(
             json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
 
