@@ -104,8 +104,12 @@ coalesces their extra responses into one item, exactly as it does when passing d
 - **`alpha = 1.0` with `degenerate_calibration = True` is not evidence of reliability.**
   Alpha is `1 - Do/De` and is undefined when expected disagreement is zero (the label never
   varies in the overlap); pragmata returns 1.0 there by convention.
-- Ties in majority consolidation fall back to the first row in file order, so a 1-of-2
-  split is decided by CSV row order rather than by the data.
+- Consolidation is pragmata's own `consolidate_labels_by_majority` - the function eval
+  scoring ingests through - so these counts are eval's by construction. A label with a
+  strict majority (> half positive) is decided independently; a tied label (a 1-of-2 split)
+  takes its value from the row that matches every strict-majority label, and only from the
+  group's first row in file order when no row does. Either way a tie is settled by row
+  selection rather than by the data.
 
 ## `eval_metric_estimates.csv`
 
