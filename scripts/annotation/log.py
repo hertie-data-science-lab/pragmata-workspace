@@ -50,6 +50,7 @@ import tempfile
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import yaml
@@ -380,6 +381,41 @@ def _parse_bool(s: str | None) -> bool | None:
     return True if s == "true" else False if s == "false" else None
 
 
+def _is_uuid(value: str) -> bool:
+    """Whether an identity has already been pseudonymised."""
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def annotator_uuid(raw_id: str, name_to_uuid: dict[str, str], where: Path) -> str:
+    """One annotator identity as an Argilla user id, or abort the run.
+
+    The throwaway export carries the Argilla *username*, and the usernames on this
+    instance are real names, so an unmapped one must never reach the snapshot or the
+    report tables built from it — a renamed or deleted account is exactly the case that
+    would otherwise pass a name straight through. Fail closed, as
+    ``pseudonymize_export.py`` does on the durable export. Values that are already UUIDs
+    pass through untouched, which is what the ``--use-export`` path (reading an
+    already-pseudonymised tree) hands us.
+    """
+    if not raw_id or _is_uuid(raw_id):
+        return raw_id
+    resolved = name_to_uuid.get(raw_id)
+    if resolved is None:
+        # Deliberately does not echo the value: keeping names out of the snapshot is the
+        # whole point, and that includes the message saying we could not map one.
+        raise SystemExit(
+            f"{where}: an annotator identity has no matching Argilla user, so it cannot "
+            "be pseudonymised.\nRefusing to write a real name into the snapshot log. "
+            "Check the roster (configs/annotation/users.json) against the instance's "
+            "user list — a renamed or deleted account looks like this."
+        )
+    return resolved
+
+
 def label_stats(
     path: Path, labels: list[str], name_to_uuid: dict[str, str]
 ) -> tuple[dict, dict]:
@@ -390,7 +426,8 @@ def label_stats(
     rollup at the domain/total level — never average per-domain prevalences.
 
     Discarded rows (``response_status == "discarded"``) feed the discard breakdown only;
-    label distribution and bias are over submitted rows. Annotators are keyed by UUID.
+    label distribution and bias are over submitted rows. Annotators are keyed by UUID; a
+    username with no matching Argilla user aborts (see :func:`annotator_uuid`).
     """
     counts = {lab: [0, 0] for lab in labels}  # [n_true, n] over submitted, non-null
     by_ann: dict[str, dict[str, list[int]]] = {}
@@ -411,8 +448,8 @@ def label_stats(
             if (row.get("notes") or "").strip():
                 n_notes += 1
             raw_id = row.get("annotator_id", "")
-            uuid = name_to_uuid.get(raw_id, raw_id)
-            ann = by_ann.setdefault(uuid, {lab: [0, 0] for lab in labels})
+            annotator = annotator_uuid(raw_id, name_to_uuid, path)
+            ann = by_ann.setdefault(annotator, {lab: [0, 0] for lab in labels})
             for lab in labels:
                 v = _parse_bool(row.get(lab))
                 if v is None:
@@ -427,7 +464,7 @@ def label_stats(
     pool_prev = {lab: per_label[lab]["prevalence"] for lab in labels}
 
     by_annotator: dict[str, dict] = {}
-    for uuid, ann in by_ann.items():
+    for annotator, ann in by_ann.items():
         out = {}
         for lab in labels:
             nt, n = ann[lab]
@@ -441,7 +478,7 @@ def label_stats(
                 "prevalence": round(prev, 4),
                 "delta_vs_pool": delta,
             }
-        by_annotator[uuid] = out
+        by_annotator[annotator] = out
 
     total = n_submitted + n_discarded
     block = {

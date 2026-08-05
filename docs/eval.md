@@ -86,6 +86,10 @@ every export before that date carried real names in every task CSV and in the
   values or IAA pairwise keys are not UUIDs, so a tree that skipped the rewrite can neither
   leave the box nor be immortalised in a freeze. One check, `scripts/lib/check_pseudonymised.py`,
   at both boundaries.
+- `log.py` applies the same mapping to the throwaway export it reads, so the snapshot log and
+  the report tables built from it carry user ids only. It fails the same way, and for the same
+  reason: a username with no matching Argilla user - a renamed or deleted account - aborts the
+  run rather than passing a real name through.
 
 The rewrite is forward-only: `exports-frozen/2026-07-29/` predates it, still holds names,
 and stays local. Exports still count as PII either way - the free-text `notes` and
