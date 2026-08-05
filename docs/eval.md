@@ -1,11 +1,11 @@
 # Eval pipeline
 
-The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). Three of its
-parts are wired up in this workspace: **data transport**
-([Eval data transport](eval-data-transport.md)), **scoring human labels** (this page), and
-**training the evaluators** ([Eval training](eval-training.md)). **Prediction**
-(`pragmata eval predict-labels`) is implemented in `pragmata` and runs on the GPU box, but
-still has no workspace-side glue - see [What is still missing](#what-is-still-missing).
+The evaluation pipeline is a sibling of the [annotation pipeline](annotation.md). All four of
+its parts are wired up in this workspace: **data transport**
+([Eval data transport](eval-data-transport.md)), **scoring human labels** (this page),
+**training the evaluators** ([Eval training](eval-training.md)), and **prediction** -
+applying them, and scoring what they produce ([Eval prediction](eval-prediction.md)). What is
+and is not finished within that is in [What is still missing](#what-is-still-missing).
 
 ## Deliverables
 
@@ -21,11 +21,22 @@ redirect). Every CSV ships with a `.provenance.json` file, and the
 | `make eval-score` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
 | `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
 
-`scripts/eval/` also holds `train_evaluators.py` (the training stage, see
-[Eval training](eval-training.md) - it produces models rather than report CSVs, so it is not
-in the table above) and two modules that are imported rather than run: `eval_common.py`
-(shared vocabulary and filters) and `vectorstore_inventory.py` (the vector store's DSN and
-connection handling, which `corpus_catalog.py` imports).
+Three further deliverables come from the model side of the pipeline
+([Eval prediction](eval-prediction.md)), into the same directory and under the same
+conventions:
+
+| Target | Script | Output |
+|---|---|---|
+| `make eval-score-synthetic POPULATION=<p>` | `score_synthetic_predictions.py` | `synthetic_metric_estimates.<p>.csv`, via `pragmata eval score --prediction-id` |
+| `make eval-evaluator-report` | `evaluator_report.py` | `evaluator_metrics.csv` |
+| `make eval-evaluator-report PART=calibration` | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
+
+`scripts/eval/` also holds `train_evaluators.py` and `predict_evaluators.py` (the training and
+prediction stages - they produce models and predictions rather than report CSVs, so they are not
+in the tables above) and two modules that are imported rather than run: `eval_common.py`
+(shared vocabulary, filters, and the pragmata/GPU/run resolution the four model-stage scripts
+share) and `vectorstore_inventory.py` (the vector store's DSN and connection handling, which
+`corpus_catalog.py` imports).
 
 **Vocabulary.** `response`, `record`, `item`, `panel` and `query group` are defined in the
 [data dictionary](eval-data-dictionary.md), together with every column of every CSV.
@@ -101,11 +112,17 @@ and stays local. Exports still count as PII either way - the free-text `notes` a
 ## Ownership
 
 `data/eval/` is pragmata's own tool tree and holds only what pragmata wrote there
-(`scores/`, later `checkpoints/` and `predictions/`). Workspace-produced inputs *to* the
-tool - the pooled, filtered CSVs `score_human_annotations.py` hands to
-`eval score --path` - are staged in `data/eval-inputs/`. Eval consumes staged input by
-explicit path only; nothing is inferred from prior tool outputs. See
-[`data/README.md`](../data/README.md).
+(`scores/`, `train_outputs/`, `prediction_outputs/`). Workspace-produced inputs *to* the
+tool - the pooled, filtered CSVs `score_human_annotations.py` hands to `eval score --path`, and
+the staged unlabelled CSVs `predict_evaluators.py` hands to `predict-labels` - are staged in
+`data/eval-inputs/`. Eval consumes staged input by explicit path only; nothing is inferred from
+prior tool outputs. See [`data/README.md`](../data/README.md).
+
+Two files this workspace writes *into* that tree are the deliberate exceptions, both marked as
+such by a `.workspace.` infix in the name: `train_provenance.workspace.json` and
+`predict_provenance.workspace.json`, each inside the run directory it describes. They are there
+because those directories are what gets pushed off the GPU box, and neither pragmata's nor
+tlmtc's own sidecars name the workspace commit, the staged input or the freeze behind it.
 
 ## Cutting a new freeze
 
@@ -160,22 +177,36 @@ be **re-derived** under the new pin, not assumed to carry over.
 
 ## What is still missing
 
-**Training now has workspace glue** - `scripts/eval/train_evaluators.py` behind
-`make eval-train-inputs`, `make eval-train-seqlen` and `make eval-train TASK=<task>`, with
-the recommended configuration per task and the diagnostics behind it. It writes to
-`data/eval/train_outputs/` and stages its pooled inputs in `data/eval-inputs/training/`,
-matching the ownership rule above. See [Eval training](eval-training.md).
+**Training and prediction both have workspace glue now.** Training is
+`scripts/eval/train_evaluators.py` behind `make eval-train-inputs`, `make eval-train-seqlen`
+and `make eval-train TASK=<task>`, with the recommended configuration per task and the
+diagnostics behind it. Prediction is `scripts/eval/predict_evaluators.py` behind
+`make eval-predict-inputs POPULATION=<p>` and `make eval-predict`, plus
+`score_synthetic_predictions.py` (the twin of `score_human_annotations.py`) and
+`evaluator_report.py`. Both write into `data/eval/` and stage their inputs in
+`data/eval-inputs/`, matching the ownership rule above. See [Eval training](eval-training.md)
+and [Eval prediction](eval-prediction.md).
 
-**Prediction does not.** `pragmata eval predict-labels` applies a chosen training run to an
-unlabelled CSV, behind the same `eval` extra, but nothing in this workspace calls it: no
-target, no staging convention for the unlabelled side, no tested procedure - see
-[implementation guide §10](implementation-guide.md#10-run-the-evaluation).
-`score_synthetic_predictions.py` is the reserved name for scoring what it produces - the twin
-of `score_human_annotations.py` - and is deliberately not stubbed.
+What remains open is smaller and specific:
+
+- **A transfer-pulled prediction or checkpoint tree has to be moved into `data/eval/` by
+  hand.** `sync.sh` writes only under `data/transfer/`, and pragmata resolves
+  `--prediction-id` (and the evaluator run directories) under `data/eval/`. The `cp` is a
+  documented step rather than an automated one - see
+  [Eval prediction](eval-prediction.md#getting-the-data-in-and-out).
+- **Grounding predictions cannot be scored through pragmata at all.** Its evaluator trains on
+  three of five labels and the grounding score schema requires all five, so
+  `synthetic_metric_estimates.*.csv` carries explicit `n = 0` rows for every grounding metric.
+  The fix is more negative grounding annotation, not more pipeline.
+- **Nothing compares the synthetic estimates against the human ones automatically.** The
+  comparison, and the report it goes into, live in the private report repository.
 
 Training's parameters live in `configs/eval/training/` - a shared `_common.yaml` deep-merged
 with one file per task, the same shape as `configs/annotation/querygen_specs/`. They are
 committed as data rather than held in the script because they are pins behind published
 numbers: every metric in the eval report was produced at them, so each is documented beside
-itself and a change shows up in a diff as a change to the pin it is. Prediction has no configs
-under `configs/eval/`, for the same reason it has no glue - there is nothing yet to configure.
+itself and a change shows up in a diff as a change to the pin it is. **Prediction has no configs
+under `configs/eval/`, deliberately**: its two choices - which population, which evaluator run -
+are CLI arguments, because a prediction is a *use* of a pinned model rather than a new pin, and
+until the final run there are no published numbers for a pin to stand behind. What each run
+actually used is recorded per run instead, in `predict_provenance.workspace.json`.

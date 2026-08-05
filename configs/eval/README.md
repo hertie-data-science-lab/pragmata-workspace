@@ -34,4 +34,12 @@ machine-dependent and passed as overrides, and grounding's label narrowing, whic
 targets only - the two dropped columns are still required in the staged CSV, because the input
 schema was built from that mapping at import time. See `grounding.yaml`'s own header.
 
-Prediction has no workspace glue at all yet, so nothing here configures it (`docs/eval.md`).
+**Prediction has workspace glue but deliberately no configs here.** Its two choices - which
+population to predict, and which evaluator run to apply - are CLI arguments
+(`make eval-predict TASK= POPULATION= RUN_ID=`), not committed data, because a prediction is a
+*use* of a pinned model rather than a new pin: until the final run there are no published numbers
+for a file here to stand behind. Adding one would freeze a choice nobody has made yet. What each
+run actually used is recorded per run instead, in `predict_provenance.workspace.json` inside the
+prediction directory - population, evaluator run id and whether it was given or resolved, the
+staged input CSV with its sha256, and the freeze date or curated-corpus pin outcomes behind it.
+See [eval prediction](../../docs/eval-prediction.md).
