@@ -721,7 +721,13 @@ def task_x_domain_pace(domains: dict) -> str:
 
 
 def render(snap: dict) -> str:
-    total, domains = snap["total"], snap["domains"]
+    total = snap["total"]
+    # A domain log.py could not read is recorded as {"error": …} and skipped, by design, so
+    # the snapshot's domain blocks are not all the same shape. Drop those once here rather
+    # than in each of the ten tables below, which index count/tasks/timing directly. The
+    # totals need no filtering: a failed domain never reaches log.py's rollup either.
+    domains = {name: v for name, v in snap["domains"].items() if "error" not in v}
+    failed = {name: v["error"] for name, v in snap["domains"].items() if "error" in v}
     parts = [
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         (
@@ -738,6 +744,18 @@ def render(snap: dict) -> str:
             "- a **query group** is one query-answer pair across all three tasks: its "
             "panel plus its grounding and generation records.</small>"
         ),
+    ]
+    if failed:
+        # Named, not silently dropped: every number below is over the domains that did
+        # read, so a partial run must not be readable as a complete one.
+        parts.append(
+            _note(
+                "**Domains missing from this snapshot** (log.py could not read them; every "
+                "figure below excludes them): "
+                + "; ".join(f"`{name}` - {err}" for name, err in sorted(failed.items()))
+            )
+        )
+    parts += [
         "## Overall counts\n\n" + overall_counts(total),
         # Per-domain progress: record-level counts with retrieval panel completeness
         # columns appended (panel data is dropped per-domain when the snapshot lacks it).
