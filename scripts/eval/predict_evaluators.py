@@ -167,8 +167,12 @@ def _check_text_columns(frame: pd.DataFrame, task: str, source: str) -> None:
 # --- predict-inputs: the annotated population ------------------------------------------
 
 
-def stage_annotated(exports: Path) -> int:
-    """Stage the frozen export as unlabelled per-task CSVs, identity kept, labels dropped.
+def pooled_annotated_items(exports: Path) -> dict[str, tuple[pd.DataFrame, list[str]]]:
+    """The frozen export pooled to one row per ITEM, labels consolidated and kept.
+
+    ``{task: (item frame, programmes that contributed rows)}``. The frame carries the task's
+    text columns, its IDENTITY_COLUMNS, `source_domain`, and every label column with its
+    majority-consolidated value.
 
     Pooled exactly as train_evaluators.combine pools it - programmes derived from the tree via
     ec.programmes (which also refuses a stale freeze pin), submitted responses only, and
@@ -176,22 +180,24 @@ def stage_annotated(exports: Path) -> int:
     population the human-label metrics describe. Anything else would make the comparison the
     two exist for meaningless.
 
-    Two differences from the training staging, both forced:
+    **The reduction to item grain is ec.consolidated_items, i.e. pragmata's own majority
+    consolidation, and this is the only place the annotated population is built.** Two callers
+    need it and need it to agree row for row: `stage_annotated` below, which strips the labels
+    and stages the rest for prediction, and export_predictions.py, which keeps the labels as
+    the human side of the per-item comparison. If one deduplicated on ITEM_KEYS and the other
+    consolidated, the two frames would hold the same items - the grain is the same either way
+    - selected by different rules, so an item's `source_domain` could differ between the
+    staged input and the human labels it is compared against. Going through one path removes
+    that possibility instead of documenting it.
 
-    - Every label column is dropped. pragmata's predict contract does not merely ignore them,
-      it REJECTS them (validate_eval_predict_frame refuses the task's label columns and
-      anything named label_*), which is the right call - a prediction input that carries the
-      answers invites scoring a model against its own input.
-    - Rows are reduced to one per ITEM. The export carries one row per annotator, and with the
-      labels gone those rows are exact duplicates of the same text: predicting them would run
-      the model two or three times over identical input, and `eval score --prediction-id`
-      would then have to collapse them again. ec.ITEM_KEYS is the same grain pragmata
-      consolidates to, so the population is unchanged - only the redundancy is.
+    Requires the eval pragmata pin, because consolidation is pragmata's. That is why
+    `predict-inputs --population annotated` needs PRAGMATA_EVAL_SRC on the CPU box - staging
+    the all-generated population already did, for record identity.
     """
     programmes = ec.programmes(exports)
     print(f"pooling {len(programmes)} programme(s) from {exports}", file=sys.stderr)
 
-    staged: dict[str, tuple[pd.DataFrame, list[str]]] = {}
+    pooled_items: dict[str, tuple[pd.DataFrame, list[str]]] = {}
     for task in ec.TASKS:
         frames = []
         contributing = []
@@ -219,7 +225,12 @@ def stage_annotated(exports: Path) -> int:
         # An explicit column list rather than a drop list: a label column added upstream would
         # then reach the predict contract and be rejected there, which reads as a pragmata bug
         # rather than as an export schema change.
-        keep = [*ec.TEXT_COLUMNS[task], *IDENTITY_COLUMNS[task], "source_domain"]
+        keep = [
+            *ec.TEXT_COLUMNS[task],
+            *IDENTITY_COLUMNS[task],
+            "source_domain",
+            *ec.LABELS[task],
+        ]
         missing = [c for c in keep if c not in pooled.columns]
         if missing:
             raise SystemExit(
@@ -228,15 +239,39 @@ def stage_annotated(exports: Path) -> int:
                 "  The export schema has changed; fix IDENTITY_COLUMNS rather than staging "
                 "a CSV the scorer\n  cannot group."
             )
-        unlabeled = pooled[keep].drop_duplicates(
-            subset=list(ec.ITEM_KEYS[task]), keep="first"
-        )
-        _check_text_columns(unlabeled, task, f"{task} (annotated)")
+        items = ec.consolidated_items(pooled[keep], task)
         print(
-            f"  {task}: {len(pooled)} response rows -> {len(unlabeled)} items "
+            f"  {task}: {len(pooled)} response rows -> {len(items)} items "
             f"from {len(contributing)} programme(s)",
             file=sys.stderr,
         )
+        pooled_items[task] = (items, contributing)
+    return pooled_items
+
+
+def stage_annotated(exports: Path) -> int:
+    """Stage the frozen export as unlabelled per-task CSVs, identity kept, labels dropped.
+
+    The population is pooled_annotated_items above; this subcommand's own work is the two
+    differences from the training staging, both forced:
+
+    - Every label column is dropped. pragmata's predict contract does not merely ignore them,
+      it REJECTS them (validate_eval_predict_frame refuses the task's label columns and
+      anything named label_*), which is the right call - a prediction input that carries the
+      answers invites scoring a model against its own input.
+    - Rows are reduced to one per ITEM. The export carries one row per annotator, and with the
+      labels gone those rows are exact duplicates of the same text: predicting them would run
+      the model two or three times over identical input, and `eval score --prediction-id`
+      would then have to collapse them again. It is the same grain pragmata consolidates to,
+      so the population is unchanged - only the redundancy is.
+    """
+    pooled_items = pooled_annotated_items(exports)
+    programmes = ec.programmes(exports)
+
+    staged: dict[str, tuple[pd.DataFrame, list[str]]] = {}
+    for task, (items, contributing) in pooled_items.items():
+        unlabeled = items.drop(columns=list(ec.LABELS[task]))
+        _check_text_columns(unlabeled, task, f"{task} (annotated)")
         staged[task] = (unlabeled, contributing)
 
     # Every task pooled before any is written, for the reason combine gives: both failure

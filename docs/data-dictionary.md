@@ -216,6 +216,50 @@ Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_
 
 **How to read these numbers** - the in-sample `annotated` population, the evaluator-quality caveat on `all-generated`, the always-zero grounding rows, and why retrieval's `n` is not comparable across populations - is in [Synthetic evaluators](synthetic-evaluators.md#the-synthetic-estimates).
 
+## `predictions_vs_human.csv`
+
+Written as `predictions_vs_human.<task>.csv`, one file per task, for the `annotated` population only.
+
+- **Purpose:** which *items* the evaluator and the annotators agree on. `synthetic_metric_estimates.annotated.csv` beside `eval_metric_estimates.csv` says whether two *rates* agree; this says where the agreement comes from and where it breaks, per label. Nothing in it is aggregated - no rate, no denominator, no interval.
+- **Grain:** one row per item - `(record_uuid, chunk_id)` for retrieval, `record_uuid` for grounding and generation. Exactly the 1,561 / 447 / 713 items `annotated` holds; the row count is checked against the pooled export and the run **refuses** on a mismatch rather than exporting a partial comparison.
+
+| Column | Definition |
+|---|---|
+| `record_uuid` | The record's identity, pragmata's own content-addressed id. For retrieval it names the *query*, so a panel's chunks share it. |
+| `chunk_id`, `chunk_rank`, `n_retrieved_chunks` | **Retrieval only**, absent from the other two files: which chunk of the panel, its 1-based rank, and the query's true *k*. Read `n_retrieved_chunks` before treating a panel as complete. |
+| `source_domain` | Programme slug the item was annotated under. Written by the pooling step, never read from the export - it is not an export column. |
+| `human_<label>` | The item's majority-consolidated human label, 0 or 1. One column per label the *task* has, including labels this evaluator does not predict. |
+| `<label>` | The evaluator's predicted label, 0 or 1 - tlmtc's own thresholded output. Bare label name, as on `predictions.csv`. |
+| `prob_<label>` | The predicted probability behind it, to six decimals. |
+| `agree_<label>` | 1 where `human_<label>` equals `<label>`, 0 otherwise. Sum or average it per label to get a per-item agreement rate; it is 0/1 rather than True/False so that arithmetic needs no coercion. |
+
+**When a column is absent.**
+
+- **A label the evaluator does not predict keeps `human_<label>` and gains no other column.** Grounding is the case in point: it trains three of its five labels, so its file carries five `human_*` columns and three each of the other three kinds. The columns are named by side, so the absence says "this evaluator does not cover the label" - where a blank cell would read as a measurement. Which labels those were is recorded in the `*.provenance.json` as `labels_not_predicted`.
+- **There is no `query_id`.** The annotation exports do not carry one - see the note under [`retrieval_manifest.csv`](#retrieval_manifestcsv) on joining. `predictions.<task>.all-generated.csv` does carry it, because its source does.
+
+**Where the human labels come from.** `consolidate_labels_by_majority`, pragmata's own, through the single function that builds the `annotated` population for prediction staging as well - so these are the same labels the human metrics rest on and the same items the evaluator was applied to, by construction rather than by resemblance. Tie behaviour is therefore pragmata's, as described under [`annotation_label_summary.csv`](#annotation_label_summarycsv).
+
+**How to read these numbers** - and why a disagreement column is not an error rate - is in [Synthetic evaluators](synthetic-evaluators.md#the-per-item-exports).
+
+## `predictions.csv`
+
+Written as `predictions.<task>.<population>.csv`, one file per task per predicted population.
+
+- **Purpose:** the readable copy of what an evaluator predicted, per item. The prediction run directory keeps tlmtc's `predictions.csv` / `probabilities.csv` pair - two files, same rows, one carrying labels and the other floats, both carrying every text column - because that pair is what `eval score --prediction-id` reads. This is the same content as one file, joined on the item keys, with the text dropped.
+- **Grain:** one row per item, as above. The two source files are checked to hold the same items exactly once each; the run **refuses** otherwise.
+
+| Column | Definition |
+|---|---|
+| `record_uuid` | As above. |
+| `chunk_id`, `chunk_rank`, `n_retrieved_chunks` | **Retrieval only**, as above. |
+| `query_id`, `doc_id` | **`all-generated` only**: the querygen spec's own query id, and the source document of the chunk (retrieval only). These are the join keys `retrieval_manifest.csv` and `corpus_catalog.csv` are keyed on. |
+| `source_domain` | Programme slug the record was generated under. |
+| `<label>` | The predicted label, 0 or 1. One column per label the evaluator predicted - three of five for grounding. |
+| `prob_<label>` | The predicted probability behind it, to six decimals. |
+
+**What is not here.** The two text columns (`query`/`chunk`, `answer`/`context_set`, `query`/`answer`) are dropped: they are the prediction *input's*, unchanged, and both the staged input CSV and the run directory keep them. And no aggregate - a prevalence computed from these rows would not be the number `pragmata eval score` produces, which is the reason [Synthetic evaluators](synthetic-evaluators.md#what-is-not-done) gives for not producing one.
+
 ## `evaluator_metrics.csv`
 
 - **Purpose:** how good each synthetic evaluator is, per label. The file to read beside any `synthetic_metric_estimates.*.csv` number.

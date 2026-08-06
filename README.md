@@ -54,7 +54,7 @@ make eval-annotation-tables    # annotation_operations, annotation_label_summary
 make eval-retrieval-manifest   # retrieval_manifest.csv, the fairness audit's join key
 make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
-make eval-deliverables         # all seven deliverable targets, including the model side below
+make eval-deliverables         # all nine deliverable targets, including the model side below
 
 # Synthetic evaluators  (train + apply; GPU host where marked - see docs/synthetic-evaluators.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
@@ -63,6 +63,8 @@ make eval-train                # train one evaluator (TASK= required; grounding 
 make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|all-generated)
 make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=; GPU host)
 make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv  (POPULATION=; CPU box)
+make eval-export-predictions   # predictions.<task>.<population>.csv, per item (POPULATION=; CPU-only)
+make eval-export-vs-human      # predictions_vs_human.<task>.csv, human beside predicted (CPU box)
 make eval-model-metrics        # evaluator_metrics.csv                        (CPU-only)
 make eval-model-calibration    # evaluator_calibration.csv                    (GPU host)
 

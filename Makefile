@@ -37,7 +37,7 @@
 #   make eval-retrieval-manifest           # what the retriever returned per query
 #   make eval-score-human                  # the curated-corpus metric estimates from human labels
 #   make eval-catalog                      # the document-corpus catalog for the fairness audit
-#   make eval-deliverables                 # all seven deliverable targets, in order
+#   make eval-deliverables                 # all nine deliverable targets, in order
 # The first four read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
 # docs/data-dictionary.md for what the columns mean.
@@ -53,6 +53,8 @@
 #   make eval-predict-inputs POPULATION=annotated       # -> data/eval-inputs/predict/annotated/
 #   make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
 #   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
+#   make eval-export-predictions POPULATION=annotated   # -> predictions.<task>.<population>.csv
+#   make eval-export-vs-human                           # -> predictions_vs_human.<task>.csv
 #   make eval-model-metrics                             # -> evaluator_metrics.csv
 #   make eval-model-calibration                         # -> evaluator_calibration.csv (GPU)
 # See docs/synthetic-evaluators.md for the populations, the run order and the output layout.
@@ -114,6 +116,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         eval-score-human eval-catalog \
         eval-train-inputs eval-train-seqlen eval-train \
         eval-predict-inputs eval-predict eval-score-synthetic \
+        eval-export-predictions eval-export-vs-human \
         eval-model-metrics eval-model-calibration \
         transfer-push transfer-pull transfer-verify \
         repro-pin repro-verify repro-reproduce venv-setup docs-check help
@@ -197,13 +200,14 @@ annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date
 
 # --- eval deliverables (reports/eval/<date>/; OUT= to redirect) ---
 
-# One target per script, so each names its own output and its own prerequisites. The
-# umbrella runs all seven; it is the only target here that fans out. Later ones need
+# One target per output, so each names its own artefact and its own prerequisites - which is
+# why evaluator_report.py and export_predictions.py each back two. The umbrella runs all
+# nine; it is the only target here that fans out. Later ones need
 # artefacts the GPU host produces (train_outputs/, prediction_outputs/) and the last needs
 # a GPU, so on a box without them the umbrella fails at that step and says why - rather
 # than a name implying a subset. The model *stages* (eval-train*, eval-predict*) are not
 # deliverables and stay out: they produce models, and one of them runs for two hours.
-eval-deliverables: eval-annotation-tables eval-retrieval-manifest eval-catalog eval-score-human eval-score-synthetic eval-model-metrics eval-model-calibration ## Eval: every report deliverable, in order (later ones need the GPU host's outputs)
+eval-deliverables: eval-annotation-tables eval-retrieval-manifest eval-catalog eval-score-human eval-score-synthetic eval-model-metrics eval-export-predictions eval-export-vs-human eval-model-calibration ## Eval: every report deliverable, in order (later ones need the GPU host's outputs)
 
 eval-annotation-tables: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv
 	$(PY) scripts/eval/annotation_tables.py $(EVAL_ARGS)
@@ -240,9 +244,10 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 
 # --- eval prediction (applying the evaluators; see docs/synthetic-evaluators.md) ---
 #
-# Same environment split as training: staging is CPU-only and runs anywhere; scoring needs the CPU
-# box's workspace venv + PRAGMATA_EVAL_SRC, since it goes through the eval pin; and `eval-predict`
-# needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).
+# Same environment split as training: staging is CPU-only, though both populations go through
+# the eval pin (pragmata consolidates the annotated one and derives record identity for the
+# other), so it wants the CPU box's workspace venv + PRAGMATA_EVAL_SRC as scoring does; and
+# `eval-predict` needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).
 # There are no YAML configs here on purpose - population and evaluator run id are arguments,
 # because until the final run nothing is published for a pin to stand behind.
 
@@ -269,6 +274,26 @@ eval-predict: ## Eval prediction: one evaluator over one population -> data/eval
 eval-score-synthetic: ## Eval prediction: score one predicted population -> synthetic_metric_estimates.<population>.csv (POPULATION=annotated|all-generated, default annotated)
 	$(PY) scripts/eval/score_synthetic_predictions.py \
 	  --population $(if $(POPULATION),$(POPULATION),annotated) $(EVAL_ARGS)
+
+# The per-item exports. Two targets over one script, split for the reason the two
+# evaluator_report ones are: their prerequisites differ and the target name is where that has
+# to be visible. Neither needs a GPU. PREDICTION_IDS is a space-separated list of prediction
+# directory names, one per task, and is to these what RUN_ID is to eval-predict: optional, and
+# to be passed for anything published.
+
+eval-export-predictions: ## Eval prediction: per-item labels + probabilities in one file -> predictions.<task>.<population>.csv (POPULATION= as passed, default annotated; PREDICTION_IDS=). Needs only the prediction dirs - no GPU, no eval pin
+	$(PY) scripts/eval/export_predictions.py predictions \
+	  --population $(if $(POPULATION),$(POPULATION),annotated) $(EVAL_ARGS) \
+	  $(foreach id,$(PREDICTION_IDS),--prediction-id $(id))
+
+# The annotated population only, because it is the only one with human labels to compare
+# against. Consolidating those labels is pragmata's own function, so unlike the target above
+# this one needs the eval pin: workspace venv + PRAGMATA_EVAL_SRC, i.e. the CPU box, plus the
+# frozen export tree (EXPORTS= to point at a pulled copy).
+eval-export-vs-human: ## Eval prediction: consolidated human label beside the prediction -> predictions_vs_human.<task>.csv (annotated only; needs the workspace venv + PRAGMATA_EVAL_SRC for pragmata's consolidation; PREDICTION_IDS=, EXPORTS=)
+	$(PY) scripts/eval/export_predictions.py vs-human $(EVAL_ARGS) \
+	  $(foreach id,$(PREDICTION_IDS),--prediction-id $(id)) \
+	  $(if $(EXPORTS),--exports $(EXPORTS),)
 
 # These two were one target behind PART=, which hid the fact that only one of them needs a
 # GPU. Split so the prerequisite is visible in the target name, as it is everywhere else.

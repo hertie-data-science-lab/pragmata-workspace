@@ -9,9 +9,11 @@ Per-task configuration lives in [`configs/eval/training/`](../configs/eval/train
 | `make eval-train-inputs` | pools the frozen export into `data/eval-inputs/training/<task>.csv` | either box, CPU-only |
 | `make eval-train-seqlen` | reports how much of each task's input the default sequence length truncates | either box, CPU-only |
 | `make eval-train TASK=<task>` | trains one evaluator into `data/eval/train_outputs/<run_id>/` | GPU host |
-| `make eval-predict-inputs POPULATION=<p>` | stages the unlabelled per-task CSVs into `data/eval-inputs/predict/<p>/` | either box, CPU-only |
+| `make eval-predict-inputs POPULATION=<p>` | stages the unlabelled per-task CSVs into `data/eval-inputs/predict/<p>/` | CPU-only, but through the eval pin - both populations use pragmata (consolidation for one, record identity for the other), so in practice the CPU box |
 | `make eval-predict TASK=<t> POPULATION=<p> RUN_ID=<id>` | applies one evaluator into `data/eval/prediction_outputs/<run_id>-<p>/` | GPU host |
 | `make eval-score-synthetic POPULATION=<p>` | `synthetic_metric_estimates.<p>.csv` | CPU box - it scores through the eval pin, so it needs the workspace venv and `PRAGMATA_EVAL_SRC` |
+| `make eval-export-predictions POPULATION=<p>` | `predictions.<task>.<p>.csv` - per-item labels + probabilities | either box, CPU-only; reads only the prediction dirs |
+| `make eval-export-vs-human` | `predictions_vs_human.<task>.csv` - human label beside the prediction | CPU box - it consolidates through the eval pin, so it needs the workspace venv and `PRAGMATA_EVAL_SRC` |
 | `make eval-model-metrics` | `evaluator_metrics.csv` | either box, CPU-only |
 | `make eval-model-calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
 
@@ -63,7 +65,7 @@ Every grounding item was being cut off at the default - the model never saw a co
 
 They answer different questions.
 
-**`annotated`** is the frozen export with the labels stripped - the same rows `eval_metric_estimates.csv` describes, pooled exactly as training pools them, so each synthetic metric reads straight beside its human counterpart. Two things differ from the training staging, both forced. Every label column is dropped, because pragmata's `validate_eval_predict_frame` does not merely ignore the task's labels, it *rejects* them. And rows are reduced to one per item: the export carries one row per annotator, and with the labels gone those are exact duplicates. The grain is the one pragmata consolidates to anyway, so this removes redundancy, not population - landing on the same 1,561 / 447 / 713 items `eval-train-seqlen` reports.
+**`annotated`** is the frozen export with the labels stripped - the same rows `eval_metric_estimates.csv` describes, pooled exactly as training pools them, so each synthetic metric reads straight beside its human counterpart. Two things differ from the training staging, both forced. Every label column is dropped, because pragmata's `validate_eval_predict_frame` does not merely ignore the task's labels, it *rejects* them. And rows are reduced to one per item: the export carries one row per annotator, and with the labels gone those are exact duplicates. The reduction *is* pragmata's `consolidate_labels_by_majority` - the same function training consolidates with - so this removes redundancy, not population, landing on the same 1,561 / 447 / 713 items `eval-train-seqlen` reports. That is also why this staging step needs the eval pin, and why `predictions_vs_human.<task>.csv` ([below](#the-per-item-exports)) lines up with it row for row: the two come out of one function, one keeping the consolidated labels where the other strips them.
 
 **`all-generated`** is the all-generated set, `data/publikationsbot/*_combined.jsonl` - everything querygen/publikationsbot produced that combined cleanly (failures sit in the `.errors`/`.no_retrieval` siblings), a superset of the capacity-curated selection the annotations were drawn from. Until 2026-08-06 this stage predicted a `corpus` population instead - the curated selection, `*_combined.curated.jsonl`; those artefacts remain in the pinned 2026-08-06 bundle. Its text columns are built by pragmata's own import code, so they match the Argilla fields exactly: retrieval pairs the query with each *chunk's* text, grounding pairs the answer with `context_set`, generation pairs the query with the answer. Note `context_set` is a field of the import record carried through verbatim, not assembled from the chunk texts.
 
@@ -128,6 +130,9 @@ make eval-model-calibration PY=$PY                     # re-predicts each run's 
 make eval-model-metrics                                # evaluator_metrics.csv
 make eval-score-synthetic POPULATION=annotated
 make eval-score-synthetic POPULATION=all-generated
+make eval-export-predictions POPULATION=annotated      # per-item labels + probabilities
+make eval-export-predictions POPULATION=all-generated
+make eval-export-vs-human                              # human label beside the prediction
 ```
 
 Only the GPU lines need `PY=`. `RUN_ID` is optional, but treat it as required: omitted, the script resolves the latest evaluator for the task, prints that it did, and records it - right for a scratch run, wrong for a published one, because "latest" is a property of the box rather than of the numbers. Pass it for anything whose output leaves the machine.
@@ -159,6 +164,20 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 - **Retrieval's `n` differs sharply between the two populations.** `--skip-incomplete-panels` drops 283 of 464 panels on `annotated`, exactly as for the human run, because annotation coverage is partial; all-generated panels are complete by construction, so an all-generated run drops none. The two `n` are not comparable without reading `n_panels_skipped` beside them.
 - **Grounding rows are always `n = 0`.** Its evaluator trains three of five labels ([above](#training)) and pragmata's grounding score schema requires all five, built from the label map at import time, so the narrowing that makes training possible cannot reach it. The scorer checks the header up front and writes explicit `n = 0` rows with `status = evaluator_labels_incomplete`, rather than letting the CLI reject the frame with what reads like a staging bug. Inventing the two missing columns would be fabricating labels. The fix is more negative grounding annotation, not more pipeline.
 
+### The per-item exports
+
+The two files above are aggregates. These two are not: they are one row per item, and they exist because an aggregate cannot answer "which items?".
+
+`predictions_vs_human.<task>.csv` is **the item-level companion of the aggregate twin comparison.** `synthetic_metric_estimates.annotated.csv` read beside `eval_metric_estimates.csv` says whether the evaluator's rate matches the humans'; it cannot say whether that came from agreeing item by item or from two different sets of errors cancelling. This file carries, per item and per label, the majority-consolidated human label, the predicted label, the probability, and a 0/1 agreement flag - so the same rows the human metrics were scored on can be read as a confusion matrix, sliced by `source_domain`, or sorted by probability to find where the model is confidently wrong.
+
+`predictions.<task>.<population>.csv` is the readable copy of a prediction run: tlmtc writes `predictions.csv` and `probabilities.csv` as a pair, both carrying every text column, because that pair is what `eval score --prediction-id` consumes. This is the two joined on the item keys with the text dropped, so `all-generated` predictions can be joined to `retrieval_manifest.csv` and `corpus_catalog.csv` on `query_id` / `doc_id` without opening a multi-megabyte file.
+
+- **Neither file aggregates anything.** No rate, no denominator, no interval - see [What is not done](#what-is-not-done) for why a prevalence computed here would be the wrong number.
+- **The human side is not a workspace majority vote.** It comes from the one function that builds the `annotated` population, which consolidates with pragmata's own `consolidate_labels_by_majority` - the same function eval train and score ingestion run. That is also what makes the row counts line up: the export pools to the same 1,561 / 447 / 713 items the prediction was staged from, and the export refuses on any mismatch rather than writing a partial comparison.
+- **`agree_<label>` is agreement, not correctness.** The human label is a majority of two or three annotators, on labels whose alpha is at or below chance in places ([Agreement](report-deliverables.md#agreement-annotation_label_summarycsv)). A disagreement flag says the two sources differ; which one is right is a separate question, and on a low-alpha label it is not answerable from this file.
+- **Grounding's file carries five human columns and three predicted ones.** The two untrained labels keep `human_*` and gain no prediction, probability or flag - the columns are named by side, so nothing has to be blank to say so.
+- **`annotated` is largely in-sample here too.** Roughly three quarters of these items were in the evaluator's own train or validation split, so the agreement rate this file supports is optimistic about the evaluator by an unknown amount, exactly as the aggregate estimate is.
+
 ### The evaluator metrics
 
 `evaluator_metrics.csv` describes the **models**, on each run's own held-out test split - 409 / 112 / 183 rows for retrieval / grounding / generation. It reads only what a completed run left on disk, so it needs neither a GPU nor pragmata. Accuracy is not persisted by tlmtc and is derived from the metrics that are; the derivation and the check that keeps it honest are in the [dictionary](data-dictionary.md#evaluator_metricscsv).
@@ -179,5 +198,5 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 ## What is not done
 
 - The transfer-pull-then-copy step above is manual, for both `predictions/` and `checkpoints/`.
-- Nothing compares the two `synthetic_metric_estimates.*.csv` against `eval_metric_estimates.csv` automatically; that comparison, and the report it goes into, live in the private report repository.
-- Population prevalence for grounding is not produced by any route. The scoring path refuses it for the reason above, and computing it directly from `predictions.csv` was deliberately not done: it would produce a number the score CLI would not, from a code path nothing else uses, for three of the five labels the taxonomy asks about.
+- Nothing compares the two `synthetic_metric_estimates.*.csv` against `eval_metric_estimates.csv` automatically - no CSV pairs an evaluator's rate with the human rate for the same metric. That comparison, and the report it goes into, live in the private report repository. `predictions_vs_human.<task>.csv` is the item-level comparison, not this one: it pairs *labels* per item, where the aggregates pair *metrics*, and the taxonomy's metrics are not one-per-label.
+- Population prevalence for grounding is not produced by any route. The scoring path refuses it for the reason above, and computing it directly from `predictions.csv` was deliberately not done: it would produce a number the score CLI would not, from a code path nothing else uses, for three of the five labels the taxonomy asks about. The per-item exports do not cross that line - they copy the predicted labels out per item and aggregate nothing, so a reader who wants a rate takes it (and its caveats) on themselves.

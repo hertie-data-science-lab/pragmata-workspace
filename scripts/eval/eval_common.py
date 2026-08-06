@@ -343,6 +343,23 @@ NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 
+def csv_columns(path: Path) -> list[str]:
+    """A CSV's column names, read from its header line alone.
+
+    One line, not read_text() and not a pandas read: a prediction CSV over the all-generated
+    population carries every chunk's text and runs to tens of MB, and the callers here need
+    only to know which columns are in it - which labels a run predicted, and whether the
+    identity columns survived. Splitting the header on commas is safe where splitting a data
+    row would not be, because these are all bare identifiers.
+
+    Shared by score_synthetic_predictions.unscoreable_labels and export_predictions, which ask
+    the same question of the same files.
+    """
+    with path.open(encoding="utf-8") as handle:
+        header = handle.readline()
+    return [column.strip().strip('"') for column in header.split(",")]
+
+
 def read_task(exports: Path, programme: str, task: str) -> pd.DataFrame:
     """Read one programme's task CSV, asserting the schema the filters rely on.
 
@@ -493,16 +510,12 @@ def _pragmata_consolidate() -> tuple:
     return _CONSOLIDATE
 
 
-def consolidated_prevalence(
-    frame: pd.DataFrame, task: str, label: str
-) -> tuple[int, int]:
-    """(n_items, n_true) for one label, majority-consolidated per item.
+def consolidated_items(frame: pd.DataFrame, task: str) -> pd.DataFrame:
+    """One row per ITEM, every label majority-consolidated, non-label columns preserved.
 
     Consolidation IS pragmata's `consolidate_labels_by_majority` — the same function eval
     train and score ingestion run — rather than a local restatement of it, so these are the
-    numbers eval would ingest by construction rather than by resemblance. The count is
-    therefore of annotated items, not of responses, and n_true counts items whose
-    consolidated label is true.
+    rows eval would ingest by construction rather than by resemblance.
 
     Ties are pragmata's semantics because pragmata decides them: a strict majority (> half
     positive) sets a label independently; an exact 50/50 takes the value from the row that
@@ -510,11 +523,17 @@ def consolidated_prevalence(
     row does. A reimplementation that took the first row's value unconditionally agrees on
     every tie in the 2026-07-30 freeze and is free to diverge on the next export.
 
-    Named `n_items` in the label table and `n_items_annotated` in the operations table (the
-    same count at the same grain); see the data dictionary.
+    The surviving row per item is pragmata's choice too, which is why every caller that needs
+    item-grain rows goes through here rather than deduplicating on ITEM_KEYS itself: the
+    representative row carries the non-label columns (`source_domain`, the identity columns,
+    the text), and two callers picking it by different rules could disagree about which
+    programme an item belongs to. Labels come back as int64 — see the cast below.
+
+    Returns the frame unchanged when it is empty, since there is nothing to collapse and
+    pragmata's function would still want the label columns present.
     """
     if frame.empty:
-        return 0, 0
+        return frame
     consolidate, Task = _pragmata_consolidate()
     # Int labels are the contract, not a workaround: eval score coerces them through
     # pandera and eval train casts them outright, both before consolidating. The export
@@ -523,7 +542,24 @@ def consolidated_prevalence(
     # in a submitted response fail here rather than be silently counted.
     labelled = frame.astype({column: "int64" for column in LABELS[task]})
     # One row per item out, in first-occurrence order.
-    consolidated = consolidate(labelled, task=Task(task))
+    return consolidate(labelled, task=Task(task))
+
+
+def consolidated_prevalence(
+    frame: pd.DataFrame, task: str, label: str
+) -> tuple[int, int]:
+    """(n_items, n_true) for one label, majority-consolidated per item.
+
+    The count is of annotated items, not of responses, and n_true counts items whose
+    consolidated label is true. Consolidation is ``consolidated_items`` above, which is
+    pragmata's own.
+
+    Named `n_items` in the label table and `n_items_annotated` in the operations table (the
+    same count at the same grain); see the data dictionary.
+    """
+    if frame.empty:
+        return 0, 0
+    consolidated = consolidated_items(frame, task)
     return len(consolidated), int(consolidated[label].sum())
 
 
