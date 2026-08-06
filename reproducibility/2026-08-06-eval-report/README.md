@@ -2,9 +2,11 @@
 
 kind: freeze
 fetch: `make transfer-pull PREFIX=exports-frozen/2026-07-30` (the export tree) and
-`make transfer-pull PREFIX=checkpoints/<run_id>` for each of the three training runs below.
-The report tree is **not mirrored to Blob** — it is regenerable: check out the workspace SHA
-recorded in each `.provenance.json` on a clean tree and run `make eval-deliverables`.
+`make transfer-pull PREFIX=checkpoints/<run_id>` for each of the three training runs below,
+and `make transfer-pull PREFIX=reports/eval/2026-08-06` (the report tree, snapshot
+`sha256:319d04fb62398676c5c0283950630fd9da17d4ddc201ab42263d720fa7d34769`). The report tree is
+also regenerable: check out the workspace SHA recorded in each `.provenance.json` on a clean
+tree and run `make eval-deliverables`.
 
 The **canonical data for the BSt report**, superseding `2026-07-31-eval-report/`, which the
 same commit that adds this bundle deletes. Every human-annotation, fairness-audit and
