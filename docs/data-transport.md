@@ -22,7 +22,7 @@ flowchart LR
 ## Two planes
 
 - **Control plane - git.** Code moves through GitHub; both boxes must run the same commit, or the `transfer-*` targets error loudly. Nothing in `data/` is ever committed (see [Data & secrets](configuration.md#data--secrets)).
-- **Data plane - Blob.** Everything else - exports, the curated corpus, predictions, checkpoints, CSV deliverables - moves as files through the container.
+- **Data plane - Blob.** Everything else - exports, the generated probe set, predictions, checkpoints, CSV deliverables - moves as files through the container.
 
 ## The subtrees
 
@@ -31,13 +31,13 @@ Each is a top-level prefix, pinned by its own `MANIFEST.sha256`:
 | Prefix | Direction | What |
 | --- | --- | --- |
 | `exports/` | CPU → GPU | annotation exports, the input to eval |
-| `publikationsbot/` | CPU → GPU | the curated corpus the `corpus` prediction population is staged from - not part of the frozen export, so it travels separately |
+| `publikationsbot/` | CPU → GPU | the probe-set JSONLs the `generated` prediction population is staged from - not part of the frozen export, so they travel separately |
 | `predictions/` | GPU → CPU | the whole `data/eval/prediction_outputs/` tree, one directory per (evaluator, population) |
 | `checkpoints/` | GPU → CPU | trained evaluator checkpoints - **push these off the GPU box before it is torn down** (see [Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out)) |
 
 Two more prefixes sit outside the CPU ↔ GPU loop, pushed the same way: `exports-frozen/<date>/` (the pinned export tree behind published numbers) and `reports/eval/<date>/` (the CSV deliverables the final report is built from). The prefix list is not fixed: every `push` names its own.
 
-**A pulled tree cannot always be consumed where it lands.** `pull` writes only under `data/transfer/`, never inside a tool's output tree - so a tool resetting its own directory cannot clobber received data, but `predictions/` and `checkpoints/` have to be copied into `data/eval/` after verifying, which [Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out) covers. The export and corpus prefixes need none of it: the scripts that read them fall back to the `data/transfer/` copy themselves, and say which they settled on.
+**A pulled tree cannot always be consumed where it lands.** `pull` writes only under `data/transfer/`, never inside a tool's output tree - so a tool resetting its own directory cannot clobber received data, but `predictions/` and `checkpoints/` have to be copied into `data/eval/` after verifying, which [Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out) covers. The export and probe-set prefixes need none of it: the scripts that read them fall back to the `data/transfer/` copy themselves, and say which they settled on.
 
 ## Commands
 

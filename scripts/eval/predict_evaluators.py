@@ -58,7 +58,7 @@ PREDICT_INPUTS = ws.DATA_DIR / "eval-inputs" / "predict"
 
 # Populations `predict-inputs` builds. `testsplit` is a third one that `predict` accepts but
 # this subcommand does not build: evaluator_report.py stages it per run from that run's own
-# held-out split, which is a property of a training run rather than of the corpus.
+# held-out split, which is a property of a training run rather than of the probe set.
 STAGED_POPULATIONS = ("annotated", "generated")
 PREDICT_POPULATIONS = (*STAGED_POPULATIONS, "testsplit")
 
@@ -87,11 +87,11 @@ IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "generation": ("record_uuid",),
 }
 
-# Corpus-only identity, carried because the corpus side has identifiers the export does not.
+# Identity carried from the probe-set files that the export lacks.
 # `query_id` is the querygen spec's own id - the join key retrieval_manifest.csv and
 # corpus_catalog.csv are keyed on, and the one thing the annotation exports lack (see the
 # data dictionary's note on joining). `doc_id` is per chunk, so retrieval only.
-CORPUS_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
+PROBE_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": ("query_id", "doc_id"),
     "grounding": ("query_id",),
     "generation": ("query_id",),
@@ -100,7 +100,7 @@ CORPUS_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
 # The curation bundle whose pins each source JSONL is checked against. The raw generated
 # files are not pinned there (pin_sha256 comes out null and the recorded sha256 is the
 # population's identity); a curated file, if ever staged again, would be compared for real.
-# Either way the outcome is recorded - see _corpus_pin_records.
+# Either way the outcome is recorded - see _probe_pin_records.
 CURATION_PINS = (
     ws.ROOT / "reproducibility" / "2026-07-01-annotation-curation" / "pins.sha256"
 )
@@ -283,7 +283,7 @@ def _read_pins(path: Path) -> dict[str, str]:
     return pins
 
 
-def _corpus_pin_records(paths: list[Path]) -> list[dict]:
+def _probe_pin_records(paths: list[Path]) -> list[dict]:
     """Each source JSONL's sha256 beside the curation bundle's pin for it, matched or not.
 
     The comparison outcome is recorded either way, never only on success: "these are the same
@@ -315,7 +315,7 @@ def _corpus_pin_records(paths: list[Path]) -> list[dict]:
     return records
 
 
-def stage_generated(corpus_dir: Path) -> int:
+def stage_generated(probes_dir: Path) -> int:
     """Stage the full generated probe set as unlabelled per-task CSVs.
 
     The text columns are built the way pragmata builds the Argilla fields at annotation
@@ -331,10 +331,11 @@ def stage_generated(corpus_dir: Path) -> int:
     every chunk of a pair is staged, so a generated panel is complete by construction and
     `--skip-incomplete-panels` has nothing to drop.
 
-    The population is "every curated record that satisfies pragmata's import contract", which
-    is the same set that could have been annotated - a record the contract rejects (a query
-    whose retrieval returned no chunks, say) could never have reached Argilla either. Rejects
-    are counted and recorded rather than silently dropped, and an all-reject file is fatal.
+    The population is "every probe-set record that satisfies pragmata's import contract",
+    which is the same set that could have been annotated - a record the contract rejects (a
+    query whose retrieval returned no chunks, say) could never have reached Argilla either.
+    Rejects are counted and recorded rather than silently dropped, and an all-reject file is
+    fatal.
     """
     # Loaded through pragmata rather than re-derived: the record identity and the field
     # mapping are its decisions, and a workspace copy of either would drift silently. Also
@@ -345,13 +346,13 @@ def stage_generated(corpus_dir: Path) -> int:
         from pragmata.core.schemas.annotation_import import QueryResponsePair
     except ImportError as exc:
         raise SystemExit(
-            f"corpus staging needs pragmata's annotation import schema: {exc}\n"
+            f"probe-set staging needs pragmata's annotation import schema: {exc}\n"
             "  It imports argilla, which the GPU host's training venv does not install.\n"
             "  Stage the generated population on the CPU box and transfer the CSVs, or install\n"
             "  argilla there. See docs/synthetic-evaluators.md."
         ) from exc
 
-    paths = sorted(corpus_dir.glob(f"*{ec.COMBINED_SUFFIX}"))
+    paths = sorted(probes_dir.glob(f"*{ec.COMBINED_SUFFIX}"))
     programmes = []
     rows: dict[str, list[dict]] = {task: [] for task in ec.TASKS}
     n_valid = n_invalid = 0
@@ -375,7 +376,7 @@ def stage_generated(corpus_dir: Path) -> int:
             try:
                 pair = QueryResponsePair.model_validate(payload)
             # Broad: pydantic raises ValidationError, but importing it here just to name it
-            # would tie corpus staging to a pydantic version this workspace does not pin.
+            # would tie probe-set staging to a pydantic version this workspace does not pin.
             except Exception as exc:
                 invalid += 1
                 if invalid == 1:
@@ -425,7 +426,7 @@ def stage_generated(corpus_dir: Path) -> int:
             raise SystemExit(
                 f"{path}: not one of its {invalid} record(s) satisfies pragmata's import "
                 "contract.\n"
-                "  That is a source problem, not a filter: check the JSONL is the curated "
+                "  That is a source problem, not a filter: check the JSONL is the "
                 "generated probe set and not\n  an intermediate batch."
             )
         print(f"  {programme}: {valid} record(s), {invalid} rejected", file=sys.stderr)
@@ -434,10 +435,10 @@ def stage_generated(corpus_dir: Path) -> int:
 
     if not programmes:
         raise SystemExit(
-            f"no *{ec.COMBINED_SUFFIX} under {corpus_dir} outside the excluded set."
+            f"no *{ec.COMBINED_SUFFIX} under {probes_dir} outside the excluded set."
         )
 
-    pin_records = _corpus_pin_records(used_paths)
+    pin_records = _probe_pin_records(used_paths)
     matched = sum(1 for r in pin_records if r["matches_curation_pin"])
     print(
         f"curation pins: {matched} of {len(pin_records)} source file(s) match "
@@ -451,11 +452,11 @@ def stage_generated(corpus_dir: Path) -> int:
         keep = [
             *ec.TEXT_COLUMNS[task],
             *IDENTITY_COLUMNS[task],
-            *CORPUS_IDENTITY_COLUMNS[task],
+            *PROBE_IDENTITY_COLUMNS[task],
             "source_domain",
         ]
         frame = frame[keep]
-        # The same pair can appear in two programmes' curated files, and derive_record_uuid is
+        # The same pair can appear in two programmes' probe-set files, and derive_record_uuid is
         # content-addressed, so the duplicate collapses to one identity. Dropped here rather
         # than left to the scorer, which rejects duplicate scoring units outright.
         before = len(frame)
@@ -480,12 +481,12 @@ def stage_generated(corpus_dir: Path) -> int:
                 "population": "generated",
                 "programmes": programmes,
                 "excluded_programmes": sorted(ec.EXCLUDED_PROGRAMMES),
-                "corpus_dir": str(
-                    corpus_dir.relative_to(ws.ROOT)
-                    if corpus_dir.is_relative_to(ws.ROOT)
-                    else corpus_dir
+                "probes_dir": str(
+                    probes_dir.relative_to(ws.ROOT)
+                    if probes_dir.is_relative_to(ws.ROOT)
+                    else probes_dir
                 ),
-                "corpus_sources": pin_records,
+                "probe_sources": pin_records,
                 "curation_pins": str(CURATION_PINS.relative_to(ws.ROOT)),
                 "n_records_valid": n_valid,
                 "n_records_rejected": n_invalid,
@@ -689,7 +690,7 @@ def predict(
     # A provenance record inside the final directory, because that directory is what gets
     # pushed off the GPU box and read months later. pragmata's own pragmata_predict.meta.json
     # carries run_id, task and the input path; nothing there names the population, the freeze
-    # or corpus pins behind the input, or the commit of this workspace that filed it - and the
+    # or probe-set pins behind the input, or the commit of this workspace that filed it - and the
     # directory name is this workspace's invention, so it has to be explained from inside. The
     # `.workspace.` infix is load-bearing: data/eval/ is pragmata's tool tree by the ownership
     # rule in docs/report-deliverables.md, so a file this workspace wrote there has to say so in its name.
@@ -713,7 +714,7 @@ def predict(
                 # just established they are the same one, and recording it is what lets a
                 # testsplit directory say whose split it holds without the sidecar beside it.
                 "evaluator_run_id",
-                "corpus_sources",
+                "probe_sources",
                 "n_records_valid",
                 "n_records_rejected",
                 "grain",
@@ -756,11 +757,11 @@ def main() -> int:
         help="Annotation export tree to pool (default: the frozen canonical export).",
     )
     inputs_parser.add_argument(
-        "--corpus-dir",
+        "--probes-dir",
         type=Path,
         default=None,
         help=(
-            "Directory holding the curated *_combined.curated.jsonl files "
+            "Directory holding the generated probe-set *_combined.jsonl files "
             "(default: data/publikationsbot/, falling back to data/transfer/publikationsbot/)."
         ),
     )
@@ -812,7 +813,7 @@ def main() -> int:
         if args.population == "annotated":
             return stage_annotated(ec.resolve_exports(args.exports))
         return stage_generated(
-            ec.resolve_corpus_dir(args.corpus_dir, suffix=ec.COMBINED_SUFFIX)
+            ec.resolve_probes_dir(args.probes_dir, suffix=ec.COMBINED_SUFFIX)
         )
 
     predict(

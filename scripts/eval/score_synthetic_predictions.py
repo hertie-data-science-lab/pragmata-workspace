@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Corpus metrics from the synthetic evaluators' predictions - the twin of the human scorer.
+"""Population metrics from the synthetic evaluators' predictions - the twin of the human scorer.
 
 Columns and caveats are defined in `docs/data-dictionary.md`
 (`synthetic_metric_estimates.csv`). Its twin, `score_human_annotations.py`, scores the human
@@ -169,10 +169,10 @@ def unscoreable_labels(prediction_dir: Path, task: str) -> list[str]:
     an explicit n=0 row per affected metric saying the evaluator does not cover the label -
     which is a finding about the evaluator, and one the eval report already documents.
     """
-    # One line, not read_text(): a corpus predictions.csv carries every chunk's text and runs
-    # to tens of MB, and only the header is wanted. Label columns are appended by tlmtc and are
-    # bare identifiers, so splitting the header on commas is safe where splitting a data row
-    # would not be.
+    # One line, not read_text(): a generated-population predictions.csv carries every chunk's
+    # text and runs to tens of MB, and only the header is wanted. Label columns are appended by
+    # tlmtc and are bare identifiers, so splitting the header on commas is safe where splitting
+    # a data row would not be.
     with (prediction_dir / "predictions.csv").open(encoding="utf-8") as handle:
         header = handle.readline()
     present = {column.strip().strip('"') for column in header.split(",")}

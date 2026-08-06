@@ -199,7 +199,7 @@ The full rules are the annotation protocol; these are the column names the expor
 
 Written as `synthetic_metric_estimates.<population>.csv`, one file per predicted population.
 
-- **Purpose:** the same curated-corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a *synthetic evaluator's* predictions instead of on human labels. Produced by the same `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of `--path`.
+- **Purpose:** the same metric taxonomy as `eval_metric_estimates.csv`, scored on a *synthetic evaluator's* predictions instead of on human labels, over whichever population was predicted. Produced by the same `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of `--path`.
 - **Grain:** one row per task x metric, over one predicted population.
 
 Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_metric_estimatescsv) - the row builder is literally shared - with two differences and three additions:

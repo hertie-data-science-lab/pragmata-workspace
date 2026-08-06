@@ -422,13 +422,13 @@ Training:
 Prediction, and the deliverables that come off it - `eval-predict` and `eval-model-calibration` need the training venv inside the GPU container, the rest run CPU-side:
 
     make eval-predict-inputs POPULATION=annotated       # frozen export, labels stripped -> data/eval-inputs/predict/annotated/
-    make eval-predict-inputs POPULATION=corpus          # curated corpus -> data/eval-inputs/predict/corpus/
+    make eval-predict-inputs POPULATION=generated       # generated probe set -> data/eval-inputs/predict/generated/
     make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
     make eval-score-synthetic POPULATION=annotated      # synthetic_metric_estimates.annotated.csv
     make eval-model-metrics                             # evaluator_metrics.csv
     make eval-model-calibration                         # evaluator_calibration.csv (GPU)
 
-Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/` rather than at the `<run_id>/` tlmtc would use - [why](synthetic-evaluators.md#where-prediction-output-lands-and-why-it-is-moved). Read the [evaluator-quality caveats](synthetic-evaluators.md#reading-the-numbers) before quoting any corpus-scale synthetic number.
+Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/` rather than at the `<run_id>/` tlmtc would use - [why](synthetic-evaluators.md#where-prediction-output-lands-and-why-it-is-moved). Read the [evaluator-quality caveats](synthetic-evaluators.md#reading-the-numbers) before quoting any at-scale synthetic number.
 
 ## 11. Return and archive
 

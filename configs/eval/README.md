@@ -43,5 +43,5 @@ population to predict, and which evaluator run to apply - are CLI arguments
 for a file here to stand behind. Adding one would freeze a choice nobody has made yet. What each
 run actually used is recorded per run instead, in `predict_provenance.workspace.json` inside the
 prediction directory - population, evaluator run id and whether it was given or resolved, the
-staged input CSV with its sha256, and the freeze date or curated-corpus pin outcomes behind it.
+staged input CSV with its sha256, and the freeze date or curation-pin outcomes behind it.
 See [synthetic evaluators](../../docs/synthetic-evaluators.md).

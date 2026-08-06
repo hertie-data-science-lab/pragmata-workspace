@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Corpus metrics from the human-labelled annotations.
+"""Population metrics from the human-labelled annotations.
 
 Columns and caveats are defined in `docs/data-dictionary.md`
 (`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, scores the same
@@ -92,7 +92,7 @@ COLUMNS = [
     "ci_level",
     "top_k",
     # Incomplete retrieval panels dropped by pragmata before scoring; n counts the
-    # completed-panel population, not the corpus.
+    # completed-panel population, not every panel the export carries.
     "n_panels_skipped",
     "policy",
     # Reliability of the labels the metric rests on — calibration-only, by definition

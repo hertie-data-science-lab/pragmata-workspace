@@ -69,7 +69,7 @@ They answer different questions.
 
 Record identity comes from pragmata's own deriving function, so a generated row and the export row for the same pair carry the *same* `record_uuid`. That is what makes the two populations comparable, and why generated retrieval panels are complete by construction - every chunk of a pair is staged, so `--skip-incomplete-panels` has nothing to drop. The population is every generated record satisfying pragmata's import contract: a record the contract rejects (a query whose retrieval returned no chunks, say) could never have been annotated either. Rejects are counted in the sidecar rather than silently dropped, and a file of nothing but rejects is fatal.
 
-A third population, **`testsplit`**, is not staged by `eval-predict-inputs`: `evaluator_report.py calibration` stages one per run from that run's own held-out split, which is a property of a training run rather than of the corpus. `make eval-predict POPULATION=testsplit` accepts it so the pass can be repeated by hand, but `RUN_ID` must then name the run the split came from - predicting it with a different evaluator would fill that evaluator's directory with another run's calibration data.
+A third population, **`testsplit`**, is not staged by `eval-predict-inputs`: `evaluator_report.py calibration` stages one per run from that run's own held-out split, which is a property of a training run rather than of the probe set. `make eval-predict POPULATION=testsplit` accepts it so the pass can be repeated by hand, but `RUN_ID` must then name the run the split came from - predicting it with a different evaluator would fill that evaluator's directory with another run's calibration data.
 
 ## Where prediction output lands, and why it is moved
 
@@ -88,7 +88,7 @@ make transfer-push SRC=data/publikationsbot PREFIX=publikationsbot   # CPU box
 make transfer-pull PREFIX=publikationsbot                            # GPU box, +verify
 ```
 
-`eval-predict-inputs POPULATION=generated` looks in `data/publikationsbot/` first and falls back to `data/transfer/publikationsbot/`, saying which it settled on - the same two-place rule training applies to the export tree. `CORPUS_DIR=` overrides both, and an explicitly named directory is never silently substituted.
+`eval-predict-inputs POPULATION=generated` looks in `data/publikationsbot/` first and falls back to `data/transfer/publikationsbot/`, saying which it settled on - the same two-place rule training applies to the export tree. `PROBES_DIR=` overrides both, and an explicitly named directory is never silently substituted.
 
 **Push the checkpoints and predictions off the box before it is torn down.** Not optional housekeeping: everything else is reproducible from pinned inputs and code, but checkpoints are not - and the runs behind the report's own numbers were never pushed, and went with the container.
 
@@ -152,7 +152,7 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 
 `make eval-score-synthetic` is the twin of `make eval-score-human`: same CLI, same eval pin, same row-building code, so `synthetic_metric_estimates.<population>.csv` is column-for-column comparable with `eval_metric_estimates.csv` - minus the four `alpha_*` columns, plus `evaluator_run_id`, `prediction_id` and `population`. The `alpha_*` columns are absent by definition, not by omission: a prediction has one label per item and no annotator disagreement to measure. What replaces them is the evaluator's own quality, in `evaluator_metrics.csv`.
 
-**Read the two files together.** A corpus rate produced by a model whose AUC is near chance is not a measurement. The intervals here cover sampling uncertainty over queries *only* - they say nothing about the evaluator being wrong, which is the dominant source of error for two of the three tasks.
+**Read the two files together.** A population rate produced by a model whose AUC is near chance is not a measurement. The intervals here cover sampling uncertainty over queries *only* - they say nothing about the evaluator being wrong, which is the dominant source of error for two of the three tasks.
 
 - **`annotated` is largely in-sample.** Each evaluator's train and validation splits are roughly three quarters of exactly these items (retrieval 1,152 of 1,561; grounding 335 of 447; generation 530 of 713), so an estimate here is optimistic about the evaluator by an unknown amount. It is the right population for "does the evaluator reproduce the human metric" and the wrong one for "how good is the evaluator".
 - **`generated` is the full probe set at scale, with no human baseline at all**, and for grounding and generation it carries the evaluator-quality caveat in full: generation's evaluator shows majority-class collapse on its two highest-prevalence labels (F1 0.93 against an AUC of 0.53), and grounding's is directional at best on two of its three trained labels. Read those rates as an indication of what a better evaluator would be measuring.
@@ -166,7 +166,7 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 - **Trust `roc_auc` over `f1`/`precision`/`recall`.** It is threshold-independent where the others all depend on the run's decision threshold.
 - **`accuracy` is a weak summary on skewed labels, and most of these are skewed.** `generation/response_on_topic` has a true prevalence of 0.93, so always predicting positive scores 0.93; its AUC is 0.53.
 - **`n` is small.** 112 grounding test rows means one flipped prediction moves a rate by ~0.9 points, and the two labels with 2-4 test positives move AUC by 0.2-0.3. Directional at best.
-- **These are the evaluator's metrics, not the corpus's.** Nothing here describes the publikationsbot; it describes how well a model reproduces human labels on held-out annotated data.
+- **These are the evaluator's metrics, not the population's.** Nothing here describes the publikationsbot; it describes how well a model reproduces human labels on held-out annotated data.
 
 ### The calibration curve
 
@@ -180,4 +180,4 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 
 - The transfer-pull-then-copy step above is manual, for both `predictions/` and `checkpoints/`.
 - Nothing compares the two `synthetic_metric_estimates.*.csv` against `eval_metric_estimates.csv` automatically; that comparison, and the report it goes into, live in the private report repository.
-- Corpus prevalence for grounding is not produced by any route. The scoring path refuses it for the reason above, and computing it directly from `predictions.csv` was deliberately not done: it would produce a number the score CLI would not, from a code path nothing else uses, for three of the five labels the taxonomy asks about.
+- Population prevalence for grounding is not produced by any route. The scoring path refuses it for the reason above, and computing it directly from `predictions.csv` was deliberately not done: it would produce a number the score CLI would not, from a code path nothing else uses, for three of the five labels the taxonomy asks about.

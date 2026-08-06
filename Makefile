@@ -246,11 +246,11 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 # There are no YAML configs here on purpose - population and evaluator run id are arguments,
 # because until the final run nothing is published for a pin to stand behind.
 
-eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> data/eval-inputs/predict/<population>/ (POPULATION=annotated|generated; EXPORTS=/CORPUS_DIR= to override the source)
+eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> data/eval-inputs/predict/<population>/ (POPULATION=annotated|generated; EXPORTS=/PROBES_DIR= to override the source)
 	@case "$(POPULATION)" in annotated|generated) ;; *) \
 	  echo "usage: make eval-predict-inputs POPULATION=annotated|generated"; exit 2 ;; esac
 	$(PY) scripts/eval/predict_evaluators.py predict-inputs --population $(POPULATION) \
-	  $(if $(EXPORTS),--exports $(EXPORTS),) $(if $(CORPUS_DIR),--corpus-dir $(CORPUS_DIR),)
+	  $(if $(EXPORTS),--exports $(EXPORTS),) $(if $(PROBES_DIR),--probes-dir $(PROBES_DIR),)
 
 # RUN_ID is optional and should not be: the script defaults to the latest evaluator for the
 # task and says so, which is right for a scratch run and wrong for a published one. Pass it
