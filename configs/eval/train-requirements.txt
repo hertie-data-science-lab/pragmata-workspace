@@ -13,7 +13,14 @@
 #   uv pip install --no-config --python ~/train-venv/bin/python \
 #       torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
 #   uv pip install --no-config --python ~/train-venv/bin/python \
+#       --index-strategy unsafe-best-match \
 #       -r /workspace/configs/eval/train-requirements.txt
+#
+# --index-strategy unsafe-best-match is REQUIRED on uv >= 0.12: the extra cu128 index below
+# outranks PyPI under the default first-index strategy, so uv looks up every package there
+# first, finds a few (certifi, ...) at the wrong versions, and fails resolution outright.
+# "unsafe" is a misnomer here - every line in this file is an exact ==, so best-match is
+# deterministic. Verified on ds01 with uv 0.12.2 (2026-08-06 container rebuild).
 #
 # torch goes FIRST and from the cu128 index: installing tlmtc[train] first pulls the default
 # PyPI torch, which is a cu130 build the driver cannot use. See docs/synthetic-evaluators.md.
@@ -31,8 +38,9 @@
 #
 
 # torch==2.9.1+cu128 is a local-version wheel that exists only on PyTorch's own index, never on
-# PyPI, so the index is declared here rather than left to the caller's command line - this file
-# resolves standalone. The separate torch step in the instructions above is about install ORDER.
+# PyPI, so the index is declared here rather than left to the caller's command line. NB "this
+# file resolves standalone" holds only WITH the --index-strategy flag above on uv >= 0.12. The
+# separate torch step in the instructions above is about install ORDER.
 --extra-index-url https://download.pytorch.org/whl/cu128
 
 accelerate==1.14.0
