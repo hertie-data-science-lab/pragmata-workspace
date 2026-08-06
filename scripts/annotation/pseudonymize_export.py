@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rewrite annotator identities in an export tree to stable UUIDs.
 
-Why the export must not carry names, and what this guarantees: `docs/eval.md` (Annotator
+Why the export must not carry names, and what this guarantees: `docs/eval-human-annotation.md` (Annotator
 identities).
 
 `pragmata annotation export` writes the Argilla *username* into `annotator_id`, and the

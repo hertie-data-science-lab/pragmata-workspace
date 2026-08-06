@@ -30,7 +30,7 @@ tmp/
 .pipeline.lock
 # Shared by export.sh and freeze.sh, so a freeze cannot copy a tree mid-export.
 .export.lock
-# GPU-container idle-timeout keep-alive; docs/eval-training.md tells operators to create it.
+# GPU-container idle-timeout keep-alive; docs/eval-synthetic-evaluator.md tells operators to create it.
 .keep-alive
 
 # --- python caches ---

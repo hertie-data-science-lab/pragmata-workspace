@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What the retriever returned for each query — the join key for the fairness audit.
 
-Columns and caveats are defined in `docs/eval-data-dictionary.md`
+Columns and caveats are defined in `docs/deliverables-data-dictionary.md`
 (`retrieval_manifest.csv`).
 
 Reads `*_combined.curated.jsonl` — the curated corpus, a superset of what was imported

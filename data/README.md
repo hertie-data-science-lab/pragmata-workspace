@@ -12,16 +12,16 @@ data/
 ├── annotation/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
 │   ├── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
-│   │                    annotator_id is pseudonymised on export; see docs/eval.md
+│   │                    annotator_id is pseudonymised on export; see docs/eval-human-annotation.md
 │   │                    one dir per domain config and nothing else: this tree is published
 │   │                    by transfer-push and consumers read exports/*/ as the domain list
 │   └── exports-frozen/  read-only (chmod a-w) freezes, one dir per <date>: the pinned
-│                        inputs behind published numbers; see docs/eval.md
+│                        inputs behind published numbers; see docs/eval-human-annotation.md
 ├── eval/                pragmata eval tool outputs; only what pragmata wrote, plus the two
-│   │                    *.workspace.json provenance records named in docs/eval.md
+│   │                    *.workspace.json provenance records named in docs/eval-human-annotation.md
 │   ├── train_outputs/       one dir per evaluator training run, named <run_id>
 │   ├── prediction_outputs/  one dir per prediction, named <run_id>-<population>: tlmtc names
-│   │                        it <run_id> and overwrites, see docs/eval-prediction.md
+│   │                        it <run_id> and overwrites, see docs/eval-synthetic-evaluator.md
 │   └── scores/              one dir per score run, named <score_id>
 ├── eval-inputs/         workspace-staged CSVs handed to the eval tool; kept out of eval/ so
 │   │                    that tree holds only what pragmata wrote. Each ships a

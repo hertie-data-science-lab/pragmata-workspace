@@ -6,7 +6,7 @@ Secrets live in `.env` (gitignored). Copy `.env.example` and fill in. Required k
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen);
 - `PUBLIKATIONSBOT_URL` (bot); 
 - `PRAGMATA_EVAL_SRC` (path to the eval-pin `pragmata` checkout - the annotation pragmata needs no key, it is git-pinned in `pyproject.toml`); 
-- `EVAL_BLOB_ACCOUNT`, `EVAL_BLOB_CONTAINER`, `EVAL_BLOB_SAS` (eval data transport only - see [Eval data transport](eval-data-transport.md)). 
+- `EVAL_BLOB_ACCOUNT`, `EVAL_BLOB_CONTAINER`, `EVAL_BLOB_SAS` (eval data transport only - see [Data transport](data-transport.md)). 
 
 For Azure, set `OPENAI_API_KEY` to your Azure key and `OPENAI_BASE_URL` to `https://<resource>.openai.azure.com/openai/v1/`.
 
@@ -19,7 +19,7 @@ Python deps live in `pyproject.toml` + `uv.lock` - committed. `uv sync` reproduc
 These live in `configs/settings.conf` (queries-per-spec, bot concurrency, throttle, disk thresholds) - committed.
 
 ### The canonical freeze pin
-This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Eval pipeline](eval.md#the-three-pins).
+This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Human annotation scoring](eval-human-annotation.md#the-three-pins).
 
 
 ### querygen runtime (model, reasoning effort, batching) 

@@ -38,20 +38,20 @@
 #   make eval-catalog                      # the corpus catalog for the fairness audit
 # All three read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
-# docs/eval-data-dictionary.md for what the columns mean.
+# docs/deliverables-data-dictionary.md for what the columns mean.
 #
 # Eval training (the synthetic evaluators; the training extra is not in uv.lock - GPU host):
 #   make eval-train-inputs                 # pool the frozen export -> data/eval-inputs/training/
 #   make eval-train-seqlen                 # diagnostic: sequence-length truncation per task
 #   make eval-train TASK=retrieval         # train one evaluator (grounding is 2+ hours)
-# See docs/eval-training.md for the per-task config and what was tried and rejected.
+# See docs/eval-synthetic-evaluator.md for the per-task config and what was tried and rejected.
 #
 # Eval prediction (applying the trained evaluators; same environment as training - GPU host):
 #   make eval-predict-inputs POPULATION=annotated       # -> data/eval-inputs/predict/annotated/
 #   make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
 #   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
 #   make eval-evaluator-report                          # -> evaluator_metrics.csv (PART=calibration for the other)
-# See docs/eval-prediction.md for the populations, the run order and the output layout.
+# See docs/eval-synthetic-evaluator.md for the populations, the run order and the output layout.
 #
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
 # it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
@@ -201,7 +201,7 @@ eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata 
 eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`)
 	$(PY) scripts/eval/corpus_catalog.py $(EVAL_ARGS)
 
-# --- eval training (the synthetic evaluators; see docs/eval-training.md) ---
+# --- eval training (the synthetic evaluators; see docs/eval-synthetic-evaluator.md) ---
 #
 # Training needs the `eval` extra (pragmata[eval] -> tlmtc[train]) and a CUDA torch, neither
 # of which is in uv.lock - deliberately, since that lock freezes the environment behind the
@@ -222,7 +222,7 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 	  echo "usage: make eval-train TASK=retrieval|grounding|generation"; exit 2 ;; esac
 	$(PY) scripts/eval/train_evaluators.py train $(TASK) $(if $(THRESHOLD_TYPE),--threshold-type $(THRESHOLD_TYPE),)
 
-# --- eval prediction (applying the evaluators; see docs/eval-prediction.md) ---
+# --- eval prediction (applying the evaluators; see docs/eval-synthetic-evaluator.md) ---
 #
 # Same environment split as training: staging and scoring are CPU-only and run anywhere,
 # `eval-predict` needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).

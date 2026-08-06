@@ -713,7 +713,7 @@ def render(snap: dict) -> str:
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         (
             "<small>**Counting items** (full definitions in "
-            "`docs/eval-data-dictionary.md`):\n"
+            "`docs/deliverables-data-dictionary.md`):\n"
             "- a **response** is one annotator's submission on one record,\n"
             "- a **record** is one annotatable thing — a chunk for retrieval, a query for "
             "grounding and generation — and is *completed* once it has met its required "

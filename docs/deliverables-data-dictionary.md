@@ -338,7 +338,7 @@ thing a reader of the CSV cannot check.
   too few negative items for any split ratio to give `tlmtc` full class support, so they are not
   trained and have no row here. Their absence is recorded in the `*.provenance.json`
   (`labels_not_trained`) rather than written as blank rows, because a blank row in a metrics
-  table reads as a measurement of zero. See [Eval training](eval-training.md).
+  table reads as a measurement of zero. See [Synthetic evaluators](eval-synthetic-evaluator.md).
 - **`accuracy` is a weak summary on skewed labels, and most of these are skewed.**
   `generation/response_on_topic` has `true_prevalence` 0.93: always predicting positive scores
   0.93. Compare `roc_auc` (0.53) for what the model actually discriminates.
@@ -404,9 +404,10 @@ thing a reader of the CSV cannot check.
 >   pins the copy that travelled with that date's CSVs, at the hash this file had then -
 >   binding the delivered numbers to that exact wording. (The pin resolves under `reports/`,
 >   which is not in git, so it reads `ABSENT` until the tree is fetched.)
+>   **This file was `eval-data-dictionary.md` up to and including the 2026-07-31 report**, so the 07-30 and 07-31 bundles pin that name. That is correct and is not a mismatch: a historical pin names the bytes that shipped, under the name they shipped as. Bundles from here on pin `deliverables-data-dictionary.md`.
 > - **Implemented in code.** `scripts/eval/eval_common.py` is the executable half of the
 >   vocabulary defined here (`response`, `record`, `item`, `panel`, `query group`) and is kept
->   in step with it. Referenced from `docs/eval.md`, `docs/implementation-guide.md`,
+>   in step with it. Referenced from `docs/eval-human-annotation.md`, `docs/implementation-guide.md`,
 >   `docs/reproducibility.md`, the `Makefile` header, and the annotation report's footnotes.
 >
 > **Re: editing.** Any byte change moves the SHA-256, and the `*.provenance.json` files already

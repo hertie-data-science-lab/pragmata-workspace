@@ -2,7 +2,7 @@
 """One row per document in the publikationsbot corpus — the fairness audit's base.
 
 Columns, the author-gender collapse rule and every caveat are defined in
-`docs/eval-data-dictionary.md` (`corpus_catalog.csv`).
+`docs/deliverables-data-dictionary.md` (`corpus_catalog.csv`).
 
 Reads the live vector store read-only, rolling 13 of its 22 per-chunk metadata keys up to
 document grain; joins to `retrieval_manifest.csv` on `doc_id`. DSN handling is imported

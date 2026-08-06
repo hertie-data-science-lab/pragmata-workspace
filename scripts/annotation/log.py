@@ -820,7 +820,7 @@ def process_domain(
     so discard rows are present for the discard breakdown; IAA filters them out, so this is
     safe. By default we run a throwaway export under ``scratch_base``, a temp tree owned by
     :func:`run` — never inside ``data/annotation/exports/``, which is published (see
-    docs/eval-data-transport.md, "What may live in a pushed tree"). With ``use_export`` we
+    docs/data-transport.md, "What may live in a pushed tree"). With ``use_export`` we
     instead reuse the durable per-domain export (e.g. scripts/export.sh, also
     include_discarded=True) and skip re-exporting; a missing export degrades gracefully.
     """

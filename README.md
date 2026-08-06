@@ -53,17 +53,21 @@ make annotation-report-tables  # tables only -> report.md
 make annotation-report-pdf     # tables -> report.pdf                (needs pandoc + xelatex)
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
-# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/eval.md)
+# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/eval-human-annotation.md)
 make eval-report               # annotation_operations, annotation_label_summary, retrieval_manifest
 make eval-score                # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
 
-# Eval training  (the synthetic evaluators; GPU host - see docs/eval-training.md)
+# Synthetic evaluators  (train + apply; GPU host - see docs/eval-synthetic-evaluator.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
 make eval-train-seqlen         # diagnostic: sequence-length truncation per task
 make eval-train                # train one evaluator (TASK= required; grounding is 2+ hours)
+make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|corpus)
+make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=)
+make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv (POPULATION=)
+make eval-evaluator-report     # evaluator_metrics.csv  (PART=calibration for the other CSV)
 
-# Data transport  (see docs/eval-data-transport.md)
+# Data transport  (see docs/data-transport.md)
 make transfer-push             # push a tree to the Blob             (SRC= source, PREFIX= dest; both required)
 make transfer-pull             # pull blob <prefix>/ -> data/transfer/<prefix>/ + verify (PREFIX=)
 make transfer-verify           # re-verify a pulled tree against its manifest (PREFIX=)
@@ -78,20 +82,15 @@ make help                      # list every target
 
 ## Documentation
 
->[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system.
-  Everything below is reference detail it cross-references.
-- [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting,
-  backup/restore.
-- [Eval pipeline](docs/eval.md) - deliverables, the pinned freeze model, annotator
-  pseudonymisation, and the refresh runbook; prediction has no workspace glue yet.
-- [Eval training](docs/eval-training.md) - training the synthetic evaluators: the recommended
-  config per task, why the training extra stays out of the lock, and what was tried and
-  rejected.
-- [Data transport](docs/eval-data-transport.md) - moving exports, predictions and
-  checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
+> **[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
+
+- [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting, backup/restore.
+- [Human annotation scoring](docs/eval-human-annotation.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
+- [Synthetic evaluators](docs/eval-synthetic-evaluator.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
+- [Deliverables data dictionary](docs/deliverables-data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
+- [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
-- [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data &
-  secrets.
+- [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data & secrets.
 
 ## Layout
 

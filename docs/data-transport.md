@@ -2,7 +2,7 @@
 
 Moving eval data between the CPU annotation box (BSt Azure tenant) and the GPU eval box (Hertie network). The two VMs sit in different organisations and neither box can reach the other directly (BSt VNet ↔ Hertie`10.x`, no peering), so data travels through a shared Azure Blob container that both reach over HTTPS.
 
-This is the operator how-to; for the eval stage that consumes the data see [Eval pipeline](eval.md), and for the staging layout [`data/transfer/README.md`](../data/transfer/README.md).
+This is the operator how-to; for the eval stage that consumes the data see [Human annotation scoring](eval-human-annotation.md), and for the staging layout [`data/transfer/README.md`](../data/transfer/README.md).
 
 ```mermaid
 flowchart LR
@@ -31,12 +31,15 @@ Each is a top-level prefix in the container, pinned by its own `MANIFEST.sha256`
 | Prefix | Direction | What |
 | --- | --- | --- |
 | `exports/` | CPU → GPU | annotation exports, the input to eval |
-| `predictions/` | GPU → CPU | per-row model predictions from an eval run |
+| `publikationsbot/` | CPU → GPU | the curated corpus the `corpus` prediction population is staged from - not part of the frozen export, so it travels on its own |
+| `predictions/` | GPU → CPU | the whole `data/eval/prediction_outputs/` tree, one directory per (evaluator, population) |
 | `checkpoints/` | GPU → CPU | trained evaluator checkpoints  |
 
 Two further prefixes are in the container, pushed the same way but outside the CPU ↔ GPU loop: 
 1. `exports-frozen/<date>/` (the pinned export tree behind published numbers),
 2.  `reports/eval/<date>/` (the pipeline end CSV deliverables that form the basis of the final report).
+
+**A pulled tree cannot always be consumed where it lands.** `pull` writes only under `data/transfer/`, while pragmata resolves evaluator runs and `--prediction-id` under `data/eval/`, so `predictions/` and `checkpoints/` have to be copied across after verifying - see [Getting the data in and out](eval-synthetic-evaluator.md#getting-the-data-in-and-out). The export and corpus prefixes need none of this: the scripts that read them fall back to the `data/transfer/` copy themselves, and say which they settled on.
 
 ## Commands
 
@@ -54,9 +57,11 @@ All three require explicit arguments:
 
 ## Integrity
 
-**When export data is frozen** (`make annotation-freeze`) this produces a hashed `sha25` pin, which is then passed through into any downstream eval ops for provenance tracking
+**When export data is frozen** (`make annotation-freeze`) this produces a hashed `sha256` pin, which is then passed through into any downstream eval ops for provenance tracking
 
-**For data transfer**: Every `push` writes a sorted per-file `sha256` manifest to `<prefix>/MANIFEST.sha256` and prints a one-line snapshot pin (a single hash for the whole tree) for a future reproducibility bundle. Every `pull` re-runs `sha256sum -c` on the receiving end and fails loudly on any mismatch, so a truncated or corrupted transfer can never pass silently. 
+**For data transfer**: Every `push` writes a sorted per-file `sha256` manifest to `<prefix>/MANIFEST.sha256` and prints a one-line snapshot pin (a single hash for the whole tree) for a future reproducibility bundle. An empty source tree is refused rather than pushed: a manifest of nothing pins nothing. Every `pull` re-runs `sha256sum -c` on the receiving end and fails loudly on any mismatch, so a truncated or corrupted transfer can never pass silently.
+
+A `pull` **replaces** `data/transfer/<prefix>/` rather than downloading over the top of it, so a file deleted at the source cannot survive locally and pass verification - `sha256sum -c` only checks the files the manifest lists. The download lands in a staging directory beside it and is swapped in once complete, so a failed pull leaves the previous tree where it was. `verify` runs on the local tree alone: no `EVAL_BLOB_*` credentials, no `az`.
 
 ## The staging boundary
 
@@ -107,7 +112,7 @@ make transfer-pull PREFIX=checkpoints          # → data/transfer/checkpoints/ 
 
 ## Data sensitivity
 
-Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, pseudonymised on every export (see [Annotator identities](eval.md#annotator-identities)). As a second line of defence, `push` itself refuses any tree whose `annotator_id` values or `iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
+Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, rewritten from the username on every export by `scripts/annotation/pseudonymize_export.py`. The guarantee is in the code rather than in prose: `scripts/lib/check_pseudonymised.py` enforces it at both boundaries, and a username with no matching Argilla user (a renamed or deleted account) aborts the run rather than passing a real name through. As a second line of defence, `push` itself refuses any tree whose `annotator_id` values or `iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
 
 Exports are still treated as PII as the free-text `notes` and `discard_notes` columns are annotator-authored and unreviewed. They
 ship into the private, IP-allowlisted container; the annotator roster

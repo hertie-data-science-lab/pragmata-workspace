@@ -4,7 +4,7 @@
 The workspace side of `pragmata eval train-evaluator`. Stages the pooled per-task training
 CSVs out of the frozen canonical export, then trains one evaluator per task at the
 configuration each task's numbers were established under. Runs on the GPU box: the training
-extra is not in this workspace's lock, see [Eval training](../../docs/eval-training.md).
+extra is not in this workspace's lock, see [Synthetic evaluators](../../docs/eval-synthetic-evaluator.md).
 
 The per-task configuration lives in configs/eval/training/ - a shared `_common.yaml`
 deep-merged with one file per task, mirroring configs/annotation/querygen_specs/. Those values
@@ -134,7 +134,7 @@ def _train(eval_api, **kwargs):
             "  workspace's uv.lock - it pulls a CUDA torch build, and the lock freezes the\n"
             "  environment behind the published human-label numbers.\n"
             "  Training runs on the GPU host against its own environment; the install steps\n"
-            "  are in docs/eval-training.md."
+            "  are in docs/eval-synthetic-evaluator.md."
         ) from exc
 
 
@@ -462,7 +462,7 @@ def train(task: str, threshold_type: str | None = None) -> int:
     # tlmtc's train_run_meta.json carries the model-side settings it received - but nothing
     # names which CSV, which freeze, or which commit of this workspace produced them, and the
     # split seed and epoch ceiling are absent from both as well. The `.workspace.` infix is
-    # load-bearing: data/eval/ is pragmata's tool tree by the ownership rule in docs/eval.md,
+    # load-bearing: data/eval/ is pragmata's tool tree by the ownership rule in docs/eval-human-annotation.md,
     # so a file this workspace wrote there has to say so in its name.
     record = ws.provenance(
         script="scripts/eval/train_evaluators.py",

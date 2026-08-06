@@ -11,7 +11,15 @@ Three targets produce the report deliverables into `reports/eval/<date>/` (`OUT=
 | `make eval-score` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
 | `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
 
-Every CSV ships with a `.provenance.json` file (containing script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash), and the [data dictionary](eval-data-dictionary.md) is copied beside the CSVs whose`.provenance.json` pins it.
+Three further deliverables come from the model side of the pipeline ([Synthetic evaluators](eval-synthetic-evaluator.md)), into the same directory and under the same conventions:
+
+| Target | Script | Output |
+|---|---|---|
+| `make eval-score-synthetic POPULATION=<p>` | `score_synthetic_predictions.py` | `synthetic_metric_estimates.<p>.csv`, via `pragmata eval score --prediction-id` |
+| `make eval-evaluator-report` | `evaluator_report.py` | `evaluator_metrics.csv` |
+| `make eval-evaluator-report PART=calibration` | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
+
+Every CSV ships with a `.provenance.json` file (containing script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash), and the [data dictionary](deliverables-data-dictionary.md) is copied beside the CSVs whose `.provenance.json` pins it. Every input the script declared is listed, including one that was not there when it ran - as `"sha256": null, "missing": true`, never by omission.
 
 ## The three pins
 
@@ -29,7 +37,9 @@ The first two are `FREEZE_DATE` and `CANONICAL_SNAPSHOT_RUN_AT` in
 
 ## Ownership
 
-`data/eval/` is pragmata's own tool tree and holds only what pragmata wrote there (`scores/`, later `checkpoints/` and `predictions/`).Workspace-produced inputs *to* the tool - the pooled, filtered CSVs `score_human_annotations.py` hands to `eval score --path` - are staged in `data/eval-inputs/`.
+`data/eval/` is pragmata's own tool tree and holds only what pragmata wrote there (`scores/`, `train_outputs/`, `prediction_outputs/`). Workspace-produced inputs *to* the tool - the pooled, filtered CSVs `score_human_annotations.py` hands to `eval score --path`, and the staged unlabelled CSVs `predict_evaluators.py` hands to `predict-labels` - are staged in `data/eval-inputs/`.
+
+Two files this workspace writes *into* that tree are the deliberate exceptions, both marked as such by a `.workspace.` infix in the name: `train_provenance.workspace.json` and `predict_provenance.workspace.json`, each inside the run directory it describes. They are there because those directories are what gets pushed off the GPU box, and neither pragmata's nor tlmtc's own sidecars name the workspace commit, the staged input or the freeze behind it.
 
 ## Cutting a new freeze
 
@@ -39,8 +49,9 @@ The order matters: each `.provenance.json` records the workspace commit it was g
 2. **Take the export and snapshot**: `make annotation-export`  then `make annotation-log`.
 3. **Freeze the tree and write the pin**: `make annotation-freeze`. 
    - DATE and RUN_AT (i.e. relevant log) both derive from the export tree's own `created_at` (pass `DATE=<date>` or `RUN_AT=<run_at>` to override either). 
-   - Guards before the copy is op'd: (i) clean working tree, (ii) no freeze under that date already, (iii) the resolved RUN_AT schema-current, (iv) no real names left in `exports/`. 
-   - After the guards this make targets creates the read-only dated copy (copy, then `chmod -R a-w` the new dir) and writes `configs/eval/freeze.conf`.
+   - Guards before the copy: (i) clean working tree, (ii) no freeze under that date already, (iii) the resolved RUN_AT schema-current and paired with the export - one that predates it, or lags it implausibly, is refused whether derived or passed, (iv) no real names left in `exports/`.
+   - It takes the same `.export.lock` `export.sh` does, so it cannot copy a tree the 02:00 cron is halfway through rewriting.
+   - After the guards the target creates the read-only dated copy (copy, then `chmod -R a-w` the new dir) and writes `configs/eval/freeze.conf`. It cleans up after itself: if the copy or the `chmod` fails, the partial dated dir is removed rather than left for the next run's "already frozen" guard to mistake for a real freeze.
 4. **Commit the pin.**  Until it is committed, another checkout still resolves the old date.
 5. **Regenerate everything on the clean tree**: `make eval-report eval-score eval-catalog`. 
 6. **Re-pin the bundle (if preexisting).** `repro-pin` refuses a pre-existing bundle dir and `pins.sha256` is generated, never hand-edited - so delete the old bundle dir, re-pin, commit.

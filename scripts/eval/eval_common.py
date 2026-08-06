@@ -1,6 +1,6 @@
 """Shared vocabulary for the eval-stage report scripts.
 
-The executable half of ``docs/eval-data-dictionary.md``, which defines response / record /
+The executable half of ``docs/deliverables-data-dictionary.md``, which defines response / record /
 item / panel / query group and every column of every CSV in prose. The things that decide
 a number — which rows count, what an item is, which population a statistic describes — are
 defined once here rather than re-derived per script. Keep the two in step.
@@ -35,7 +35,7 @@ TASKS = ("retrieval", "grounding", "generation")
 
 # pragmata's own eval tool tree. Named here rather than per script because three stages now
 # read it - training writes train_outputs/, prediction writes prediction_outputs/, scoring
-# writes scores/ - and the ownership rule in docs/eval.md is that this tree holds only what
+# writes scores/ - and the ownership rule in docs/eval-human-annotation.md is that this tree holds only what
 # pragmata put there. Workspace-produced inputs live under data/eval-inputs/.
 EVAL_TOOL_ROOT = ws.DATA_DIR / "eval"
 TRAIN_OUTPUTS = EVAL_TOOL_ROOT / "train_outputs"
@@ -106,7 +106,7 @@ def _freeze_pin(key: str) -> str:
         raise SystemExit(
             f"missing {FREEZE_CONF.relative_to(ws.ROOT)} - it pins the canonical freeze.\n"
             "  Cut one with `make annotation-freeze`, or restore\n"
-            "  the file from git. See docs/eval.md."
+            "  the file from git. See docs/eval-human-annotation.md."
         )
     value = os.environ.get(key, "").strip()
     if not value:
@@ -679,7 +679,7 @@ def pragmata_eval():
             raise SystemExit(
                 f"cannot import the eval API from {pin.src}: {exc}\n"
                 "  On the GPU host, install pragmata[eval] from\n"
-                "  configs/eval/train-requirements.txt instead - see docs/eval-training.md."
+                "  configs/eval/train-requirements.txt instead - see docs/eval-synthetic-evaluator.md."
             ) from exc
 
     package_dir = Path(eval_api.__file__).parent.parent
@@ -722,7 +722,7 @@ def require_gpu(*, use_cpu: bool = False) -> None:
         "  Inside the training container, point make at the training venv:\n"
         "    make eval-train TASK=<task> PY=~/train-venv/bin/python\n"
         "  On the GPU host outside a container, compute is disabled by site policy - launch a\n"
-        "  container first. See docs/eval-training.md."
+        "  container first. See docs/eval-synthetic-evaluator.md."
     )
 
 
