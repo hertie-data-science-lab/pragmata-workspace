@@ -16,7 +16,7 @@ The scripts under `scripts/` load `.env` themselves (via `scripts/lib/common.sh`
 Python deps live in `pyproject.toml` + `uv.lock` - committed. `uv sync` reproduces the environment exactly, including pragmata itself (git-pinned to an exact SHA used in the pilot). The lock carries a `constraint-dependencies` freeze of the versions that produced the shipped report numbers; see the comment there before upgrading anything.
 
 ## Operational tunables
-These live in `configs/settings.conf` (queries-per-spec, bot concurrency, throttle, disk thresholds) - committed.
+These live in `configs/settings.conf` - committed. `N_BASELINE`/`N_EDGECASE` queries per spec (500/60); `N_PARALLEL_BOTS` (4) and `INTER_QUERY_DELAY_S` (2.0) throttle the bot; `DISK_MIN_FREE_MB`/`DISK_WARN_FREE_MB` (100/500) abort or warn a stage on free space; `LOG_SESSION_GAP_MIN` (30) is the cadence break threshold; `LOG_IAA_RESAMPLES`/`LOG_IAA_SEED` (1000/0) seed the alpha bootstrap.
 
 ## The canonical freeze pin
 This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Report deliverables](report-deliverables.md#the-three-pins).

@@ -1,6 +1,8 @@
-# Report deliverables
+# Report deliverables and the pins behind them
 
 The CSVs the BSt report is built from, the pins that make each number citable, and how to read the numbers themselves. Every column is defined in the [data dictionary](data-dictionary.md).
+
+Producing a set: [the pins](#the-three-pins), then [Refreshing the numbers](#refreshing-the-numbers). Reading one: [Reading the numbers](#reading-the-numbers).
 
 ## The eight CSVs
 
@@ -29,7 +31,7 @@ The dictionary says when a value is blank and how it was computed. What the numb
 ### Metric estimates (`eval_metric_estimates.csv`)
 
 - **The intervals cover sampling uncertainty over queries only** - not annotator disagreement, and not label error. A tight interval on a label whose alpha is at or below chance reads as precision that is not there; the `alpha_*` columns exist to stop that reading.
-- **`n` is the filtered population, not the corpus.** Read it beside `n_panels_skipped`: for retrieval, incomplete panels are dropped before scoring, so `n` describes what survived rather than what was retrieved.
+- **`n` is the filtered population, not the corpus.** Read it beside `n_panels_skipped`: for retrieval, incomplete panels are dropped before scoring, so `n` describes what survived rather than what was retrieved. It is prevented during annotation, not at scoring: [`--tag-partial-panels`](IMPLEMENTATION-GUIDE.md#81-when-annotation-counts-as-done).
 
 ### The retrieval manifest
 
@@ -56,7 +58,7 @@ The first two live in [`configs/eval/freeze.conf`](../configs/eval/freeze.conf) 
 
 The environment is pinned too: `uv.lock` freezes all 126 packages at the versions that produced these numbers - see the `constraint-dependencies` comment in `pyproject.toml`.
 
-## Ownership
+## Where files go: `data/eval/` vs `data/eval-inputs/`
 
 `data/eval/` is pragmata's tool tree and holds only what pragmata wrote there (`scores/`, `train_outputs/`, `prediction_outputs/`). Workspace-produced inputs *to* the tool - the pooled CSVs `score_human_annotations.py` hands to `eval score --path`, and the staged unlabelled CSVs `predict_evaluators.py` hands to `predict-labels` - go in `data/eval-inputs/`.
 

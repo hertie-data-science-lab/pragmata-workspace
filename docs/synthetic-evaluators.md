@@ -2,7 +2,7 @@
 
 One evaluator per task, fine-tuned on the pooled human annotations, then applied to unlabelled populations. `train_evaluators.py` trains, `predict_evaluators.py` stages and applies, `score_synthetic_predictions.py` and `evaluator_report.py` turn the output into [deliverables](report-deliverables.md).
 
-Per-task configuration lives in [`configs/eval/training/`](../configs/eval/training/) as a shared `_common.yaml` deep-merged with one file per task, the same shape as `querygen_specs/_runtime.yaml`. The training and prediction runs themselves need the GPU host, whose dependencies are deliberately outside this workspace's lock - see [The environment](#the-environment).
+Per-task configuration lives in [`configs/eval/training/`](../configs/eval/training/) as a shared `_common.yaml` deep-merged with one file per task, the same shape as `querygen_specs/_runtime.yaml`. The training and prediction runs themselves need the GPU host, whose dependencies are deliberately outside this workspace's lock - see [below](#the-gpu-training-environment-and-why-the-workspace-venv-cannot-train).
 
 | Target | Does | Where it runs |
 |---|---|---|
@@ -19,7 +19,7 @@ The fine-tuning itself is done by `tlmtc`, the library pragmata's eval module wr
 
 **Prediction has no YAML configs.** Training's parameters are committed as data because they are pins behind published numbers; prediction's two choices - which population, which evaluator run - are CLI arguments.
 
-## The environment
+## The GPU training environment, and why the workspace venv cannot train
 
 Two things are pinned separately, for different reasons.
 
@@ -104,7 +104,7 @@ make transfer-pull PREFIX=checkpoints && cp -a data/transfer/checkpoints/.  data
 make transfer-pull PREFIX=predictions && cp -a data/transfer/predictions/. data/eval/prediction_outputs/
 ```
 
-This does not break the [ownership rule](report-deliverables.md#ownership): these files *were* written by pragmata, on the other box.
+This does not break the [ownership rule](report-deliverables.md#where-files-go-dataeval-vs-dataeval-inputs): these files *were* written by pragmata, on the other box.
 
 ## Run order
 

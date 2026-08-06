@@ -62,7 +62,7 @@ The `pragmata-workspace` repository is public, so the actual identifier values -
 
 >NB: **the two pins below are pilot scaffolding, not how the pipeline has to be run.** They exist because the pilot froze its annotation pin mid-study while eval tracked upstream, and two commits of one package cannot coexist in one venv. Once upstream `pragmata` carries both stages at one commit, bumping the single git SHA in `pyproject.toml` collapses all of this: `uv sync` alone, no second checkout, no `PRAGMATA_EVAL_SRC`. `pip install pragmata` is the intended route for that - **forthcoming**, it is not on PyPI yet - so for now it installs from `git+ssh://` and a GitHub SSH key with read access to `bertelsmannstift/pragmata` is required.
 
-The pilot's specific pipeline runs two different commits of `pragmata`.
+The pilot's specific pipeline runs two different commits of `pragmata`. These are *code* pins; the three pins behind a published number are a different set ([Report deliverables](report-deliverables.md#the-three-pins)), sharing only the eval pin.
 
 The annotation pin is a git dependency pinned to a SHA in `pragmata-workspace/pyproject.toml`, installed by `uv sync`. This commit built and imported the live Argilla instance.
 
@@ -74,7 +74,7 @@ The eval pin is a git checkout we provide at `pin/eval-report-2026-07` (as two c
 
 ### 3.2 Create the environment
 
-**On the primary CPU-backed VM**: from `pragmata-workspace` run `make venv-setup` (requires `uv` on PATH), this creates the `.venv/`; python is also uv-managed (the version is fixed by `.python-version` (3.12.13)). As it covers every Python entry point in the repository, the single venv runs both stages ([why](report-deliverables.md#the-three-pins)). Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure CLI on PATH.
+**On the primary CPU-backed VM**: from `pragmata-workspace` run `make venv-setup` (requires `uv` on PATH), this creates the `.venv/`; python is also uv-managed (the version is fixed by `.python-version` (3.12.13)). As it covers every Python entry point in the repository, the single venv runs both stages (§3.1 says why eval still needs its own checkout). Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure CLI on PATH.
 
 > Use the target rather than a bare `uv sync`: it wraps `uv sync --frozen` and keeps uv's interpreter and wheel cache in `.uv/` in the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. No practical difference on a single-user VM, but on a checkout shared between users by POSIX ACL it is what makes `.venv` readable by all of them - uv writes those per-user paths mode 700/711. Both paths are overridable from the environment.
 
@@ -165,7 +165,7 @@ The pipeline writes to fixed paths:
 
 They are deliberately not per-run: this makes the stages resumable (the Publikationsbot client skips query IDs already present in its output file, and the combine stage absorbs matching `_batch` files from earlier runs). An interrupted run is therefore cheap to continue - but an *earlier* run left in place is silently mixed into the new one.
 
-Before running anything, confirm the tree is clean:
+Run these twice: now, and again after the §5 smoke tests, which write to these same paths. Confirm the tree is clean:
 
     ls data/querygen/runs        # should fail - no such directory
     ls data/publikationsbot      # should hold only .gitkeep
@@ -289,7 +289,7 @@ The workspace and dataset structure comes from `configs/annotation/domains/`, on
 
 **Decide `dataset_id` before importing, not after.** Left empty it reuses the previous run's datasets; set to `2026-08` it stands up new ones beside them. That is the difference between adding to an existing dataset and starting a fresh run, and the import will not undo it for you.
 
-One workspace per task, and the annotation item differs by task. Grounding and generation have one item per record; retrieval has one per (record, chunk). That is why retrieval alone has *panels* - the K chunks of one query - and why `panel_complete` is a retrieval-only condition (§8.1).
+One workspace per task, and the annotation item differs by task. Grounding and generation have one item per record; retrieval has one per (record, chunk). That is why retrieval alone has *panels* - the K chunks of one query - and why `panel_complete` is a retrieval-only condition (§8.1). `record`, `item` and `panel` are defined in the [vocabulary](data-dictionary.md#vocabulary).
 
 ### 7.2 Back up Argilla
 
@@ -305,6 +305,8 @@ Backup and restore are documented in [Annotation pipeline](annotation.md#backup-
 The target reads the domain configuration and the local user files and creates what is missing; existing users and workspaces are skipped. Auto-generated passwords print once - capture them into `users.secrets.json` ([Configuration](configuration.md#annotator-roster)).
 
 ### 7.4 Import the records
+
+Rejected records: [§6.1](#61-the-import-contract).
 
     make annotation-import DOMAIN=gesundheit   # one domain
     make pipeline FROM=annotation-setup        # all domains, after setup

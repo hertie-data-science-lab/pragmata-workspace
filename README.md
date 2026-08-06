@@ -82,6 +82,8 @@ make help                      # list every target
 
 `make docs-check` is what keeps the list above honest: it compares the target names here against the Makefile's own `##` help lines in both directions, so neither an undocumented target nor a stale line here can pass. It also checks every relative doc link and `#heading` anchor.
 
+Three things are called reports: `reports/annotation/` tracks progress during annotation, `reports/eval/` holds the deliverable CSVs, and the final BSt report is assembled in a separate private repo.
+
 ## Documentation
 
 > **[IMPLEMENTATION GUIDE](docs/IMPLEMENTATION-GUIDE.md)** - the end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
@@ -89,7 +91,7 @@ make help                      # list every target
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting, backup/restore.
 - [Report deliverables](docs/report-deliverables.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
 - [Synthetic evaluators](docs/synthetic-evaluators.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
-- [Data dictionary](docs/data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
+- [Data dictionary](docs/data-dictionary.md) - the vocabulary (response / record / item / panel / query group), every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
 - [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
 - [Configuration](docs/configuration.md) - every config file and env var, the freeze pin, the domain config, and what stays gitignored.

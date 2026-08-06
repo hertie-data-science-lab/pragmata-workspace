@@ -1,6 +1,6 @@
 # Data dictionary
 
-> **This file is injected into the metric-production pipeline as a schema contract; do not edit w/o editing corresponding pipeline code.** 
+> **This file is injected into the metric-production pipeline as a schema contract; do not edit w/o editing corresponding pipeline code** - [what breaks](#appendix---what-breaks-if-you-edit-this-file-read-first).
 
 > Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
@@ -13,6 +13,7 @@
 | **item** | One record's responses majority-consolidated into a single value per label. 1:1 with annotated records, and the grain eval ingests. pragmata's own code calls this the *scoring unit*. |
 | **panel** | Retrieval only: the *k* chunk-records of one query. *Complete* means every chunk in it has a submitted response. |
 | **query group** | One query + response across all three tasks: its panel, plus its grounding record and its generation record. |
+| **programme / domain** | The same thing. Configs and CLI say domain (`configs/annotation/domains/`, `DOMAIN=`); the CSVs say `programme`. |
 
 A **query group owns four content artefacts** - the `query`, the bot's `response`, the retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks rendered as one block) - and each task's records are a *projection* of them, which is why "record" holds different content per task:
 
@@ -26,6 +27,16 @@ query group ── query ── response ── chunks (k, each with text + rank
 > Consequence for counting: one query group with k=5 projects into 7 records (1x grounding, 1x generation, 5x retrieval).
 
 **Calibration** records are deliberately overlapped so several annotators see the same thing; they are the only population inter-annotator agreement is computed on. They are *pooled with production* in `annotation_operations.csv` and *kept in* the scored corpus (pragmata's majority consolidation coalesces their extra responses into one item, exactly as it does when passing data for training its synthetic data generation models).
+
+**The three tasks.** What the annotator is shown, and the labels they set:
+
+| task | judges | labels |
+|---|---|---|
+| retrieval | one retrieved chunk against the query | `topically_relevant`, `evidence_sufficient`, `misleading` |
+| grounding | the answer against its whole `context_set` | `support_present`, `unsupported_claim_present`, `contradicted_claim_present`, `source_cited`, `fabricated_source` |
+| generation | the answer against the query | `proper_action`, `response_on_topic`, `helpful`, `incomplete`, `unsafe_content` |
+
+The full rules are the annotation protocol; these are the column names the exports and every CSV below use.
 
 ---
 
@@ -254,7 +265,7 @@ Every one of those is a count of test rows and must come out whole; each is chec
 
 **How to read these numbers** - why `n` is the first column to look at, and what calibration does and does not tell you about the decision threshold - is in [Synthetic evaluators](synthetic-evaluators.md#the-calibration-curve).
 
-## Appendix - Implications for editing this doc (pipeline deps)
+## Appendix - what breaks if you edit this file (read first)
 >3 points in the pipeline depend on this md by path and by hash:
 >
 > - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
