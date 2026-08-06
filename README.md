@@ -80,10 +80,6 @@ make docs-check                # this list matches the Makefile + every doc link
 make help                      # list every target
 ```
 
-`make docs-check` is what keeps the list above honest: it compares the target names here against the Makefile's own `##` help lines in both directions, so neither an undocumented target nor a stale line here can pass. It also checks every relative doc link and `#heading` anchor.
-
-Three things are called reports: `reports/annotation/` tracks progress during annotation, `reports/eval/` holds the deliverable CSVs, and the final BSt report is neither - it is assembled in the separate repository named at the top of this page.
-
 ## Documentation
 
 > **[IMPLEMENTATION GUIDE](docs/IMPLEMENTATION-GUIDE.md)** - the end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
@@ -95,15 +91,3 @@ Three things are called reports: `reports/annotation/` tracks progress during an
 - [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention and how to replay the lineage; the contract and the `repro-*` targets are in [`reproducibility/README.md`](reproducibility/README.md).
 - [Configuration](docs/configuration.md) - every config file and env var, the freeze pin, the domain config, and what stays gitignored.
-
-## Layout
-
-```
-.env.example           template for .env (copy to .env and fill in)
-configs/               committed configs & specs (settings.conf, annotation/, eval/)
-reproducibility/       committed lineage records (one dated bundle per operation)
-scripts/               committed pipeline code (pipeline.sh, daily.sh, annotation/, eval/, lib/, transfer/)
-data/  logs/  reports/ pipeline I/O and outputs (gitignored except README + .gitkeep)
-argilla_backup/        status-preserving Argilla dumps (gitignored, local/external)
-docs/
-```
