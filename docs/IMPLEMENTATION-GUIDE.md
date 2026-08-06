@@ -407,7 +407,7 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
     make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog              # corpus_catalog.csv (needs an active `az login`)
 
-`make eval-deliverables` runs these four plus the three synthetic-evaluator ones below, in order - use it once the GPU host's outputs are back.
+`make eval-deliverables` runs these four plus the five synthetic-evaluator ones below, in order - use it once the GPU host's outputs are back.
 
 They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Report deliverables](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
 

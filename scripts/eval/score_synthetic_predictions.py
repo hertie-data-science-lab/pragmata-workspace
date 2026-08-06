@@ -169,13 +169,9 @@ def unscoreable_labels(prediction_dir: Path, task: str) -> list[str]:
     an explicit n=0 row per affected metric saying the evaluator does not cover the label -
     which is a finding about the evaluator, and one the eval report already documents.
     """
-    # One line, not read_text(): an all-generated predictions.csv carries every chunk's
-    # text and runs to tens of MB, and only the header is wanted. Label columns are appended by
-    # tlmtc and are bare identifiers, so splitting the header on commas is safe where splitting
-    # a data row would not be.
-    with (prediction_dir / "predictions.csv").open(encoding="utf-8") as handle:
-        header = handle.readline()
-    present = {column.strip().strip('"') for column in header.split(",")}
+    # From the header alone, not a pandas read - see ec.csv_columns, shared with
+    # export_predictions.py, which asks the same question of the same file.
+    present = set(ec.csv_columns(prediction_dir / "predictions.csv"))
     return [label for label in ec.LABELS[task] if label not in present]
 
 
