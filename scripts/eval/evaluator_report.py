@@ -233,7 +233,7 @@ def metrics(run_ids: dict[str, str], out_dir: Path | None) -> int:
                 file=sys.stderr,
             )
 
-    target = ws.stage_report_dir("eval", out_dir) / "evaluator_metrics.csv"
+    target = ws.deliverable_path("eval", "evaluator_metrics.csv", out_dir)
     ws.write_csv(
         target,
         rows,
@@ -442,7 +442,7 @@ def calibration(
             file=sys.stderr,
         )
 
-    target = ws.stage_report_dir("eval", out_dir) / "evaluator_calibration.csv"
+    target = ws.deliverable_path("eval", "evaluator_calibration.csv", out_dir)
     ws.write_csv(
         target,
         rows,
@@ -485,7 +485,10 @@ def main() -> int:
             "--out-dir",
             type=Path,
             default=None,
-            help="Output directory (default: reports/eval/<today>/).",
+            help=(
+                "Run root for the deliverable set; each CSV lands in its taxonomy "
+                "subdirectory (default: reports/eval/<today>/)."
+            ),
         )
 
     metrics_parser = sub.add_parser(

@@ -290,7 +290,6 @@ def main() -> int:
 
     snapshot, identity = ws.find_snapshot(args.snapshot_run_at)
     programmes = ec.programmes(args.exports)
-    target_dir = ws.stage_report_dir("eval", args.out_dir)
 
     labels = [
         row
@@ -300,7 +299,7 @@ def main() -> int:
         )
     ]
     ws.write_csv(
-        target_dir / "annotation_label_summary.csv",
+        ws.deliverable_path("eval", "annotation_label_summary.csv", args.out_dir),
         labels,
         columns=LABEL_COLUMNS,
         prov=ws.provenance(
@@ -333,7 +332,7 @@ def main() -> int:
         for row in ops_rows(snapshot, programme, args.exports)
     ]
     ws.write_csv(
-        target_dir / "annotation_operations.csv",
+        ws.deliverable_path("eval", "annotation_operations.csv", args.out_dir),
         ops,
         columns=OPS_COLUMNS,
         prov=ws.provenance(

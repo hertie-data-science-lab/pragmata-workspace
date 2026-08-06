@@ -30,8 +30,8 @@ DATA_DIR = ROOT / "data"  # pragmata base_dir; tools write DATA_DIR/<tool>
 SETTINGS = ROOT / "configs" / "settings.conf"  # workspace-global operational tunables
 
 # Annotation stage paths — the only stage with a fixed set of them. The eval scripts
-# resolve their output dir through stage_report_dir("eval") and read explicit paths
-# otherwise, so they need none here.
+# resolve their output path through deliverable_path("eval", <filename>) and read explicit
+# paths otherwise, so they need none here.
 DOMAINS_DIR = ROOT / "configs" / "annotation" / "domains"  # per-domain task YAMLs
 LOGS_DIR = ROOT / "logs" / "annotation"  # log.jsonl + run logs (flat)
 REPORTS_DIR = ROOT / "reports" / "annotation"  # rendered tables + plots
@@ -420,13 +420,16 @@ def report_dir(run_at: str) -> Path:
 
 
 def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
-    """Dated output dir for a stage's generated reports, ``reports/<stage>/<today>/``.
+    """Dated RUN root for a stage's generated reports, ``reports/<stage>/<today>/``.
 
     Lives here, not in a stage helper, so every script in one bundle resolves the same
     date from the same clock — including corpus_catalog.py, which cannot import the
     pandas-dependent eval helpers. A script computing its own date drifts: a UTC date
     against the others' local date splits one bundle across two directories for the last
     hours of each local day.
+
+    The run root holds the data dictionary and any hand-written run-level summary; the CSVs
+    themselves sit one level down, in their subset directory — see ``deliverable_path``.
     """
     from datetime import date
 
@@ -435,6 +438,64 @@ def stage_report_dir(stage: str, explicit: Path | None = None) -> Path:
     target = explicit or (ROOT / "reports" / stage / date.today().isoformat())  # noqa: DTZ011
     target.mkdir(parents=True, exist_ok=True)
     return target
+
+
+# The three deliverable subsets, one directory each under the dated eval report dir. The
+# taxonomy is defined in docs/report-deliverables.md and is what the report is assembled from,
+# so the scripts write it natively rather than leaving an operator to group a flat directory by
+# hand — which is how the 2026-08-06 set was shipped.
+#
+# Keyed on the output filename's first dot-separated token rather than on the script: one
+# script writes two CSVs into one subset (annotation_tables.py), and two of the others vary
+# their filename by policy or population — eval_metric_estimates.<policy>.csv,
+# synthetic_metric_estimates.<population>.csv — so the stem is the stable part.
+DELIVERABLE_SUBSETS: dict[str, str] = {
+    "annotation_label_summary": "human-annotation",
+    "annotation_operations": "human-annotation",
+    "eval_metric_estimates": "human-annotation",
+    "retrieval_manifest": "fairness-audit",
+    "corpus_catalog": "fairness-audit",
+    "evaluator_metrics": "synthetic-evaluator",
+    "evaluator_calibration": "synthetic-evaluator",
+    "synthetic_metric_estimates": "synthetic-evaluator",
+}
+
+
+def deliverable_path(stage: str, filename: str, explicit: Path | None = None) -> Path:
+    """Where one report deliverable goes: ``reports/<stage>/<date>/<subset>/<filename>``.
+
+    The single place the tiered layout is decided, so every script resolves it the same way
+    and a new deliverable is registered once, in DELIVERABLE_SUBSETS, rather than by each
+    script hardcoding a directory name that can drift from the others.
+
+    An unregistered filename is refused rather than filed at the dated root. A deliverable
+    that quietly lands outside its subset would still be produced, still be hashed, and still
+    be pinned — and the flat copy would only be noticed when the report was assembled.
+
+    **The data dictionary stays at the dated root**, one copy for the whole set rather than
+    one per subset: it defines every CSV in all three, its ``.provenance.json`` pin is by
+    hash rather than by path, and three identical copies in a handover tree read as three
+    documents. Copied here rather than in ``write_csv`` because this is the layer that knows
+    the run root as well as the leaf.
+    """
+    root = stage_report_dir(stage, explicit)
+    subset = DELIVERABLE_SUBSETS.get(filename.split(".")[0])
+    if subset is None:
+        raise SystemExit(
+            f"{filename} is not a registered report deliverable, so which of the three "
+            f"subsets it belongs in is unknown.\n"
+            f"  Add it to DELIVERABLE_SUBSETS in {Path(__file__).name} and to the table in "
+            "docs/report-deliverables.md."
+        )
+    if not DATA_DICTIONARY.exists():
+        raise SystemExit(
+            f"no data dictionary at {DATA_DICTIONARY} — every eval .provenance.json pins it, "
+            "and the deliverable set ships a copy at the dated report root."
+        )
+    (root / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
+    subset_dir = root / subset
+    subset_dir.mkdir(parents=True, exist_ok=True)
+    return subset_dir / filename
 
 
 def link_latest(target: Path) -> None:
@@ -468,7 +529,8 @@ def domains() -> list[str]:
 # What a column means and how to read it belongs in the hand-authored data dictionary,
 # which every .provenance.json pins by hash — one authored explanation, not a copy per
 # artifact —
-# so a CSV can always be paired with the wording that was current when it was written.
+# so a CSV can always be paired with the wording that was current when it was written. The
+# copy that travels with a run is placed by deliverable_path, at the dated root.
 DATA_DICTIONARY = ROOT / "docs" / "data-dictionary.md"
 
 
@@ -553,7 +615,7 @@ def provenance(
     if not DATA_DICTIONARY.exists():
         raise SystemExit(
             f"no data dictionary at {DATA_DICTIONARY} — every eval .provenance.json pins it, and "
-            "write_csv copies it next to the CSVs."
+            "deliverable_path copies it beside the set."
         )
     record = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -583,6 +645,10 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     ``columns`` is explicit rather than inferred from the first row: these CSVs are
     a contract with the report author, so column order and presence must not depend
     on which rows happen to be non-empty. Missing keys are written as empty.
+
+    The data dictionary that every ``.provenance.json`` here pins is copied beside the set by
+    ``deliverable_path``, which resolves ``path`` — it goes to the dated run root rather than
+    to each subset directory, so this layer does not place it.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
@@ -594,12 +660,6 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     provenance_path.write_text(
         json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    # The dictionary travels WITH the CSVs whose .provenance.json pins it: a bare CSV in a
-    # handover folder is unreadable without the wording the pin refers to. Done here,
-    # in the layer that already knows the output directory, so a direct script run and
-    # a make run behave identically and no second clock resolves "today's dir".
-    # Unconditional: provenance() pins the dictionary in every record it builds.
-    (path.parent / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
 
 
 def read_jsonl(path: Path) -> list[dict]:

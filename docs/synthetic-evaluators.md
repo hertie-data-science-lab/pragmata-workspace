@@ -15,6 +15,8 @@ Per-task configuration lives in [`configs/eval/training/`](../configs/eval/train
 | `make eval-model-metrics` | `evaluator_metrics.csv` | either box, CPU-only |
 | `make eval-model-calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
 
+The last three land in `reports/eval/<date>/synthetic-evaluator/`, the subset directory of the [three-part deliverable layout](report-deliverables.md#the-eight-csvs).
+
 The fine-tuning itself is done by `tlmtc`, the library pragmata's eval module wraps; it comes up throughout, mostly where its defaults had to be overridden.
 
 **Prediction has no YAML configs.** Training's parameters are committed as data because they are pins behind published numbers; prediction's two choices - which population, which evaluator run - are CLI arguments.

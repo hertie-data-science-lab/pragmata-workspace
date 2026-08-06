@@ -400,7 +400,7 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
 
 ## 10. Run the evaluation
 
-**Scoring human-annotated labels runs on the CPU VM**. Four targets produce the human-annotation and fairness-audit deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the current data dictionary beside it:
+**Scoring human-annotated labels runs on the CPU VM**. Four targets produce the human-annotation and fairness-audit deliverables into the matching subset directories of `reports/eval/<date>/` ([the layout](report-deliverables.md#the-eight-csvs)), each CSV with a `.provenance.json` and the current data dictionary at the run root:
 
     make eval-annotation-tables    # annotation_operations, annotation_label_summary
     make eval-retrieval-manifest   # retrieval_manifest.csv

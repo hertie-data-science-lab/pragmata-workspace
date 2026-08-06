@@ -223,7 +223,10 @@ def main() -> int:
         "--out-dir",
         type=Path,
         default=None,
-        help="Output directory (default: reports/eval/<today>/).",
+        help=(
+            "Run root for the deliverable set; each CSV lands in its taxonomy "
+            "subdirectory (default: reports/eval/<today>/)."
+        ),
     )
     ap.add_argument(
         "--all-panels",
@@ -306,9 +309,8 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    target = (
-        ws.stage_report_dir("eval", args.out_dir)
-        / f"synthetic_metric_estimates.{args.population}.csv"
+    target = ws.deliverable_path(
+        "eval", f"synthetic_metric_estimates.{args.population}.csv", args.out_dir
     )
     ws.write_csv(
         target,

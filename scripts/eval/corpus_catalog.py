@@ -302,11 +302,14 @@ def main() -> int:
         "--out-dir",
         type=Path,
         default=None,
-        help="Output directory (default: reports/eval/<today>/).",
+        help=(
+            "Run root for the deliverable set; each CSV lands in its taxonomy "
+            "subdirectory (default: reports/eval/<today>/)."
+        ),
     )
     args = ap.parse_args()
 
-    target = ws.stage_report_dir("eval", args.out_dir) / "corpus_catalog.csv"
+    target = ws.deliverable_path("eval", "corpus_catalog.csv", args.out_dir)
 
     conn = vsi.connect(vsi.fetch_dsn())
     try:

@@ -6,7 +6,7 @@ Producing a set: [the pins](#the-three-pins), then [Refreshing the numbers](#ref
 
 ## The eight CSVs
 
-Seven targets, eight CSVs - `eval-annotation-tables` emits two. All land in `reports/eval/<date>/` (`OUT=` to redirect). One target per script, so each names its own output; `make eval-deliverables` runs all seven in order. They come in three subsets, named in the table below and used by those names throughout: the **human-annotation** and **fairness-audit** CSVs read the frozen export and the two corpora, while the **synthetic-evaluator** ones need what the GPU host produced ([Synthetic evaluators](synthetic-evaluators.md)).
+Seven targets, eight CSVs - `eval-annotation-tables` emits two. All land under `reports/eval/<date>/` (`OUT=` to redirect that run root). One target per script, so each names its own output; `make eval-deliverables` runs all seven in order. They come in three subsets, named in the table below and used by those names throughout: the **human-annotation** and **fairness-audit** CSVs read the frozen export and the two corpora, while the **synthetic-evaluator** ones need what the GPU host produced ([Synthetic evaluators](synthetic-evaluators.md)).
 
 | Target | Subset | Script | Output |
 |---|---|---|---|
@@ -18,7 +18,23 @@ Seven targets, eight CSVs - `eval-annotation-tables` emits two. All land in `rep
 | `make eval-model-metrics` | synthetic-evaluator | `evaluator_report.py` | `evaluator_metrics.csv` |
 | `make eval-model-calibration` | synthetic-evaluator | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
 
-Every CSV ships a `.provenance.json` - script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash - and the data dictionary is copied beside the CSVs whose record pins it. Every declared input is listed - one that was absent when the script ran appears as `"sha256": null, "missing": true`, never by omission.
+**The subset is a directory, not just a label.** Each script writes into its own subset, so a run produces the tiered layout the report is assembled from without anyone grouping a flat directory by hand:
+
+```
+reports/eval/<date>/
+├── data-dictionary.md              one copy for the whole set - it defines all three subsets
+├── human-annotation/               annotation_label_summary, annotation_operations,
+│                                   eval_metric_estimates
+├── fairness-audit/                 retrieval_manifest, corpus_catalog
+└── synthetic-evaluator/            evaluator_metrics, evaluator_calibration,
+                                    synthetic_metric_estimates.<population>
+```
+
+The mapping from output filename to subset lives once, in `DELIVERABLE_SUBSETS` in `scripts/lib/workspace.py`; a filename that is not in it is refused rather than filed at the run root, because a deliverable outside its subset would still be produced, hashed and pinned, and would only be noticed when the report was assembled. Anything hand-written for a run - an executive summary, a note - belongs at the run root beside the dictionary.
+
+> The pinned 2026-08-06 set has this layout, assembled by hand at the time; from this change on the scripts produce it themselves. Its dictionary copy is named `eval-data-dictionary.md`, the name that file shipped under then.
+
+Every CSV ships a `.provenance.json` - script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash - and the data dictionary is copied to the run root, one copy for the set whose records pin it. Every declared input is listed - one that was absent when the script ran appears as `"sha256": null, "missing": true`, never by omission.
 
 ## Reading the numbers
 

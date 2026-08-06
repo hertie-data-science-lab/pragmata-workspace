@@ -49,7 +49,8 @@ make annotation-report-tables  # tables only -> report.md
 make annotation-report-pdf     # tables -> report.pdf                (needs pandoc + xelatex)
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
-# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/report-deliverables.md)
+# Eval deliverables  (-> reports/eval/<date>/{human-annotation,fairness-audit,synthetic-evaluator}/,
+#                     OUT= to redirect the run root; see docs/report-deliverables.md)
 make eval-annotation-tables    # annotation_operations, annotation_label_summary
 make eval-retrieval-manifest   # retrieval_manifest.csv, the fairness audit's join key
 make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`

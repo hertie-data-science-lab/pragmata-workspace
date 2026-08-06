@@ -32,7 +32,8 @@
 #   make repro-reproduce PIN=2026-07-01-annotation-curation
 # See reproducibility/README.md for the bundle contract.
 #
-# Eval deliverables (reports/eval/<date>/, one CSV + its .provenance.json each):
+# Eval deliverables (one CSV + its .provenance.json each, filed under reports/eval/<date>/ in
+# the subset directory it belongs to - human-annotation/, fairness-audit/, synthetic-evaluator/):
 #   make eval-annotation-tables            # annotation counts + per-label prevalence
 #   make eval-retrieval-manifest           # what the retriever returned per query
 #   make eval-score-human                  # the curated-corpus metric estimates from human labels
@@ -40,7 +41,8 @@
 #   make eval-deliverables                 # all seven deliverable targets, in order
 # The first four read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
-# docs/data-dictionary.md for what the columns mean.
+# docs/data-dictionary.md for what the columns mean and docs/report-deliverables.md for the
+# three-subset layout.
 #
 # Eval training (the synthetic evaluators; the training extra is not in uv.lock - GPU host):
 #   make eval-train-inputs                 # pool the frozen export -> data/eval-inputs/training/
@@ -94,9 +96,9 @@ export UV_PYTHON_INSTALL_DIR UV_CACHE_DIR
 HF_HOME ?= $(CURDIR)/.hf
 export HF_HOME
 
-# Eval report output args. The scripts resolve the dated output dir themselves and drop
-# the data dictionary beside the CSVs (ws.write_csv); OUT= redirects for an off-date or
-# scratch run.
+# Eval report output args. The scripts resolve the dated run root themselves, file each CSV
+# in its subset directory and drop the data dictionary at the root (ws.deliverable_path);
+# OUT= redirects the run root for an off-date or scratch run.
 EVAL_ARGS := $(if $(OUT),--out-dir $(OUT),)
 
 # Pass-through flags for pipeline.sh / plan, built from make vars.
@@ -197,7 +199,7 @@ annotation-report-pdf: ## Render latest snapshot tables -> reports/annotation/<d
 annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date>/ (needs matplotlib)
 	$(PY) scripts/annotation/plot_summary.py
 
-# --- eval deliverables (reports/eval/<date>/; OUT= to redirect) ---
+# --- eval deliverables (reports/eval/<date>/<subset>/; OUT= to redirect the run root) ---
 
 # One target per script, so each names its own output and its own prerequisites. The
 # umbrella runs all seven; it is the only target here that fans out. Later ones need

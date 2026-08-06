@@ -2,7 +2,7 @@
 
 > **This file is injected into the metric-production pipeline as a schema contract; do not edit w/o editing corresponding pipeline code** - [what breaks](#appendix---what-breaks-if-you-edit-this-file-read-first).
 
-> Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
+> Here is the canonical record of definitions for the report data CSVs under `reports/eval/<date>/`, whose three subset directories - `human-annotation/`, `fairness-audit/`, `synthetic-evaluator/` - are laid out in [Report deliverables](report-deliverables.md#the-eight-csvs). Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
 ## Vocabulary
 
@@ -272,9 +272,10 @@ Every one of those is a count of test rows and must come out whole; each is chec
 >3 points in the pipeline depend on this md by path and by hash:
 >
 > - **Injected into every deliverable.** `scripts/lib/workspace.py` (`DATA_DICTIONARY`) writes
->   this file's `{path, sha256}` into every `*.provenance.json`, and `write_csv()` copies the
->   file itself into the output directory beside the CSVs whose `.provenance.json` carries that pin. The
->   eval scripts refuse to run if it is missing.
+>   this file's `{path, sha256}` into every `*.provenance.json`, and `deliverable_path()` copies
+>   the file itself to the dated run root - one copy for the set, since it defines all three
+>   subsets - beside the CSVs whose `.provenance.json` carries that pin. The eval scripts refuse
+>   to run if it is missing.
 > - **Pinned by the committed record.** `reproducibility/<date>-eval-report/pins.sha256`
 >   pins the copy that travelled with that date's CSVs, at the hash this file had then -
 >   binding the delivered numbers to that exact wording. (The pin resolves under `reports/`,

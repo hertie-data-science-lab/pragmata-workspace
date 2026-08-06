@@ -340,8 +340,8 @@ def main() -> int:
     # runs with different flags would otherwise overwrite each other at one path, and
     # the difference would only be visible inside the file.
     suffix = "" if policy == DEFAULT_POLICY else f".{policy}"
-    target = (
-        ws.stage_report_dir("eval", args.out_dir) / f"eval_metric_estimates{suffix}.csv"
+    target = ws.deliverable_path(
+        "eval", f"eval_metric_estimates{suffix}.csv", args.out_dir
     )
     ws.write_csv(
         target,

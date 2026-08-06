@@ -145,7 +145,10 @@ def add_common_args(parser) -> None:
         "--out-dir",
         type=Path,
         default=None,
-        help="Output directory (default: reports/eval/<today>/).",
+        help=(
+            "Run root for the deliverable set; each CSV lands in its taxonomy "
+            "subdirectory (default: reports/eval/<today>/)."
+        ),
     )
 
 
