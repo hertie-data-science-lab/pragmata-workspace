@@ -65,12 +65,7 @@ Neither box has to be an Azure VM. Each needs:
 
 Two network prerequisites are the usual sticking points, and matter most for the GPU box: **outbound 443 to `*.blob.core.windows.net`** must be open through the local firewall or proxy, and **the container is private and IP-allowlisted**, so the box's public egress IP must be on BSt's storage-account allowlist. Confirm the egress IP with the storage owner when onboarding a new box.
 
-Smoke-test a box with a bare list - `403` means the IP is not allowlisted, a timeout means 443 is blocked:
-
-```bash
-az storage blob list --account-name "$EVAL_BLOB_ACCOUNT" \
-  --container-name "$EVAL_BLOB_CONTAINER" --sas-token "$EVAL_BLOB_SAS" -o table
-```
+Smoke-test each box with a bare blob listing; the command is in the walkthrough at [IMPLEMENTATION-GUIDE §5.6](IMPLEMENTATION-GUIDE.md#56-test-blob-storage). `403` means the IP is not allowlisted, a timeout means 443 is blocked.
 
 ## Data sensitivity
 

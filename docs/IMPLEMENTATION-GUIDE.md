@@ -43,7 +43,7 @@ The CPU VM runs the dataset-generation and annotation pipeline (Azure OpenAI, Pu
 
 The two boxes do not connect directly. Code moves through GitHub (both instances need to be at the same commit); data moves through Azure Blob Storage over HTTPS. See [Data transport](data-transport.md).
 
-## 2.1 Deployment inventory
+### 2.1 Deployment inventory
 
 The `pragmata-workspace` repository is public, so the actual identifier values - tenant and subscription IDs, host, VM and storage-account names, the SAS expiry etc - are kept in a gitignored `docs/deployment-inventory.local.md`. 
 
@@ -60,7 +60,7 @@ The `pragmata-workspace` repository is public, so the actual identifier values -
 
 ### 3.1 Recorded code versions
 
->NB: **the two pins below are pilot scaffolding, not how the pipeline has to be run.** They exist because the pilot froze its annotation pin mid-study while eval tracked upstream, and two commits of one package cannot coexist in one venv. Once upstream `pragmata` carries both stages at one commit, bumping the single git SHA in `pyproject.toml` collapses all of this: `uv sync` alone, no second checkout, no `PRAGMATA_EVAL_SRC`. `pip install pragmata` is the intended route for that - **forthcoming**, it is not on PyPI yet - so for now it installs from `git+ssh://` and a GitHub SSH key with read access to `bertelsmannstift/pragmata` is required.
+>NB: **the two pins below are pilot scaffolding, not how the pipeline has to be run** - the pilot froze its annotation pin mid-study while eval tracked upstream, and two commits of one package cannot coexist in one venv. Once upstream `pragmata` carries both stages at one commit, bumping the single git SHA in `pyproject.toml` collapses all of this to `uv sync` alone - no second checkout, no `PRAGMATA_EVAL_SRC` - and until `pip install pragmata` is possible (**forthcoming**; it is not on PyPI yet) the dependency installs over `git+ssh://`, which needs the SSH key [§3.2](#32-create-the-environment) calls for.
 
 The pilot's specific pipeline runs two different commits of `pragmata`. These are *code* pins; the three pins behind a published number are a different set ([Report deliverables](report-deliverables.md#the-three-pins)), sharing only the eval pin.
 
@@ -82,7 +82,7 @@ The eval pin is a git checkout we provide at `pin/eval-report-2026-07` (as two c
 > 
 > Here ends the exact-reproduction divergence. The rest of the setup is the same either way.
 
-**The GPU host does not need the venv:** everything it runs from this repository is in `scripts/transfer/sync.sh`: pull and verify are `bash` + Azure CLI + `sha256sum`, and push adds only the system `python3` for the pseudonymisation guard. 
+**The GPU host does not need the *workspace* venv:** its make targets run on the training venv built inside the evaluation container, passed per run as `PY=` ([Synthetic evaluators](synthetic-evaluators.md#the-gpu-training-environment-and-why-the-workspace-venv-cannot-train)). The only thing that runs on the bare host is `scripts/transfer/sync.sh`, which needs no venv at all: pull and verify are `bash` + Azure CLI + `sha256sum`, and push adds only the system `python3` for the pseudonymisation guard. 
 
 ### 3.3 Create the local configuration
 
@@ -400,28 +400,26 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
 
 ## 10. Run the evaluation
 
-**Scoring human-annotated labels runs on the CPU VM**. Three targets produce the report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the current data dictionary beside it:
+**Scoring human-annotated labels runs on the CPU VM**. Four targets produce the human-annotation and fairness-audit deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the current data dictionary beside it:
 
     make eval-annotation-tables    # annotation_operations, annotation_label_summary
     make eval-retrieval-manifest   # retrieval_manifest.csv
     make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog              # corpus_catalog.csv (needs an active `az login`)
 
-`make eval-deliverables` runs these four plus the three model-side ones below, in order - use it once the GPU host's outputs are back.
+`make eval-deliverables` runs these four plus the three synthetic-evaluator ones below, in order - use it once the GPU host's outputs are back.
 
 They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Report deliverables](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
 
-**Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.** `pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead the GPU box installs its own environment.
+**Evaluator training and prediction are implemented in `pragmata` and run on the GPU host**, behind an `eval` extra (`pragmata[eval]` → `tlmtc[train]`) that is deliberately not in this workspace's lock, so the GPU box installs its own environment. **Read [Synthetic evaluators](synthetic-evaluators.md) before running any of this**: it carries the install steps for that environment, the per-task configuration, the two predicted populations, and the levers that were tried and made results worse.
 
-For training, these workspace targets carry the recommended configuration per task, pool the frozen export into the staged input, and resolve the eval pragmata pin:
+Training:
 
     make eval-train-inputs                  # frozen export -> data/eval-inputs/training/<task>.csv
     make eval-train-seqlen                  # diagnostic: sequence-length truncation per task
     make eval-train TASK=retrieval          # then grounding (2+ hours), then generation
 
-The per-task configurations and the install steps for the GPU host's own environment are in [Synthetic evaluators](synthetic-evaluators.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
-
-For prediction, these targets stage the unlabelled side, apply a chosen evaluator, and turn the result into deliverables. `eval-predict` and `eval-model-calibration` need the same GPU environment training does; everything else here is CPU-only:
+Prediction, and the deliverables that come off it - `eval-predict` and `eval-model-calibration` need the training venv inside the GPU container, the rest run CPU-side:
 
     make eval-predict-inputs POPULATION=annotated       # frozen export, labels stripped -> data/eval-inputs/predict/annotated/
     make eval-predict-inputs POPULATION=corpus          # curated corpus -> data/eval-inputs/predict/corpus/
@@ -430,9 +428,7 @@ For prediction, these targets stage the unlabelled side, apply a chosen evaluato
     make eval-model-metrics                             # evaluator_metrics.csv
     make eval-model-calibration                         # evaluator_calibration.csv (GPU)
 
-Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/`, not at the `<run_id>/` tlmtc would use: tlmtc overwrites that directory without warning, so predicting a second population with the same evaluator would silently replace the first. The populations, the run order, the transport prerequisites, and what each population's numbers may and may not be read as are in [Synthetic evaluators](synthetic-evaluators.md). Read the evaluator-quality caveats there before quoting any corpus-scale synthetic number.
-
-The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
+Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/` rather than at the `<run_id>/` tlmtc would use - [why](synthetic-evaluators.md#where-prediction-output-lands-and-why-it-is-moved). Read the [evaluator-quality caveats](synthetic-evaluators.md#reading-the-numbers) before quoting any corpus-scale synthetic number.
 
 ## 11. Return and archive
 

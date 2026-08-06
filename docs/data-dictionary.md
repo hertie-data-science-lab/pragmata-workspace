@@ -14,6 +14,9 @@
 | **panel** | Retrieval only: the *k* chunk-records of one query. *Complete* means every chunk in it has a submitted response. |
 | **query group** | One query + response across all three tasks: its panel, plus its grounding record and its generation record. |
 | **programme / domain** | The same thing. Configs and CLI say domain (`configs/annotation/domains/`, `DOMAIN=`); the CSVs say `programme`. |
+| **curated corpus** | The curated set of query-response items the annotation datasets were drawn from (`data/publikationsbot/*_combined.curated.jsonl`). Not to be confused with the **document corpus** - the publikationsbot vector store's publications, which is what `corpus_catalog.csv` describes. Unqualified "corpus" in these CSVs means the curated corpus unless the column is a `corpus_catalog.csv` one. |
+| **`annotated`** | A prediction population: the annotated subset of the curated corpus - the frozen export's rows with their labels stripped, so the synthetic metrics describe exactly the items the human metrics do. |
+| **`corpus`** | A prediction population: *all* curated query-response items, a superset of `annotated`, most of which was never annotated. The curated corpus, never the document corpus. |
 
 A **query group owns four content artefacts** - the `query`, the bot's `response`, the retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks rendered as one block) - and each task's records are a *projection* of them, which is why "record" holds different content per task:
 
@@ -26,7 +29,7 @@ query group ── query ── response ── chunks (k, each with text + rank
 
 > Consequence for counting: one query group with k=5 projects into 7 records (1x grounding, 1x generation, 5x retrieval).
 
-**Calibration** records are deliberately overlapped so several annotators see the same thing; they are the only population inter-annotator agreement is computed on. They are *pooled with production* in `annotation_operations.csv` and *kept in* the scored corpus (pragmata's majority consolidation coalesces their extra responses into one item, exactly as it does when passing data for training its synthetic data generation models).
+**Calibration** records are deliberately overlapped so several annotators see the same thing; they are the only population inter-annotator agreement is computed on. They are *pooled with production* in `annotation_operations.csv` and *kept in* the scored item set (pragmata's majority consolidation coalesces their extra responses into one item, exactly as it does when passing data for training the synthetic evaluators).
 
 **The three tasks.** What the annotator is shown, and the labels they set:
 
@@ -95,7 +98,7 @@ The full rules are the annotation protocol; these are the column names the expor
 
 ## `eval_metric_estimates.csv`
 
-- **Purpose:** the corpus metric taxonomy, scored on human labels. 
+- **Purpose:** the curated-corpus metric taxonomy, scored on human labels. 
 - **Grain:** one row per task x metric, pooled across programmes - the taxonomy has no per-programme grain.
 
 | Column | Definition |
@@ -145,7 +148,7 @@ The full rules are the annotation protocol; these are the column names the expor
 
 **Caveats.**
 
-- The source is the curated corpus, a superset of what was annotated - 464 of 1143 queries are annotated.
+- The source is the curated corpus, a superset of what was annotated - 464 of 1143 queries have at least one annotated chunk in their retrieval panel (`panel_started`).
 - `panel_started` and `n_chunks_annotated` are the only columns here derived from annotation state; every other column comes from the curated corpus. They exist because the join that would reproduce them is not available from this bundle: the exports carry no `query_id`, only `record_uuid`, and this file carries no query text. (TODO-DEFERRED - fix this in pragmata)
 
 **How to join this file**, and the row fan-out that makes a naive join wrong, is in [Report deliverables](report-deliverables.md#the-retrieval-manifest).
@@ -196,7 +199,7 @@ The full rules are the annotation protocol; these are the column names the expor
 
 Written as `synthetic_metric_estimates.<population>.csv`, one file per predicted population.
 
-- **Purpose:** the same corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a *synthetic evaluator's* predictions instead of on human labels. Produced by the same `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of `--path`.
+- **Purpose:** the same curated-corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a *synthetic evaluator's* predictions instead of on human labels. Produced by the same `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of `--path`.
 - **Grain:** one row per task x metric, over one predicted population.
 
 Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_metric_estimatescsv) - the row builder is literally shared - with two differences and three additions:

@@ -6,23 +6,23 @@ Producing a set: [the pins](#the-three-pins), then [Refreshing the numbers](#ref
 
 ## The eight CSVs
 
-Seven targets, eight CSVs - `eval-annotation-tables` emits two. All land in `reports/eval/<date>/` (`OUT=` to redirect). One target per script, so each names its own output; `make eval-deliverables` runs all seven in order. The first four read the frozen export and the corpus, the last three need what the GPU host produced ([Synthetic evaluators](synthetic-evaluators.md)).
+Seven targets, eight CSVs - `eval-annotation-tables` emits two. All land in `reports/eval/<date>/` (`OUT=` to redirect). One target per script, so each names its own output; `make eval-deliverables` runs all seven in order. They come in three subsets, named in the table below and used by those names throughout: the **human-annotation** and **fairness-audit** CSVs read the frozen export and the two corpora, while the **synthetic-evaluator** ones need what the GPU host produced ([Synthetic evaluators](synthetic-evaluators.md)).
 
-| Target | Script | Output |
-|---|---|---|
-| `make eval-annotation-tables` | `annotation_tables.py` | `annotation_operations.csv`, `annotation_label_summary.csv` |
-| `make eval-retrieval-manifest` | `retrieval_manifest.py` | `retrieval_manifest.csv` |
-| `make eval-score-human` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
-| `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
-| `make eval-score-synthetic POPULATION=<p>` | `score_synthetic_predictions.py` | `synthetic_metric_estimates.<p>.csv`, via `eval score --prediction-id` |
-| `make eval-model-metrics` | `evaluator_report.py` | `evaluator_metrics.csv` |
-| `make eval-model-calibration` | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
+| Target | Subset | Script | Output |
+|---|---|---|---|
+| `make eval-annotation-tables` | human-annotation | `annotation_tables.py` | `annotation_operations.csv`, `annotation_label_summary.csv` |
+| `make eval-score-human` | human-annotation | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
+| `make eval-retrieval-manifest` | fairness-audit | `retrieval_manifest.py` | `retrieval_manifest.csv` |
+| `make eval-catalog` | fairness-audit | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
+| `make eval-score-synthetic POPULATION=<p>` | synthetic-evaluator | `score_synthetic_predictions.py` | `synthetic_metric_estimates.<p>.csv`, via `eval score --prediction-id` |
+| `make eval-model-metrics` | synthetic-evaluator | `evaluator_report.py` | `evaluator_metrics.csv` |
+| `make eval-model-calibration` | synthetic-evaluator | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
 
 Every CSV ships a `.provenance.json` - script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash - and the data dictionary is copied beside the CSVs whose record pins it. Every declared input is listed - one that was absent when the script ran appears as `"sha256": null, "missing": true`, never by omission.
 
 ## Reading the numbers
 
-The dictionary says when a value is blank and how it was computed. What the numbers *mean* is here. For the three model-side CSVs, see [Synthetic evaluators](synthetic-evaluators.md#reading-the-numbers).
+The dictionary says when a value is blank and how it was computed. What the numbers *mean* is here. For the three synthetic-evaluator CSVs, see [Synthetic evaluators](synthetic-evaluators.md#reading-the-numbers).
 
 ### Agreement (`annotation_label_summary.csv`)
 
@@ -31,7 +31,7 @@ The dictionary says when a value is blank and how it was computed. What the numb
 ### Metric estimates (`eval_metric_estimates.csv`)
 
 - **The intervals cover sampling uncertainty over queries only** - not annotator disagreement, and not label error. A tight interval on a label whose alpha is at or below chance reads as precision that is not there; the `alpha_*` columns exist to stop that reading.
-- **`n` is the filtered population, not the corpus.** Read it beside `n_panels_skipped`: for retrieval, incomplete panels are dropped before scoring, so `n` describes what survived rather than what was retrieved. It is prevented during annotation, not at scoring: [`--tag-partial-panels`](IMPLEMENTATION-GUIDE.md#81-when-annotation-counts-as-done).
+- **`n` is the filtered population, not the curated corpus it was drawn from.** Read it beside `n_panels_skipped`: for retrieval, incomplete panels are dropped before scoring, so `n` describes what survived rather than what was retrieved. It is prevented during annotation, not at scoring: [`--tag-partial-panels`](IMPLEMENTATION-GUIDE.md#81-when-annotation-counts-as-done).
 
 ### The retrieval manifest
 
@@ -72,7 +72,7 @@ The runbook for producing a new set of these CSVs. It moves all three pins and r
 2. **Export and snapshot**: `make annotation-export`, then `make annotation-log`.
 3. **Freeze and write the pin**: `make annotation-freeze`. DATE and RUN_AT both derive from the export tree's own `created_at`; pass `DATE=` or `RUN_AT=` to override either. Guards before the copy: clean working tree, no freeze under that date already, no real names left in `exports/`, and a RUN_AT that is schema-current and consistent with the export - one earlier than the export, or implausibly later, is refused whether it was derived or passed in. It takes the same `.export.lock` that `export.sh` takes, so it cannot copy a tree the cron is halfway through rewriting. Only then does it make the read-only dated copy and write `configs/eval/freeze.conf`. A failed copy or `chmod` removes the partial dated directory, so a later run cannot mistake it for a real freeze.
 4. **Commit the pin.** Until it is committed, another checkout still resolves the old date.
-5. **Regenerate on the clean tree.** `make eval-deliverables` runs all seven, but the last three need the GPU host's `train_outputs/` and `prediction_outputs/` copied in first ([Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out)). For a human-label-only refresh, run the first four: `make eval-annotation-tables eval-retrieval-manifest eval-score-human eval-catalog`.
+5. **Regenerate on the clean tree.** `make eval-deliverables` runs all seven, but the synthetic-evaluator three need the GPU host's `train_outputs/` and `prediction_outputs/` copied in first ([Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out)). For a human-label-only refresh, run the human-annotation and fairness-audit targets: `make eval-annotation-tables eval-retrieval-manifest eval-score-human eval-catalog`.
 6. **Re-pin the bundle**, if one already exists. `repro-pin` refuses a pre-existing bundle directory and `pins.sha256` is generated rather than hand-edited, so: delete the old directory, re-pin, commit.
 7. **Publish**: `make transfer-push SRC=data/annotation/exports-frozen/<date> PREFIX=exports-frozen/<date>`. To check Blob without pulling, download the remote `MANIFEST.sha256` and diff it against a freshly computed local one - comparing push's own printed hash is circular.
 

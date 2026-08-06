@@ -49,8 +49,8 @@ by a bundle, plus the most recent.
 | `2026-08-06-eval-report/` | freeze | The canonical data behind every number in the BSt report: the pseudonymised export (41 files), the tiered report CSVs with their `.provenance.json` files and data dictionary (20 files), and the three evaluator training runs' metadata, evaluation and adapter weights (61 files). Supersedes `2026-07-31-eval-report/` (seeded alpha CIs; adds the synthetic-evaluator deliverables). |
 
 The lineage composes to an end state of **4,244 records** across 48 datasets — the
-2026-07-01 keep-lists, since the descope is retired. That matches live. Whether it still
-does is what `repro-reproduce`'s preview tells you; it is not an assumption.
+2026-07-01 keep-lists, since the descope is retired. Whether live still matches that is what
+`repro-reproduce`'s preview tells you; it is not an assumption.
 
 Composition is per keep-list **override, not union** — a later bundle's
 `<workspace>__<dataset>.ids` replaces the earlier one wholesale, because a keep-list

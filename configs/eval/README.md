@@ -1,3 +1,5 @@
+# configs/eval/
+
 Evaluation-stage configs. Mirrors `configs/annotation/`.
 
 - `freeze.conf` — the canonical freeze pin every report number rests on, written by

@@ -35,8 +35,8 @@
 # Eval deliverables (reports/eval/<date>/, one CSV + its .provenance.json each):
 #   make eval-annotation-tables            # annotation counts + per-label prevalence
 #   make eval-retrieval-manifest           # what the retriever returned per query
-#   make eval-score-human                  # the corpus metric estimates from human labels
-#   make eval-catalog                      # the corpus catalog for the fairness audit
+#   make eval-score-human                  # the curated-corpus metric estimates from human labels
+#   make eval-catalog                      # the document-corpus catalog for the fairness audit
 #   make eval-deliverables                 # all seven deliverable targets, in order
 # The first four read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
@@ -48,7 +48,8 @@
 #   make eval-train TASK=retrieval         # train one evaluator (grounding is 2+ hours)
 # See docs/synthetic-evaluators.md for the per-task config and what was tried and rejected.
 #
-# Eval prediction (applying the trained evaluators; same environment as training - GPU host):
+# Eval prediction (applying the trained evaluators: prediction runs on the GPU host in the same
+# environment as training, while scoring and the metrics tables run CPU-side):
 #   make eval-predict-inputs POPULATION=annotated       # -> data/eval-inputs/predict/annotated/
 #   make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
 #   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
@@ -239,8 +240,9 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 
 # --- eval prediction (applying the evaluators; see docs/synthetic-evaluators.md) ---
 #
-# Same environment split as training: staging and scoring are CPU-only and run anywhere,
-# `eval-predict` needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).
+# Same environment split as training: staging is CPU-only and runs anywhere; scoring needs the CPU
+# box's workspace venv + PRAGMATA_EVAL_SRC, since it goes through the eval pin; and `eval-predict`
+# needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).
 # There are no YAML configs here on purpose - population and evaluator run id are arguments,
 # because until the final run nothing is published for a pin to stand behind.
 
