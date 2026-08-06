@@ -124,9 +124,9 @@ FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
-# The full generated probe set the curation selected from - everything querygen/publikationsbot
+# The all-generated set the curation selected from - everything querygen/publikationsbot
 # produced that combined cleanly (failures live in the .errors/.no_retrieval siblings). A
-# superset of the curated files; the `generated` prediction population reads these.
+# superset of the curated files; the `all-generated` prediction population reads these.
 COMBINED_SUFFIX = "_combined.jsonl"
 
 # Excluded from every report output, decided 2026-07-30: the programme was seeded in
@@ -246,19 +246,20 @@ def resolve_exports(exports: Path) -> Path:
     )
 
 
-def resolve_probes_dir(
+def resolve_all_generated_dir(
     explicit: Path | None = None, suffix: str = COMBINED_SUFFIX
 ) -> Path:
-    """The directory holding the generated probe-set JSONLs, wherever this box has it.
+    """The directory holding the all-generated JSONLs, wherever this box has it.
 
     The same two-place rule ``resolve_exports`` applies to the export tree, for the same
-    reason: the probe-set files are produced on the CPU box under ``data/publikationsbot/``
-    and reach the GPU box through the Blob, where ``transfer-pull`` can only land them at
-    ``data/transfer/publikationsbot/``. An explicit path is honoured untouched.
+    reason: the all-generated JSONLs are produced on the CPU box under
+    ``data/publikationsbot/`` and reach the GPU box through the Blob, where ``transfer-pull``
+    can only land them at ``data/transfer/publikationsbot/``. An explicit path is honoured
+    untouched.
     """
     if explicit is not None:
         if not explicit.is_dir():
-            raise SystemExit(f"no probe-set directory at {explicit}")
+            raise SystemExit(f"no all-generated directory at {explicit}")
         return explicit
     if any(ws.OUT_DIR.glob(f"*{suffix}")):
         return ws.OUT_DIR
@@ -273,7 +274,8 @@ def resolve_probes_dir(
     raise SystemExit(
         f"no *{suffix} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
         f"  Nor a pulled copy at {staged.relative_to(ws.ROOT)}.\n"
-        "  The probe-set JSONLs are produced on the CPU box; on the GPU host pull them first:\n"
+        "  The all-generated JSONLs are produced on the CPU box; on the GPU host pull them\n"
+        "  first:\n"
         "    make transfer-pull PREFIX=publikationsbot"
     )
 
@@ -587,8 +589,8 @@ def require_fresh_staged_csv(
       it; training has one pooled CSV per task and no such key.
     - ``check_freeze``. Every training input is pooled from the frozen export, so a moved
       pin always makes it the previous dataset; on the prediction side only the annotated
-      population is, the generated population being pinned by the per-source sha256s and
-      the curation-pin comparison in its own sidecar instead.
+      population is, the all-generated population being pinned by the per-source sha256s
+      and the curation-pin comparison in its own sidecar instead.
     """
     if not path.exists():
         raise SystemExit(f"no staged CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")

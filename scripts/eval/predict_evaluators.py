@@ -12,12 +12,12 @@ Two populations answer the published questions, and a third is internal:
 - `annotated` - the same rows the human-label metrics were scored on, pooled from the frozen
   canonical export with the labels stripped. Predicting these is what makes evaluator output
   comparable against a human baseline at all.
-- `generated` - the full generated probe set (`*_combined.jsonl`), i.e. everything
+- `all-generated` - the all-generated set (`*_combined.jsonl`), i.e. everything
   querygen/publikationsbot produced that combined cleanly - a superset of the curated
   selection the annotations were drawn from. Predicting these gives at-scale prevalence
   estimates, with no baseline to check them against. (A `corpus` population - the
   capacity-curated selection - existed through the pinned 2026-08-06 deliverables and
-  remains in that bundle; it was retired in favour of `generated`.)
+  remains in that bundle; it was retired in favour of `all-generated`.)
 - `testsplit` - a run's own held-out split, staged by `evaluator_report.py calibration` rather
   than by `predict-inputs`, and re-predicted only for the per-item probabilities the
   reliability curves need. A manual re-run must name the run the split was staged from.
@@ -58,8 +58,9 @@ PREDICT_INPUTS = ws.DATA_DIR / "eval-inputs" / "predict"
 
 # Populations `predict-inputs` builds. `testsplit` is a third one that `predict` accepts but
 # this subcommand does not build: evaluator_report.py stages it per run from that run's own
-# held-out split, which is a property of a training run rather than of the probe set.
-STAGED_POPULATIONS = ("annotated", "generated")
+# held-out split, which is a property of a training run rather than of the predicted
+# population.
+STAGED_POPULATIONS = ("annotated", "all-generated")
 PREDICT_POPULATIONS = (*STAGED_POPULATIONS, "testsplit")
 
 # See train_evaluators.py's own note: set here rather than left to the Makefile so a direct
@@ -87,20 +88,20 @@ IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "generation": ("record_uuid",),
 }
 
-# Identity carried from the probe-set files that the export lacks.
+# Identity carried from the all-generated JSONLs that the export lacks.
 # `query_id` is the querygen spec's own id - the join key retrieval_manifest.csv and
 # corpus_catalog.csv are keyed on, and the one thing the annotation exports lack (see the
 # data dictionary's note on joining). `doc_id` is per chunk, so retrieval only.
-PROBE_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
+ALL_GENERATED_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": ("query_id", "doc_id"),
     "grounding": ("query_id",),
     "generation": ("query_id",),
 }
 
-# The curation bundle whose pins each source JSONL is checked against. The raw generated
-# files are not pinned there (pin_sha256 comes out null and the recorded sha256 is the
-# population's identity); a curated file, if ever staged again, would be compared for real.
-# Either way the outcome is recorded - see _probe_pin_records.
+# The curation bundle whose pins each source JSONL is checked against. The raw
+# *_combined.jsonl files are not pinned there (pin_sha256 comes out null and the recorded
+# sha256 is the population's identity); a curated file, if ever staged again, would be
+# compared for real. Either way the outcome is recorded - see _all_generated_pin_records.
 CURATION_PINS = (
     ws.ROOT / "reproducibility" / "2026-07-01-annotation-curation" / "pins.sha256"
 )
@@ -263,7 +264,7 @@ def stage_annotated(exports: Path) -> int:
     return 0
 
 
-# --- predict-inputs: the generated population ---------------------------------------------
+# --- predict-inputs: the all-generated population -----------------------------------------
 
 
 def _read_pins(path: Path) -> dict[str, str]:
@@ -283,7 +284,7 @@ def _read_pins(path: Path) -> dict[str, str]:
     return pins
 
 
-def _probe_pin_records(paths: list[Path]) -> list[dict]:
+def _all_generated_pin_records(paths: list[Path]) -> list[dict]:
     """Each source JSONL's sha256 beside the curation bundle's pin for it, matched or not.
 
     The comparison outcome is recorded either way, never only on success: "these are the same
@@ -315,8 +316,8 @@ def _probe_pin_records(paths: list[Path]) -> list[dict]:
     return records
 
 
-def stage_generated(probes_dir: Path) -> int:
-    """Stage the full generated probe set as unlabelled per-task CSVs.
+def stage_all_generated(all_generated_dir: Path) -> int:
+    """Stage the all-generated set as unlabelled per-task CSVs.
 
     The text columns are built the way pragmata builds the Argilla fields at annotation
     import, read out of its own `record_builder`: retrieval pairs the query with each CHUNK's
@@ -325,13 +326,13 @@ def stage_generated(probes_dir: Path) -> int:
     NOT something pragmata assembles out of the chunk texts, which is the one assumption here
     worth checking in the source rather than guessing at.
 
-    `record_uuid` comes from pragmata's own `derive_record_uuid`, so a generated row and the
-    export row for the same pair carry the SAME identity. That is what makes the two
-    populations comparable, and it is also what makes generated retrieval panels groupable at all:
-    every chunk of a pair is staged, so a generated panel is complete by construction and
-    `--skip-incomplete-panels` has nothing to drop.
+    `record_uuid` comes from pragmata's own `derive_record_uuid`, so an all-generated row and
+    the export row for the same pair carry the SAME identity. That is what makes the two
+    populations comparable, and it is also what makes all-generated retrieval panels groupable
+    at all: every chunk of a pair is staged, so an all-generated panel is complete by
+    construction and `--skip-incomplete-panels` has nothing to drop.
 
-    The population is "every probe-set record that satisfies pragmata's import contract",
+    The population is "every all-generated record that satisfies pragmata's import contract",
     which is the same set that could have been annotated - a record the contract rejects (a
     query whose retrieval returned no chunks, say) could never have reached Argilla either.
     Rejects are counted and recorded rather than silently dropped, and an all-reject file is
@@ -346,13 +347,13 @@ def stage_generated(probes_dir: Path) -> int:
         from pragmata.core.schemas.annotation_import import QueryResponsePair
     except ImportError as exc:
         raise SystemExit(
-            f"probe-set staging needs pragmata's annotation import schema: {exc}\n"
+            f"all-generated staging needs pragmata's annotation import schema: {exc}\n"
             "  It imports argilla, which the GPU host's training venv does not install.\n"
-            "  Stage the generated population on the CPU box and transfer the CSVs, or install\n"
-            "  argilla there. See docs/synthetic-evaluators.md."
+            "  Stage the all-generated population on the CPU box and transfer the CSVs, or\n"
+            "  install argilla there. See docs/synthetic-evaluators.md."
         ) from exc
 
-    paths = sorted(probes_dir.glob(f"*{ec.COMBINED_SUFFIX}"))
+    paths = sorted(all_generated_dir.glob(f"*{ec.COMBINED_SUFFIX}"))
     programmes = []
     rows: dict[str, list[dict]] = {task: [] for task in ec.TASKS}
     n_valid = n_invalid = 0
@@ -376,7 +377,8 @@ def stage_generated(probes_dir: Path) -> int:
             try:
                 pair = QueryResponsePair.model_validate(payload)
             # Broad: pydantic raises ValidationError, but importing it here just to name it
-            # would tie probe-set staging to a pydantic version this workspace does not pin.
+            # would tie all-generated staging to a pydantic version this workspace does not
+            # pin.
             except Exception as exc:
                 invalid += 1
                 if invalid == 1:
@@ -426,8 +428,8 @@ def stage_generated(probes_dir: Path) -> int:
             raise SystemExit(
                 f"{path}: not one of its {invalid} record(s) satisfies pragmata's import "
                 "contract.\n"
-                "  That is a source problem, not a filter: check the JSONL is the "
-                "generated probe set and not\n  an intermediate batch."
+                "  That is a source problem, not a filter: check the JSONL is from the "
+                "all-generated set and not\n  an intermediate batch."
             )
         print(f"  {programme}: {valid} record(s), {invalid} rejected", file=sys.stderr)
         n_valid += valid
@@ -435,10 +437,10 @@ def stage_generated(probes_dir: Path) -> int:
 
     if not programmes:
         raise SystemExit(
-            f"no *{ec.COMBINED_SUFFIX} under {probes_dir} outside the excluded set."
+            f"no *{ec.COMBINED_SUFFIX} under {all_generated_dir} outside the excluded set."
         )
 
-    pin_records = _probe_pin_records(used_paths)
+    pin_records = _all_generated_pin_records(used_paths)
     matched = sum(1 for r in pin_records if r["matches_curation_pin"])
     print(
         f"curation pins: {matched} of {len(pin_records)} source file(s) match "
@@ -452,13 +454,14 @@ def stage_generated(probes_dir: Path) -> int:
         keep = [
             *ec.TEXT_COLUMNS[task],
             *IDENTITY_COLUMNS[task],
-            *PROBE_IDENTITY_COLUMNS[task],
+            *ALL_GENERATED_IDENTITY_COLUMNS[task],
             "source_domain",
         ]
         frame = frame[keep]
-        # The same pair can appear in two programmes' probe-set files, and derive_record_uuid is
-        # content-addressed, so the duplicate collapses to one identity. Dropped here rather
-        # than left to the scorer, which rejects duplicate scoring units outright.
+        # The same pair can appear in two programmes' all-generated JSONLs, and
+        # derive_record_uuid is content-addressed, so the duplicate collapses to one identity.
+        # Dropped here rather than left to the scorer, which rejects duplicate scoring units
+        # outright.
         before = len(frame)
         frame = frame.drop_duplicates(subset=list(ec.ITEM_KEYS[task]), keep="first")
         if before != len(frame):
@@ -466,11 +469,11 @@ def stage_generated(probes_dir: Path) -> int:
                 f"  {task}: dropped {before - len(frame)} duplicate item(s)",
                 file=sys.stderr,
             )
-        _check_text_columns(frame, task, f"{task} (generated)")
+        _check_text_columns(frame, task, f"{task} (all-generated)")
         staged[task] = frame
 
     for task, frame in staged.items():
-        target = PREDICT_INPUTS / "generated" / f"{task}.csv"
+        target = PREDICT_INPUTS / "all-generated" / f"{task}.csv"
         write_staged(
             target,
             frame,
@@ -478,15 +481,15 @@ def stage_generated(probes_dir: Path) -> int:
                 "inputs": used_paths,
                 "pragmata_src": src_root,
                 "task": task,
-                "population": "generated",
+                "population": "all-generated",
                 "programmes": programmes,
                 "excluded_programmes": sorted(ec.EXCLUDED_PROGRAMMES),
-                "probes_dir": str(
-                    probes_dir.relative_to(ws.ROOT)
-                    if probes_dir.is_relative_to(ws.ROOT)
-                    else probes_dir
+                "all_generated_dir": str(
+                    all_generated_dir.relative_to(ws.ROOT)
+                    if all_generated_dir.is_relative_to(ws.ROOT)
+                    else all_generated_dir
                 ),
-                "probe_sources": pin_records,
+                "all_generated_sources": pin_records,
                 "curation_pins": str(CURATION_PINS.relative_to(ws.ROOT)),
                 "n_records_valid": n_valid,
                 "n_records_rejected": n_invalid,
@@ -515,9 +518,9 @@ def staged_csv(task: str, population: str) -> tuple[Path, dict]:
     population, and the directory name alone is not evidence of what is in it.
 
     The freeze check applies to the annotated population only, because it is the only one
-    pooled from the export. The generated population's own provenance is the per-source sha256s
-    and the curation-pin comparison in its sidecar, which staging records and this echoes.
-    `testsplit` is staged per run rather than by a make target, so its hint says so.
+    pooled from the export. The all-generated population's own provenance is the per-source
+    sha256s and the curation-pin comparison in its sidecar, which staging records and this
+    echoes. `testsplit` is staged per run rather than by a make target, so its hint says so.
     """
     path = PREDICT_INPUTS / population / f"{task}.csv"
     rebuild = (
@@ -590,8 +593,8 @@ def predict(
     guard of any kind: predicting a second population with the same evaluator OVERWRITES the
     first, silently, and pragmata's `pragmata_predict.meta.json` is rewritten to match, so
     afterwards nothing on disk says which population the numbers describe. Three populations
-    per evaluator (annotated, generated, and each run's own test split) makes that a certainty
-    rather than a risk.
+    per evaluator (annotated, all-generated, and each run's own test split) makes that a
+    certainty rather than a risk.
 
     So a successful run's output tree is MOVED to `prediction_outputs/<run_id>-<population>/`.
     That name is still scoreable, which is the constraint the scheme had to satisfy:
@@ -690,10 +693,11 @@ def predict(
     # A provenance record inside the final directory, because that directory is what gets
     # pushed off the GPU box and read months later. pragmata's own pragmata_predict.meta.json
     # carries run_id, task and the input path; nothing there names the population, the freeze
-    # or probe-set pins behind the input, or the commit of this workspace that filed it - and the
-    # directory name is this workspace's invention, so it has to be explained from inside. The
-    # `.workspace.` infix is load-bearing: data/eval/ is pragmata's tool tree by the ownership
-    # rule in docs/report-deliverables.md, so a file this workspace wrote there has to say so in its name.
+    # or the all-generated pins behind the input, or the commit of this workspace that filed
+    # it - and the directory name is this workspace's invention, so it has to be explained from
+    # inside. The `.workspace.` infix is load-bearing: data/eval/ is pragmata's tool tree by the
+    # ownership rule in docs/report-deliverables.md, so a file this workspace wrote there has to
+    # say so in its name.
     record = ws.provenance(
         script="scripts/eval/predict_evaluators.py",
         inputs=[csv_path],
@@ -714,7 +718,7 @@ def predict(
                 # just established they are the same one, and recording it is what lets a
                 # testsplit directory say whose split it holds without the sidecar beside it.
                 "evaluator_run_id",
-                "probe_sources",
+                "all_generated_sources",
                 "n_records_valid",
                 "n_records_rejected",
                 "grain",
@@ -757,11 +761,11 @@ def main() -> int:
         help="Annotation export tree to pool (default: the frozen canonical export).",
     )
     inputs_parser.add_argument(
-        "--probes-dir",
+        "--all-generated-dir",
         type=Path,
         default=None,
         help=(
-            "Directory holding the generated probe-set *_combined.jsonl files "
+            "Directory holding the all-generated *_combined.jsonl files "
             "(default: data/publikationsbot/, falling back to data/transfer/publikationsbot/)."
         ),
     )
@@ -775,7 +779,7 @@ def main() -> int:
         choices=list(PREDICT_POPULATIONS),
         required=True,
         help=(
-            "annotated|generated are staged by predict-inputs. testsplit is internal: "
+            "annotated|all-generated are staged by predict-inputs. testsplit is internal: "
             "evaluator_report.py calibration stages a run's own held-out split and predicts "
             "it in one pass, so a manual re-run must pass the --evaluator-run-id that split "
             "was staged from."
@@ -812,8 +816,10 @@ def main() -> int:
     if args.command == "predict-inputs":
         if args.population == "annotated":
             return stage_annotated(ec.resolve_exports(args.exports))
-        return stage_generated(
-            ec.resolve_probes_dir(args.probes_dir, suffix=ec.COMBINED_SUFFIX)
+        return stage_all_generated(
+            ec.resolve_all_generated_dir(
+                args.all_generated_dir, suffix=ec.COMBINED_SUFFIX
+            )
         )
 
     predict(

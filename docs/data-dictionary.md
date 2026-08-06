@@ -16,7 +16,7 @@
 | **programme / domain** | The same thing. Configs and CLI say domain (`configs/annotation/domains/`, `DOMAIN=`); the CSVs say `programme`. |
 | **curated corpus** | The curated set of query-response items the annotation datasets were drawn from (`data/publikationsbot/*_combined.curated.jsonl`). Not to be confused with the **document corpus** - the publikationsbot vector store's publications, which is what `corpus_catalog.csv` describes. Unqualified "corpus" in these CSVs means the curated corpus unless the column is a `corpus_catalog.csv` one. |
 | **`annotated`** | A prediction population: the annotated subset of the curated corpus - the frozen export's rows with their labels stripped, so the synthetic metrics describe exactly the items the human metrics do. |
-| **`generated`** | A prediction population: the *full* generated probe set (`*_combined.jsonl`) - every query-response record querygen/publikationsbot produced that combined cleanly, a superset of both `annotated` and the curated corpus. Never the document corpus. (A retired `corpus` population - the capacity-curated selection - appears in the pinned 2026-08-06 deliverables.) |
+| **`all-generated`** | A prediction population: the *full* all-generated set (`*_combined.jsonl`) - every query-response record querygen/publikationsbot produced that combined cleanly, a superset of both `annotated` and the curated corpus. Never the document corpus. (A retired `corpus` population - the capacity-curated selection - appears in the pinned 2026-08-06 deliverables.) |
 
 A **query group owns four content artefacts** - the `query`, the bot's `response`, the retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks rendered as one block) - and each task's records are a *projection* of them, which is why "record" holds different content per task:
 
@@ -211,10 +211,10 @@ Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_
 | `source_labels` | Unchanged in meaning: which label(s) the *metric's formula* reads. It is what says whether a metric rests on a label this evaluator was trained for at all. |
 | `evaluator_run_id` | The training run whose model produced the predictions. Joins to `evaluator_metrics.csv`'s `training`, and to that run's `train_provenance.workspace.json`. |
 | `prediction_id` | The prediction directory these numbers were scored from, `<evaluator_run_id>-<population>`. What `eval score --prediction-id` was given. |
-| `population` | Which unlabelled rows were predicted: `annotated` (the frozen export with labels stripped - the rows the human metrics describe) or `generated` (the full generated probe set, most of which was never annotated; the pinned 2026-08-06 files carry the retired `corpus` value - the capacity-curated selection - instead). |
+| `population` | Which unlabelled rows were predicted: `annotated` (the frozen export with labels stripped - the rows the human metrics describe) or `all-generated` (the full all-generated set, most of which was never annotated; the pinned 2026-08-06 files carry the retired `corpus` value - the capacity-curated selection - instead). |
 | `status` | As in the human CSV, plus **`evaluator_labels_incomplete`**: the evaluator does not predict a label pragmata's score contract requires, so the metric was not computed. This is grounding, always - see below. |
 
-**How to read these numbers** - the in-sample `annotated` population, the evaluator-quality caveat on `generated`, the always-zero grounding rows, and why retrieval's `n` is not comparable across populations - is in [Synthetic evaluators](synthetic-evaluators.md#the-synthetic-estimates).
+**How to read these numbers** - the in-sample `annotated` population, the evaluator-quality caveat on `all-generated`, the always-zero grounding rows, and why retrieval's `n` is not comparable across populations - is in [Synthetic evaluators](synthetic-evaluators.md#the-synthetic-estimates).
 
 ## `evaluator_metrics.csv`
 

@@ -65,11 +65,11 @@ They answer different questions.
 
 **`annotated`** is the frozen export with the labels stripped - the same rows `eval_metric_estimates.csv` describes, pooled exactly as training pools them, so each synthetic metric reads straight beside its human counterpart. Two things differ from the training staging, both forced. Every label column is dropped, because pragmata's `validate_eval_predict_frame` does not merely ignore the task's labels, it *rejects* them. And rows are reduced to one per item: the export carries one row per annotator, and with the labels gone those are exact duplicates. The grain is the one pragmata consolidates to anyway, so this removes redundancy, not population - landing on the same 1,561 / 447 / 713 items `eval-train-seqlen` reports.
 
-**`generated`** is the full generated probe set, `data/publikationsbot/*_combined.jsonl` - everything querygen/publikationsbot produced that combined cleanly (failures sit in the `.errors`/`.no_retrieval` siblings), a superset of the capacity-curated selection the annotations were drawn from. Until 2026-08-06 this stage predicted a `corpus` population instead - the curated selection, `*_combined.curated.jsonl`; those artefacts remain in the pinned 2026-08-06 bundle. Its text columns are built by pragmata's own import code, so they match the Argilla fields exactly: retrieval pairs the query with each *chunk's* text, grounding pairs the answer with `context_set`, generation pairs the query with the answer. Note `context_set` is a field of the import record carried through verbatim, not assembled from the chunk texts.
+**`all-generated`** is the all-generated set, `data/publikationsbot/*_combined.jsonl` - everything querygen/publikationsbot produced that combined cleanly (failures sit in the `.errors`/`.no_retrieval` siblings), a superset of the capacity-curated selection the annotations were drawn from. Until 2026-08-06 this stage predicted a `corpus` population instead - the curated selection, `*_combined.curated.jsonl`; those artefacts remain in the pinned 2026-08-06 bundle. Its text columns are built by pragmata's own import code, so they match the Argilla fields exactly: retrieval pairs the query with each *chunk's* text, grounding pairs the answer with `context_set`, generation pairs the query with the answer. Note `context_set` is a field of the import record carried through verbatim, not assembled from the chunk texts.
 
-Record identity comes from pragmata's own deriving function, so a generated row and the export row for the same pair carry the *same* `record_uuid`. That is what makes the two populations comparable, and why generated retrieval panels are complete by construction - every chunk of a pair is staged, so `--skip-incomplete-panels` has nothing to drop. The population is every generated record satisfying pragmata's import contract: a record the contract rejects (a query whose retrieval returned no chunks, say) could never have been annotated either. Rejects are counted in the sidecar rather than silently dropped, and a file of nothing but rejects is fatal.
+Record identity comes from pragmata's own deriving function, so an all-generated row and the export row for the same pair carry the *same* `record_uuid`. That is what makes the two populations comparable, and why all-generated retrieval panels are complete by construction - every chunk of a pair is staged, so `--skip-incomplete-panels` has nothing to drop. The population is every all-generated record satisfying pragmata's import contract: a record the contract rejects (a query whose retrieval returned no chunks, say) could never have been annotated either. Rejects are counted in the sidecar rather than silently dropped, and a file of nothing but rejects is fatal.
 
-A third population, **`testsplit`**, is not staged by `eval-predict-inputs`: `evaluator_report.py calibration` stages one per run from that run's own held-out split, which is a property of a training run rather than of the probe set. `make eval-predict POPULATION=testsplit` accepts it so the pass can be repeated by hand, but `RUN_ID` must then name the run the split came from - predicting it with a different evaluator would fill that evaluator's directory with another run's calibration data.
+A third population, **`testsplit`**, is not staged by `eval-predict-inputs`: `evaluator_report.py calibration` stages one per run from that run's own held-out split, which is a property of a training run rather than of the predicted population. `make eval-predict POPULATION=testsplit` accepts it so the pass can be repeated by hand, but `RUN_ID` must then name the run the split came from - predicting it with a different evaluator would fill that evaluator's directory with another run's calibration data.
 
 ## Where prediction output lands, and why it is moved
 
@@ -79,16 +79,16 @@ So `eval-predict` **moves** a completed run's output to `data/eval/prediction_ou
 
 ## Getting the data in and out
 
-The transport is the [Blob pipe](data-transport.md); this stage adds one prefix, `publikationsbot/`. Do this before the run order below - the generated population will not stage without it.
+The transport is the [Blob pipe](data-transport.md); this stage adds one prefix, `publikationsbot/`. Do this before the run order below - the all-generated population will not stage without it.
 
-**The generated population needs the probe-set JSONLs** (`data/publikationsbot/`), which are produced on the CPU box and are not part of the frozen export, so they travel separately:
+**The all-generated population needs the all-generated JSONLs** (`*_combined.jsonl`, under `data/publikationsbot/`), which are produced on the CPU box and are not part of the frozen export, so they travel separately:
 
 ```bash
 make transfer-push SRC=data/publikationsbot PREFIX=publikationsbot   # CPU box
 make transfer-pull PREFIX=publikationsbot                            # GPU box, +verify
 ```
 
-`eval-predict-inputs POPULATION=generated` looks in `data/publikationsbot/` first and falls back to `data/transfer/publikationsbot/`, saying which it settled on - the same two-place rule training applies to the export tree. `PROBES_DIR=` overrides both, and an explicitly named directory is never silently substituted.
+`eval-predict-inputs POPULATION=all-generated` looks in `data/publikationsbot/` first and falls back to `data/transfer/publikationsbot/`, saying which it settled on - the same two-place rule training applies to the export tree. `ALL_GENERATED_DIR=` overrides both, and an explicitly named directory is never silently substituted.
 
 **Push the checkpoints and predictions off the box before it is torn down.** Not optional housekeeping: everything else is reproducible from pinned inputs and code, but checkpoints are not - and the runs behind the report's own numbers were never pushed, and went with the container.
 
@@ -117,17 +117,17 @@ export PY=$HOME/train-venv/bin/python                  # GPU container, from her
 make eval-train TASK=retrieval PY=$PY                  # then grounding, generation
 
 make eval-predict-inputs POPULATION=annotated          # CPU-only, either box
-make eval-predict-inputs POPULATION=generated          # pull the probe-set JSONLs first (above)
+make eval-predict-inputs POPULATION=all-generated      # pull the all-generated JSONLs first (above)
 make eval-predict TASK=retrieval  POPULATION=annotated RUN_ID=<retrieval-run>  PY=$PY
 make eval-predict TASK=grounding  POPULATION=annotated RUN_ID=<grounding-run>  PY=$PY BATCH_SIZE=4
 make eval-predict TASK=generation POPULATION=annotated RUN_ID=<generation-run> PY=$PY
-# ...and the same three with POPULATION=generated
+# ...and the same three with POPULATION=all-generated
 make eval-model-calibration PY=$PY                     # re-predicts each run's own test split
 
 # back on the CPU box from here down - scoring needs the workspace venv and PRAGMATA_EVAL_SRC
 make eval-model-metrics                                # evaluator_metrics.csv
 make eval-score-synthetic POPULATION=annotated
-make eval-score-synthetic POPULATION=generated
+make eval-score-synthetic POPULATION=all-generated
 ```
 
 Only the GPU lines need `PY=`. `RUN_ID` is optional, but treat it as required: omitted, the script resolves the latest evaluator for the task, prints that it did, and records it - right for a scratch run, wrong for a published one, because "latest" is a property of the box rather than of the numbers. Pass it for anything whose output leaves the machine.
@@ -138,7 +138,7 @@ Each stage writes two records, one per side of the staging boundary, and the inp
 
 **The staged CSV** ships a `.provenance.json` naming its inputs, what was filtered or dropped, and `output_sha256` - the CSV's own bytes. Training's names the freeze date and the programmes that contributed rows; prediction's names the population, the grain, and the label columns it dropped. `eval-train` and `eval-predict` both refuse to start unless that record is present and matches the CSV on disk. `eval-train`, `eval-train-seqlen` and `eval-predict POPULATION=annotated` additionally require it to name the freeze `configs/eval/freeze.conf` currently pins: without that the pin could move while a stale CSV is silently predicted on, since nothing downstream re-reads where the staged rows came from. `POPULATION=testsplit` requires it to name the evaluator run being applied.
 
-The generated population has no freeze, so its record carries the equivalent: each source JSONL's `sha256` beside the pin for it in [`reproducibility/2026-07-01-annotation-curation/pins.sha256`](../reproducibility/2026-07-01-annotation-curation/pins.sha256), and the comparison outcome. That outcome is recorded **either way** - the raw `*_combined.jsonl` files are not pinned by the curation bundle, so these come out `pin_sha256: null` - the recorded sha256s are the population's identity. (The retired `corpus` population's curated sources did carry pins, and matched.)
+The all-generated population has no freeze, so its record carries the equivalent: each source JSONL's `sha256` beside the pin for it in [`reproducibility/2026-07-01-annotation-curation/pins.sha256`](../reproducibility/2026-07-01-annotation-curation/pins.sha256), and the comparison outcome. That outcome is recorded **either way** - the raw `*_combined.jsonl` files are not pinned by the curation bundle, so these come out `pin_sha256: null` - the recorded sha256s are the population's identity. (The retired `corpus` population's curated sources did carry pins, and matched.)
 
 **The run output** then gets a `train_provenance.workspace.json` or `predict_provenance.workspace.json` in its own directory, so the record travels with the run when it is pushed off the box. Both name the workspace git sha and dirty flag, the resolved pragmata eval source, and the staged CSV with its sha256; training adds the freeze date and the full merged configuration, prediction adds the evaluator run and whether it was given or resolved, the resolved `predict_kwargs`, and the evaluator's `label_names`.
 
@@ -155,8 +155,8 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 **Read the two files together.** A population rate produced by a model whose AUC is near chance is not a measurement. The intervals here cover sampling uncertainty over queries *only* - they say nothing about the evaluator being wrong, which is the dominant source of error for two of the three tasks.
 
 - **`annotated` is largely in-sample.** Each evaluator's train and validation splits are roughly three quarters of exactly these items (retrieval 1,152 of 1,561; grounding 335 of 447; generation 530 of 713), so an estimate here is optimistic about the evaluator by an unknown amount. It is the right population for "does the evaluator reproduce the human metric" and the wrong one for "how good is the evaluator".
-- **`generated` is the full probe set at scale, with no human baseline at all**, and for grounding and generation it carries the evaluator-quality caveat in full: generation's evaluator shows majority-class collapse on its two highest-prevalence labels (F1 0.93 against an AUC of 0.53), and grounding's is directional at best on two of its three trained labels. Read those rates as an indication of what a better evaluator would be measuring.
-- **Retrieval's `n` differs sharply between the two populations.** `--skip-incomplete-panels` drops 283 of 464 panels on `annotated`, exactly as for the human run, because annotation coverage is partial; generated panels are complete by construction, so a generated run drops none. The two `n` are not comparable without reading `n_panels_skipped` beside them.
+- **`all-generated` is the whole set at scale, with no human baseline at all**, and for grounding and generation it carries the evaluator-quality caveat in full: generation's evaluator shows majority-class collapse on its two highest-prevalence labels (F1 0.93 against an AUC of 0.53), and grounding's is directional at best on two of its three trained labels. Read those rates as an indication of what a better evaluator would be measuring.
+- **Retrieval's `n` differs sharply between the two populations.** `--skip-incomplete-panels` drops 283 of 464 panels on `annotated`, exactly as for the human run, because annotation coverage is partial; all-generated panels are complete by construction, so an all-generated run drops none. The two `n` are not comparable without reading `n_panels_skipped` beside them.
 - **Grounding rows are always `n = 0`.** Its evaluator trains three of five labels ([above](#training)) and pragmata's grounding score schema requires all five, built from the label map at import time, so the narrowing that makes training possible cannot reach it. The scorer checks the header up front and writes explicit `n = 0` rows with `status = evaluator_labels_incomplete`, rather than letting the CLI reject the frame with what reads like a staging bug. Inventing the two missing columns would be fabricating labels. The fix is more negative grounding annotation, not more pipeline.
 
 ### The evaluator metrics

@@ -9,7 +9,7 @@ code; this carries data).
 data/transfer/
 ├── exports/                annotation exports pulled on the GPU box (input to eval)
 ├── exports-frozen/<date>/  the pinned export tree behind published numbers
-├── publikationsbot/        the probe-set JSONLs the `generated` prediction population is staged from
+├── publikationsbot/        the JSONLs the `all-generated` prediction population is staged from
 ├── predictions/            per-row model predictions pulled back on the CPU box
 └── checkpoints/            trained evaluator checkpoints pulled off the GPU before teardown
 ```
@@ -27,7 +27,7 @@ a tool's output tree. Received data is always under `data/transfer/`, so it's
 unambiguous which files a tool produced versus which sync dropped, and a tool
 resetting its own dir can't nuke received data.
 
-**How eval reaches it.** For the export and probe-set prefixes it **falls back** here on its own:
+**How eval reaches it.** For the export and all-generated prefixes it **falls back** here on its own:
 the staging scripts look in the tool tree first, use the `data/transfer/` copy when the default
 is absent, and say which they settled on. `predictions/` and `checkpoints/` have to be **copied
 across** into `data/eval/` after verifying, because that is where pragmata resolves runs and
