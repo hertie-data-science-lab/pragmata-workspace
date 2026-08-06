@@ -11,7 +11,7 @@ Per-task configuration lives in [`configs/eval/training/`](../configs/eval/train
 | `make eval-train TASK=<task>` | trains one evaluator into `data/eval/train_outputs/<run_id>/` | GPU host |
 | `make eval-predict-inputs POPULATION=<p>` | stages the unlabelled per-task CSVs into `data/eval-inputs/predict/<p>/` | either box, CPU-only |
 | `make eval-predict TASK=<t> POPULATION=<p> RUN_ID=<id>` | applies one evaluator into `data/eval/prediction_outputs/<run_id>-<p>/` | GPU host |
-| `make eval-score-synthetic POPULATION=<p>` | `synthetic_metric_estimates.<p>.csv` | either box, CPU-only |
+| `make eval-score-synthetic POPULATION=<p>` | `synthetic_metric_estimates.<p>.csv` | CPU box - it scores through the eval pin, so it needs the workspace venv and `PRAGMATA_EVAL_SRC` |
 | `make eval-model-metrics` | `evaluator_metrics.csv` | either box, CPU-only |
 | `make eval-model-calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
 
@@ -124,7 +124,8 @@ make eval-predict TASK=generation POPULATION=annotated RUN_ID=<generation-run> P
 # ...and the same three with POPULATION=corpus
 make eval-model-calibration PY=$PY                     # re-predicts each run's own test split
 
-make eval-model-metrics                                # evaluator_metrics.csv, either box
+# back on the CPU box from here down - scoring needs the workspace venv and PRAGMATA_EVAL_SRC
+make eval-model-metrics                                # evaluator_metrics.csv
 make eval-score-synthetic POPULATION=annotated
 make eval-score-synthetic POPULATION=corpus
 ```

@@ -56,13 +56,13 @@ make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval s
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
 make eval-deliverables         # all seven deliverable targets, including the model side below
 
-# Synthetic evaluators  (train + apply; GPU host - see docs/synthetic-evaluators.md)
+# Synthetic evaluators  (train + apply; GPU host where marked - see docs/synthetic-evaluators.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
 make eval-train-seqlen         # diagnostic: sequence-length truncation per task
-make eval-train                # train one evaluator (TASK= required; grounding is 2+ hours)
+make eval-train                # train one evaluator (TASK= required; grounding 2+ hours; GPU host)
 make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|corpus)
-make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=)
-make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv (POPULATION=)
+make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=; GPU host)
+make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv  (POPULATION=; CPU box)
 make eval-model-metrics        # evaluator_metrics.csv                        (CPU-only)
 make eval-model-calibration    # evaluator_calibration.csv                    (GPU host)
 
@@ -82,7 +82,7 @@ make help                      # list every target
 
 `make docs-check` is what keeps the list above honest: it compares the target names here against the Makefile's own `##` help lines in both directions, so neither an undocumented target nor a stale line here can pass. It also checks every relative doc link and `#heading` anchor.
 
-Three things are called reports: `reports/annotation/` tracks progress during annotation, `reports/eval/` holds the deliverable CSVs, and the final BSt report is assembled in a separate private repo.
+Three things are called reports: `reports/annotation/` tracks progress during annotation, `reports/eval/` holds the deliverable CSVs, and the final BSt report is neither - it is assembled in the separate repository named at the top of this page.
 
 ## Documentation
 
@@ -93,14 +93,14 @@ Three things are called reports: `reports/annotation/` tracks progress during an
 - [Synthetic evaluators](docs/synthetic-evaluators.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
 - [Data dictionary](docs/data-dictionary.md) - the vocabulary (response / record / item / panel / query group), every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
 - [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
-- [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
+- [Reproducibility](docs/reproducibility.md) - the dated bundle convention and how to replay the lineage; the contract and the `repro-*` targets are in [`reproducibility/README.md`](reproducibility/README.md).
 - [Configuration](docs/configuration.md) - every config file and env var, the freeze pin, the domain config, and what stays gitignored.
 
 ## Layout
 
 ```
 .env.example           template for .env (copy to .env and fill in)
-configs/               committed configs & specs (settings.conf, annotation/, eval/ stub)
+configs/               committed configs & specs (settings.conf, annotation/, eval/)
 reproducibility/       committed lineage records (one dated bundle per operation)
 scripts/               committed pipeline code (pipeline.sh, daily.sh, annotation/, eval/, lib/, transfer/)
 data/  logs/  reports/ pipeline I/O and outputs (gitignored except README + .gitkeep)
