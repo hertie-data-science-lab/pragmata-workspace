@@ -60,7 +60,7 @@ make eval-deliverables         # all seven deliverable targets, including the mo
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
 make eval-train-seqlen         # diagnostic: sequence-length truncation per task
 make eval-train                # train one evaluator (TASK= required; grounding 2+ hours; GPU host)
-make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|corpus)
+make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|all-generated)
 make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=; GPU host)
 make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv  (POPULATION=; CPU box)
 make eval-model-metrics        # evaluator_metrics.csv                        (CPU-only)
@@ -92,7 +92,7 @@ Three things are called reports: `reports/annotation/` tracks progress during an
 - [Report deliverables](docs/report-deliverables.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
 - [Synthetic evaluators](docs/synthetic-evaluators.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
 - [Data dictionary](docs/data-dictionary.md) - the vocabulary (response / record / item / panel / query group), every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
-- [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
+- [Data transport](docs/data-transport.md) - moving exports, the all-generated set, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention and how to replay the lineage; the contract and the `repro-*` targets are in [`reproducibility/README.md`](reproducibility/README.md).
 - [Configuration](docs/configuration.md) - every config file and env var, the freeze pin, the domain config, and what stays gitignored.
 

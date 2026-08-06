@@ -124,6 +124,10 @@ FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
+# The all-generated set the curation selected from - everything querygen/publikationsbot
+# produced that combined cleanly (failures live in the .errors/.no_retrieval siblings). A
+# superset of the curated files; the `all-generated` prediction population reads these.
+COMBINED_SUFFIX = "_combined.jsonl"
 
 # Excluded from every report output, decided 2026-07-30: the programme was seeded in
 # Argilla (70 panels imported) but never staffed, so it has zero annotations in every
@@ -242,32 +246,36 @@ def resolve_exports(exports: Path) -> Path:
     )
 
 
-def resolve_corpus_dir(explicit: Path | None = None) -> Path:
-    """The directory holding the curated per-programme corpus JSONL, wherever this box has it.
+def resolve_all_generated_dir(
+    explicit: Path | None = None, suffix: str = COMBINED_SUFFIX
+) -> Path:
+    """The directory holding the all-generated JSONLs, wherever this box has it.
 
     The same two-place rule ``resolve_exports`` applies to the export tree, for the same
-    reason: the curated corpus is produced on the CPU box under ``data/publikationsbot/`` and
-    reaches the GPU box through the Blob, where ``transfer-pull`` can only land it at
-    ``data/transfer/publikationsbot/``. An explicit path is honoured untouched.
+    reason: the all-generated JSONLs are produced on the CPU box under
+    ``data/publikationsbot/`` and reach the GPU box through the Blob, where ``transfer-pull``
+    can only land them at ``data/transfer/publikationsbot/``. An explicit path is honoured
+    untouched.
     """
     if explicit is not None:
         if not explicit.is_dir():
-            raise SystemExit(f"no corpus directory at {explicit}")
+            raise SystemExit(f"no all-generated directory at {explicit}")
         return explicit
-    if any(ws.OUT_DIR.glob(f"*{CURATED_SUFFIX}")):
+    if any(ws.OUT_DIR.glob(f"*{suffix}")):
         return ws.OUT_DIR
     staged = ws.DATA_DIR / "transfer" / "publikationsbot"
-    if any(staged.glob(f"*{CURATED_SUFFIX}")):
+    if any(staged.glob(f"*{suffix}")):
         print(
-            f"note: no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
+            f"note: no *{suffix} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
             f"pulled copy at {staged.relative_to(ws.ROOT)}",
             file=sys.stderr,
         )
         return staged
     raise SystemExit(
-        f"no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
+        f"no *{suffix} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
         f"  Nor a pulled copy at {staged.relative_to(ws.ROOT)}.\n"
-        "  The curated corpus is produced on the CPU box; on the GPU host pull it first:\n"
+        "  The all-generated JSONLs are produced on the CPU box; on the GPU host pull them\n"
+        "  first:\n"
         "    make transfer-pull PREFIX=publikationsbot"
     )
 
@@ -320,10 +328,10 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
 # cell makes pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to
 # TRUE, because bool(nan) is truthy - silently, with no error. The consequence inverts
 # the filter: a blank `calibration` marks a production query as calibration and drops it
-# from the corpus. A blank `n_retrieved_chunks` is the same shape of problem one layer
-# down - pragmata cannot compare a panel's labelled chunks against an unknown K, so the
-# panel escapes the completeness check. Labels are deliberately NOT here: a discarded
-# response legitimately has none.
+# from the scored population. A blank `n_retrieved_chunks` is the same shape of problem
+# one layer down - pragmata cannot compare a panel's labelled chunks against an unknown K,
+# so the panel escapes the completeness check. Labels are deliberately NOT here: a
+# discarded response legitimately has none.
 NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
         "response_status",
@@ -581,8 +589,8 @@ def require_fresh_staged_csv(
       it; training has one pooled CSV per task and no such key.
     - ``check_freeze``. Every training input is pooled from the frozen export, so a moved
       pin always makes it the previous dataset; on the prediction side only the annotated
-      population is, the corpus population being pinned by the per-source sha256s and the
-      curation-pin comparison in its own sidecar instead.
+      population is, the all-generated population being pinned by the per-source sha256s
+      and the curation-pin comparison in its own sidecar instead.
     """
     if not path.exists():
         raise SystemExit(f"no staged CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")

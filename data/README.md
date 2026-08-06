@@ -8,7 +8,7 @@ belongs where and how to obtain it.
 ```
 data/
 ├── querygen/            LLM querygen cache + run dirs (non-deterministic; regenerable)
-├── publikationsbot/     source query corpora (<slug>_combined.jsonl) + querygen intermediates
+├── publikationsbot/     the all-generated JSONLs (<slug>_combined.jsonl) + querygen intermediates
 ├── annotation/
 │   ├── imports/         per-scope partition manifests (partition.meta.json, keyed by record_uuid)
 │   ├── exports/         annotation outputs, per-task CSVs  ← PII (free-text notes); never commit
