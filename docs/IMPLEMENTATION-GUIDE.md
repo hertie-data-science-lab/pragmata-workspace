@@ -60,7 +60,7 @@ The `pragmata-workspace` repository is public, so the actual identifier values -
 
 ### 3.1 Recorded code versions
 
->NB: **the two pins below are pilot scaffolding, not how the pipeline has to be run.** They exist because the pilot froze its annotation pin mid-study while eval tracked upstream, and two commits of one package cannot coexist in one venv. Once upstream `pragmata` carries both stages at one commit, bumping the single git SHA in `pyproject.toml` collapses all of this: `uv sync` alone, no second checkout, no `PRAGMATA_EVAL_SRC`. It installs from `git+ssh://` either way - `pragmata` is not on PyPI - so a GitHub SSH key with read access to `bertelsmannstift/pragmata` is always required.
+>NB: **the two pins below are pilot scaffolding, not how the pipeline has to be run.** They exist because the pilot froze its annotation pin mid-study while eval tracked upstream, and two commits of one package cannot coexist in one venv. Once upstream `pragmata` carries both stages at one commit, bumping the single git SHA in `pyproject.toml` collapses all of this: `uv sync` alone, no second checkout, no `PRAGMATA_EVAL_SRC`. `pip install pragmata` is the intended route for that - **forthcoming**, it is not on PyPI yet - so for now it installs from `git+ssh://` and a GitHub SSH key with read access to `bertelsmannstift/pragmata` is required.
 
 The pilot's specific pipeline runs two different commits of `pragmata`.
 
@@ -78,7 +78,7 @@ The eval pin is a git checkout we provide at `pin/eval-report-2026-07` (as two c
 
 > Use the target rather than a bare `uv sync`: it wraps `uv sync --frozen` and keeps uv's interpreter and wheel cache in `.uv/` in the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. No practical difference on a single-user VM, but on a checkout shared between users by POSIX ACL it is what makes `.venv` readable by all of them - uv writes those per-user paths mode 700/711. Both paths are overridable from the environment.
 
-> NB: a GitHub SSH key with read access to `bertelsmannstift/pragmata` is required here, whichever `pragmata` you are installing - it is a `git+ssh://` dependency, never a PyPI one.
+> NB: a GitHub SSH key with read access to `bertelsmannstift/pragmata` is required here, whichever `pragmata` you are installing - it is a `git+ssh://` dependency until the package is published to PyPI.
 > 
 > Here ends the exact-reproduction divergence. The rest of the setup is the same either way.
 
