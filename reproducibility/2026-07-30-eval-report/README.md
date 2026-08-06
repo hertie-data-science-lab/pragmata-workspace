@@ -4,7 +4,7 @@ kind: freeze
 fetch: `make transfer-pull PREFIX=exports-frozen/2026-07-30` (the Azure Blob copy of the
 export tree). The report CSVs are regenerable: check out the workspace SHA below and run
 `make eval-report eval-score eval-catalog`.
-superseded-by: `2026-07-31-eval-report/` - the report's canonical deliverables are that
+superseded-by: `2026-08-06-eval-report/` - the report's canonical deliverables are that
 freeze. The export tree did not move; the report schema did (column renames, per-slot author
 gender, bibliographic columns, `score`). This bundle is retained as an archived record and
 still verifies.
