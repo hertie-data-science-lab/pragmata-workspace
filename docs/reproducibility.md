@@ -1,9 +1,6 @@
 # Reproducibility
 
-`reproducibility/` holds one **dated bundle per operation or run**, all in the same shape:
-`<YYYY-MM-DD>-<name>/` with a `README.md` (carrying a `kind:` header) and a generated
-`pins.sha256`. The bundle contract, the retention policy and the composition rules live in
-[`reproducibility/README.md`](../reproducibility/README.md); this page is the entrypoint.
+`reproducibility/` holds one **dated bundle per operation or run**, all in the same shape: `<YYYY-MM-DD>-<name>/` with a `README.md` (carrying a `kind:` header) and a generated `pins.sha256`. The bundle contract, the retention policy and the composition rules live in [`reproducibility/README.md`](../reproducibility/README.md); this page is the entrypoint.
 
 | Bundle | kind | Operation |
 |---|---|---|
@@ -14,9 +11,7 @@
 | `2026-07-30-eval-report/` | freeze, **superseded** | The first deliverable set built on the pseudonymised export. Superseded by `2026-07-31-eval-report/`, which pins the same export with the current report schema; retained as an archived record and still verifies. |
 | `2026-07-31-eval-report/` | freeze | The canonical data behind every human-annotation and fairness number in the BSt report: the pseudonymised export and the report CSVs with their `.provenance.json` files and data dictionary. Never replayed. |
 
-`kind: lineage` bundles are replayed in date order to rebuild the live Argilla instance;
-`kind: freeze` bundles are self-contained records of a single run. A `status: retired` header
-drops a bundle out of replay while keeping it on the record.
+`kind: lineage` bundles are replayed in date order to rebuild the live Argilla instance; `kind: freeze` bundles are self-contained records of a single run. A `status: retired` header drops a bundle out of replay while keeping it on the record.
 
 ## Targets
 
@@ -26,25 +21,13 @@ make repro-pin NAME=<name> PATHS="<path ...>"   # create today's bundle: pins + 
 make repro-reproduce PIN=<bundle-dir>           # replay a lineage bundle (MODE= BACKUP= APPLY=)
 ```
 
-`ABSENT` is expected for artefacts held outside git (the corpus, Argilla dumps, the
-PII-carrying export tree); verify prints the bundle's `fetch:` line so you know where to
-get them. `MISMATCH` always means something is wrong, and outranks any number of absences
-in other bundles - a whole-tree run exits 2 if a single pin anywhere mismatched. Verifying
-nothing is a failure too: no bundles at all, or a bundle with an empty `pins.sha256`.
+`ABSENT` is expected for artefacts held outside git (the corpus, Argilla dumps, the PII-carrying export tree); verify prints the bundle's `fetch:` line so you know where to get them. `MISMATCH` always means something is wrong: a whole-tree run exits 2 if any single pin mismatched, however many bundles report only absences. Verifying nothing is a failure too: no bundles at all, or a bundle with an empty `pins.sha256`.
 
 ## Replaying the lineage
 
-Reproduction is **declarative**: the keep-lists are the desired end state, and
-`scripts/annotation/prune_to_keeplist.py` reduces any superset to them (the
-`kubectl apply --prune` / `terraform` model). A plain re-import cannot reach the curated set
-on its own - import fans every query into all three tasks, so the superset has to be built
-and then pruned down.
+Reproduction is **declarative**: the keep-lists are the desired end state, and `scripts/annotation/prune_to_keeplist.py` reduces any superset to them (the `kubectl apply --prune` / `terraform` model). A plain re-import cannot reach the curated set on its own - import fans every query into all three tasks, so the superset has to be built and then pruned down.
 
-`repro-reproduce` composes **every** active lineage bundle's keep-lists in date order before
-pruning, later dates overriding earlier ones per dataset, and reports what it skipped. The
-lineage currently ends at **4,244 records** across 48 datasets - the 2026-07-01 keep-lists,
-the 2026-07-02 descope being retired. Whether live still matches that is what the preview
-reports; do not assume it.
+`repro-reproduce` composes **every** active lineage bundle's keep-lists in date order before pruning, later dates overriding earlier ones per dataset, and reports what it skipped. The lineage currently ends at **4,244 records** across 48 datasets - the 2026-07-01 keep-lists alone, since the 2026-07-02 descope is retired. Whether live still matches that is what the preview reports; do not assume it.
 
 Point `ARGILLA_API_URL`/`ARGILLA_API_KEY` at the target, fetch the pinned artefacts, then:
 
@@ -54,8 +37,4 @@ make repro-reproduce PIN=2026-07-01-annotation-curation MODE=structure APPLY=1  
 make repro-reproduce PIN=2026-07-01-annotation-curation MODE=responses BACKUP=<dir> APPLY=1 # restore the backup, then prune
 ```
 
-Without `APPLY=1` nothing mutates: the preview reports the composed expectation and what a
-prune would delete.
-`APPLY=1` requires a `MODE=`: the prune reduces a **superset** to the keep-lists, so
-applying without rebuilding one first would delete live records down to a state the
-lineage never described.
+Without `APPLY=1` nothing mutates: the preview reports the composed expectation and what a prune would delete. `APPLY=1` requires a `MODE=`: the prune reduces a **superset** to the keep-lists, so applying without rebuilding one first would delete live records down to a state the lineage never described.

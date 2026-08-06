@@ -4,7 +4,6 @@
 
 > Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
-
 ## Vocabulary
 
 | Term | Definition |
@@ -55,7 +54,7 @@ query group ── query ── response ── chunks (k, each with text + rank
 
 **Caveats.**
 
-- The gap columns come from the Argilla REST API, not the export: the export's `created_at` is the *record's* `updated_at` and is identical across a record's annotators. Gaps longer than the session threshold are excluded as breaks (overnight, lunch), so these describe active pace, not elapsed time. The threshold is in the `*-provenance.json` (`session_gap_threshold_s`).
+- The gap columns come from the REST API because the export cannot supply them: its `created_at` is the *record's* `updated_at`, identical across a record's annotators. Excluding breaks (overnight, lunch) means these describe active pace, not elapsed time.
 
 ## `annotation_label_summary.csv`
 
@@ -72,17 +71,16 @@ query group ── query ── response ── chunks (k, each with text + rank
 | `alpha` | Krippendorff's alpha on the calibration overlap. |
 | `alpha_ci_low`, `alpha_ci_high` | Bootstrap confidence interval for `alpha`. |
 | `n_items_calibration` | Items alpha was actually computed on - the calibration overlap, typically ~30, **not** `n_items`. |
-| `degenerate_calibration` | True where the label never varies in the pairable overlap; False where it does vary. **Blank where there is no pairable overlap at all** - nothing was measured, which is what the blank `alpha` beside it says too. |
+| `degenerate_calibration` | True where the label never varies in the pairable overlap; False where it does vary. **Blank where there is no pairable overlap at all** - too few annotators saw the same records, so nothing was measured, which is what the blank `alpha` beside it says too. |
 
 **Caveats.**
 
 - `n_items` / `n_true` are the *pooled production+calibration* prevalence over items; `alpha`, `pct_agree` and `n_items_calibration` describe the *calibration overlap only*.
-- **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient to compute one - too few annotators saw the same records.
 - `alpha`, `pct_agree`, `n_items_calibration` and the interval are **recomputed from the frozen export CSVs** as the report is built, with pragmata's own IAA implementation - not read out of the export's `iaa/report.json`. That file records no seed, and a re-export overwrites the CSVs beside it without regenerating it, so its interval could neither be re-derived nor be trusted to describe the rows in this table.
 - `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with seed 0 at the 0.95 level (all three recorded in the `*-provenance.json`). So the point estimate moves only when the underlying calibration data does, while the bounds also move if those parameters change - and, being seeded, they re-derive exactly from the same tree.
 - Consolidation is pragmata's own `consolidate_labels_by_majority` - the function eval scoring ingests through - so these counts are eval's by construction. A label with a strict majority (> half positive) is decided independently; a tied label (a 1-of-2 split) takes its value from the row that matches every strict-majority label, and only from the group's first row in file order when no row does. Either way a tie is settled by row selection rather than by the data.
 
-**Why `alpha = 1.0` is not always evidence of reliability** is in [Report deliverables](report-deliverables.md#reading-the-numbers).
+**Why `alpha = 1.0` is not always evidence of reliability** is in [Report deliverables](report-deliverables.md#agreement-annotation_label_summarycsv).
 
 ## `eval_metric_estimates.csv`
 
@@ -95,7 +93,7 @@ query group ── query ── response ── chunks (k, each with text + rank
 | `point` | The point estimate. |
 | `ci_low`, `ci_high` | Confidence interval, at `ci_level`. |
 | `method` | Interval method (Wilson for rates, bootstrap for the continuous retrieval metrics). |
-| `n` | Items the metric averages over, (after post-hoc filtering in response to difficulites in annotation velocity/load vs expectation). |
+| `n` | Items the metric averages over, after the filtering `policy` names. Read beside `n_panels_skipped`. |
 | `n_examples` | Queries scored, as pragmata counted them. |
 | `ci_level` | Confidence level, 0.95. |
 | `top_k` | `max(chunk_rank)` over the scored panels. |
@@ -112,14 +110,13 @@ query group ── query ── response ── chunks (k, each with text + rank
 
 - The `alpha_*` columns are the pooled alpha over every programme's calibration items.
 - `top_k` varies per query. It is `max(chunk_rank)`, not a configured K.
-- `n` counts the population that survived filtering (submitted responses; complete retrieval panels only), not the corpus.
 
-**What the intervals do and do not cover**, and what `n` has to be read beside, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
+**What the intervals do and do not cover**, and what `n` has to be read beside, is in [Report deliverables](report-deliverables.md#metric-estimates-eval_metric_estimatescsv).
 
 ## `retrieval_manifest.csv`
 
 - **Purpose:** what the retriever returned per query - the join key for the fairness audit.
-- **Grain:** one row per (query, retrieved chunk). A query whose retrieval returned nothingkeeps one row with an empty `chunk_id` and `n_retrieved_chunks = 0`, so per-query denominators stay right.
+- **Grain:** one row per (query, retrieved chunk). A query whose retrieval returned nothing keeps one row with an empty `chunk_id` and `n_retrieved_chunks = 0`, so per-query denominators stay right.
 
 | Column | Definition |
 |---|---|
@@ -140,7 +137,7 @@ query group ── query ── response ── chunks (k, each with text + rank
 - The source is the curated corpus, a superset of what was annotated - 464 of 1143 queries are annotated.
 - `panel_started` and `n_chunks_annotated` are the only columns here derived from annotation state; every other column comes from the curated corpus. They exist because the join that would reproduce them is not available from this bundle: the exports carry no `query_id`, only `record_uuid`, and this file carries no query text. (TODO-DEFERRED - fix this in pragmata)
 
-**How to join this file**, and the row fan-out that makes a naive join wrong, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
+**How to join this file**, and the row fan-out that makes a naive join wrong, is in [Report deliverables](report-deliverables.md#the-retrieval-manifest).
 
 ## `corpus_catalog.csv`
 
@@ -163,9 +160,9 @@ query group ── query ── response ── chunks (k, each with text + rank
 | `is_institutional` | The document has recorded authors but no personal names. |
 | `author1_gender_raw`, `author2_gender_raw`, `author3_gender_raw` | `gender-guesser`'s six-way verdict for the author in that slot: `female` / `mostly_female` / `andy` / `unknown` / `mostly_male` / `male`. Blank where the slot holds no name **and** where it holds one that does not parse - the `_collapsed` column beside it separates those two. |
 | `author1_gender_collapsed`, `author2_gender_collapsed`, `author3_gender_collapsed` | That slot's verdict under our rule (below): `female` / `male` / `unknown` / `institutional`, or blank where the slot holds no author. |
-| `author_gender_collapsed` | Majority across the document's authors under the same rule; `mixed` on a tie, `institutional` / `unknown` where none resolved. |
+| `author_gender_collapsed` | Majority across the document's authors under the same rule; `mixed` on a tie; `institutional` where names are recorded but none parse; `unknown` where no author is recorded at all, or where every parsed name came back `andy` or `unknown`. |
 
-**One pair per author slot**, aligned to the metadata's `verf1..verf3` (`pers1` stands in for `verf1` where no `verf*` field exists). `author2_*` is always the second *recorded* author, even where the first could not be classified. Gender comes in pairs by design: `_raw` is what `gender-guesser` returned, `_collapsed` is the decision we made about it.
+**One pair per author slot**, aligned to the metadata's `verf1..verf3` (`pers1` stands in for `verf1` where no `verf*` field exists). `author2_*` is always the `verf2` slot - slots are never compacted, so a document recording `verf1` and `verf3` with no `verf2` leaves `author2_*` blank and its second author in `author3_*`. Gender comes in pairs by design: `_raw` is what `gender-guesser` returned, `_collapsed` is the decision we made about it.
 
 **The collapse rule**, applied identically in every `_collapsed` column:
 
@@ -177,14 +174,12 @@ query group ── query ── response ── chunks (k, each with text + rank
 | a name is recorded but does not parse as `"Last, First"` | blank | `institutional` |
 | no name in this slot | blank | blank |
 
-
 **Caveats.**
 
 - The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.
 - **What the store holds but this catalog does not.** Of its 22 metadata keys, 13 are rolled up here. Left out deliberately: `url_doi` (it is `https://doi.org/` + `doi`), `mediengrp` (the constant `"G"` on all 544,692 chunks), `mediennr` (a second document id), `filename`/`filepath_internal`/`source` (internal paths), and the per-chunk `headline` - a section heading has no document-grain meaning, and `retrieval_manifest.csv` cannot join to it either, because its `chunk_id` is the pipeline's own `<doc_id>-c1` rather than a key this store holds.
 
-**What the inferred gender columns can and cannot support**, and how to count across the author slots without misreading them, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
-
+**What the inferred gender columns can and cannot support**, and how to count across the author slots without misreading them, is in [Report deliverables](report-deliverables.md#the-corpus-catalog-and-the-fairness-audit).
 
 ## `synthetic_metric_estimates.csv`
 
@@ -205,7 +200,7 @@ Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_
 | `population` | Which unlabelled rows were predicted: `annotated` (the frozen export with labels stripped - the rows the human metrics describe) or `corpus` (the curated corpus, most of which was never annotated). |
 | `status` | As in the human CSV, plus **`evaluator_labels_incomplete`**: the evaluator does not predict a label pragmata's score contract requires, so the metric was not computed. This is grounding, always - see below. |
 
-**How to read these numbers** - the in-sample `annotated` population, the evaluator-quality caveat on `corpus`, the always-zero grounding rows, and why retrieval's `n` is not comparable across populations - is in [Synthetic evaluators](synthetic-evaluators.md#the-synthetic-estimates). None of it is inferable from the columns alone, and none of it belongs to a single column.
+**How to read these numbers** - the in-sample `annotated` population, the evaluator-quality caveat on `corpus`, the always-zero grounding rows, and why retrieval's `n` is not comparable across populations - is in [Synthetic evaluators](synthetic-evaluators.md#the-synthetic-estimates).
 
 ## `evaluator_metrics.csv`
 
