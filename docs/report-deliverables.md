@@ -46,6 +46,8 @@ The dictionary says when a value is blank and how it was computed. What the numb
 
 ## The three pins
 
+A published number has to be re-derivable from the same bytes and the same code, months later, by someone else. Nothing in this pipeline holds still on its own: the live Argilla instance keeps being annotated, the export tree is overwritten by the nightly cron, and `pragmata` moves upstream. So each report run cites three fixed inputs, and every `.provenance.json` records which.
+
 1. **The frozen export tree** - `data/annotation/exports-frozen/<FREEZE_DATE>/`, a read-only (`chmod -R a-w`) copy cut by `make annotation-freeze`. The live `data/annotation/exports/` is overwritten by the 02:00 cron, so the report scripts never read it.
 2. **The canonical log snapshot** - one line of `logs/annotation/log.jsonl`, chosen by its `run_at` timestamp rather than by being latest, and pinned by that line's sha256.
 3. **The eval pragmata pin** - `PRAGMATA_EVAL_SRC` in `.env`, a checkout separate from the annotation pipeline's frozen demo pin, so the live instance's export behaviour stays fixed while eval tracks upstream. It cannot be a git dependency like the annotation pin, because two commits of one package cannot coexist in one venv - so it stays a path in `.env` and shadows the installed package on `PYTHONPATH` at call time.
@@ -60,9 +62,9 @@ The environment is pinned too: `uv.lock` freezes all 126 packages at the version
 
 Two files this workspace writes *into* that tree are deliberate exceptions, marked by a `.workspace.` infix: `train_provenance.workspace.json` and `predict_provenance.workspace.json`, each inside the run directory it describes. Those directories are what gets pushed off the GPU box, and neither pragmata's nor tlmtc's own sidecars name the workspace commit, the staged input or the freeze behind it.
 
-## Cutting a new freeze
+## Refreshing the numbers
 
-Order matters: each `.provenance.json` records the commit it was generated at and the bundle pins them by hash, so code changes and re-runs must not interleave.
+The runbook for producing a new set of these CSVs. It moves all three pins and regenerates every deliverable behind them, so it is the procedure for a report refresh rather than for a routine export. Order matters: each `.provenance.json` records the commit it was generated at and the bundle pins them by hash, so code changes and re-runs must not interleave.
 
 1. **Commit any code changes first.** Nothing below is valid from a dirty tree.
 2. **Export and snapshot**: `make annotation-export`, then `make annotation-log`.

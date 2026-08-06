@@ -360,7 +360,7 @@ No arguments are needed: `DATE` derives from the export tree's own `created_at` 
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
 
-It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + `make repro-pin`). The guards it applies before copying are listed in [Report deliverables](report-deliverables.md#cutting-a-new-freeze).
+It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + `make repro-pin`). The guards it applies before copying are listed in [Report deliverables](report-deliverables.md#refreshing-the-numbers).
 
 > NB: The freeze and the reproducibility bundle (`make repro-pin`) are twinned but separate artefacts. The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`. The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git.
 
