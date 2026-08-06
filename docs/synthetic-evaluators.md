@@ -12,8 +12,8 @@ Per-task configuration lives in [`configs/eval/training/`](../configs/eval/train
 | `make eval-predict-inputs POPULATION=<p>` | stages the unlabelled per-task CSVs into `data/eval-inputs/predict/<p>/` | either box, CPU-only |
 | `make eval-predict TASK=<t> POPULATION=<p> RUN_ID=<id>` | applies one evaluator into `data/eval/prediction_outputs/<run_id>-<p>/` | GPU host |
 | `make eval-score-synthetic POPULATION=<p>` | `synthetic_metric_estimates.<p>.csv` | either box, CPU-only |
-| `make eval-evaluator-report` | `evaluator_metrics.csv` | either box, CPU-only |
-| `make eval-evaluator-report PART=calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
+| `make eval-model-metrics` | `evaluator_metrics.csv` | either box, CPU-only |
+| `make eval-model-calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
 
 The fine-tuning itself is done by `tlmtc`, the library pragmata's eval module wraps; it comes up throughout, mostly where its defaults had to be overridden.
 
@@ -97,7 +97,7 @@ make transfer-push SRC=data/eval/train_outputs      PREFIX=checkpoints
 make transfer-push SRC=data/eval/prediction_outputs PREFIX=predictions
 ```
 
-**A pulled tree cannot be consumed where it lands.** `sync.sh` refuses any destination escaping `data/transfer/`, while pragmata resolves evaluator runs and `--prediction-id` under `data/eval/`, so both trees have to be copied across after verifying, before `eval-score-synthetic` or `eval-evaluator-report` can read them:
+**A pulled tree cannot be consumed where it lands.** `sync.sh` refuses any destination escaping `data/transfer/`, while pragmata resolves evaluator runs and `--prediction-id` under `data/eval/`, so both trees have to be copied across after verifying, before `eval-score-synthetic` or `eval-model-metrics` can read them:
 
 ```bash
 make transfer-pull PREFIX=checkpoints && cp -a data/transfer/checkpoints/.  data/eval/train_outputs/
@@ -122,9 +122,9 @@ make eval-predict TASK=retrieval  POPULATION=annotated RUN_ID=<retrieval-run>  P
 make eval-predict TASK=grounding  POPULATION=annotated RUN_ID=<grounding-run>  PY=$PY BATCH_SIZE=4
 make eval-predict TASK=generation POPULATION=annotated RUN_ID=<generation-run> PY=$PY
 # ...and the same three with POPULATION=corpus
-make eval-evaluator-report PART=calibration PY=$PY     # re-predicts each run's own test split
+make eval-model-calibration PY=$PY                     # re-predicts each run's own test split
 
-make eval-evaluator-report                             # evaluator_metrics.csv, either box
+make eval-model-metrics                                # evaluator_metrics.csv, either box
 make eval-score-synthetic POPULATION=annotated
 make eval-score-synthetic POPULATION=corpus
 ```
@@ -149,7 +149,7 @@ Every column is defined in the [data dictionary](data-dictionary.md). What the n
 
 ### The synthetic estimates
 
-`make eval-score-synthetic` is the twin of `make eval-score`: same CLI, same eval pin, same row-building code, so `synthetic_metric_estimates.<population>.csv` is column-for-column comparable with `eval_metric_estimates.csv` - minus the four `alpha_*` columns, plus `evaluator_run_id`, `prediction_id` and `population`. The `alpha_*` columns are absent by definition, not by omission: a prediction has one label per item and no annotator disagreement to measure. What replaces them is the evaluator's own quality, in `evaluator_metrics.csv`.
+`make eval-score-synthetic` is the twin of `make eval-score-human`: same CLI, same eval pin, same row-building code, so `synthetic_metric_estimates.<population>.csv` is column-for-column comparable with `eval_metric_estimates.csv` - minus the four `alpha_*` columns, plus `evaluator_run_id`, `prediction_id` and `population`. The `alpha_*` columns are absent by definition, not by omission: a prediction has one label per item and no annotator disagreement to measure. What replaces them is the evaluator's own quality, in `evaluator_metrics.csv`.
 
 **Read the two files together.** A corpus rate produced by a model whose AUC is near chance is not a measurement. The intervals here cover sampling uncertainty over queries *only* - they say nothing about the evaluator being wrong, which is the dominant source of error for two of the three tasks.
 

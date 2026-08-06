@@ -162,7 +162,7 @@ cat >&2 <<EOF
      git add $PIN && git commit -m 'chore(eval): pin the $DATE freeze'
 
 2. Regenerate the deliverables on the clean tree:
-     make eval-report eval-score eval-catalog
+     make eval-deliverables
 
 3. Re-pin the reproducibility bundle, which can only happen now: it pins the frozen
    inputs AND the report outputs together, and the outputs did not exist until step 2.

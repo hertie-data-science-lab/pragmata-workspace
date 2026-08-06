@@ -8,13 +8,13 @@ Seven targets, eight CSVs - the first row emits two. All land in `reports/eval/<
 
 | Target | Script | Output |
 |---|---|---|
-| `make eval-report` | `annotation_tables.py` | `annotation_operations.csv`, `annotation_label_summary.csv` |
-| `make eval-report` | `retrieval_manifest.py` | `retrieval_manifest.csv` |
-| `make eval-score` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
+| `make eval-tables` | `annotation_tables.py` | `annotation_operations.csv`, `annotation_label_summary.csv` |
+| `make eval-tables` | `retrieval_manifest.py` | `retrieval_manifest.csv` |
+| `make eval-score-human` | `score_human_annotations.py` | `eval_metric_estimates.csv`, via `pragmata eval score` |
 | `make eval-catalog` | `corpus_catalog.py` | `corpus_catalog.csv`, from the publikationsbot vector store (needs `az login`) |
 | `make eval-score-synthetic POPULATION=<p>` | `score_synthetic_predictions.py` | `synthetic_metric_estimates.<p>.csv`, via `eval score --prediction-id` |
-| `make eval-evaluator-report` | `evaluator_report.py` | `evaluator_metrics.csv` |
-| `make eval-evaluator-report PART=calibration` | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
+| `make eval-model-metrics` | `evaluator_report.py` | `evaluator_metrics.csv` |
+| `make eval-model-calibration` | `evaluator_report.py` | `evaluator_calibration.csv` (needs the GPU environment) |
 
 Every CSV ships a `.provenance.json` - script, workspace SHA, pragmata pin, hashed inputs, parameters and seeds, snapshot identity, and the dictionary's hash - and the data dictionary is copied beside the CSVs whose record pins it. Every declared input is listed - one that was absent when the script ran appears as `"sha256": null, "missing": true`, never by omission.
 
@@ -70,7 +70,7 @@ The runbook for producing a new set of these CSVs. It moves all three pins and r
 2. **Export and snapshot**: `make annotation-export`, then `make annotation-log`.
 3. **Freeze and write the pin**: `make annotation-freeze`. DATE and RUN_AT both derive from the export tree's own `created_at`; pass `DATE=` or `RUN_AT=` to override either. Guards before the copy: clean working tree, no freeze under that date already, no real names left in `exports/`, and a RUN_AT that is schema-current and consistent with the export - one earlier than the export, or implausibly later, is refused whether it was derived or passed in. It takes the same `.export.lock` that `export.sh` takes, so it cannot copy a tree the cron is halfway through rewriting. Only then does it make the read-only dated copy and write `configs/eval/freeze.conf`. A failed copy or `chmod` removes the partial dated directory, so a later run cannot mistake it for a real freeze.
 4. **Commit the pin.** Until it is committed, another checkout still resolves the old date.
-5. **Regenerate on the clean tree**: `make eval-report eval-score eval-catalog`.
+5. **Regenerate on the clean tree**: `make eval-deliverables`.
 6. **Re-pin the bundle**, if one already exists. `repro-pin` refuses a pre-existing bundle directory and `pins.sha256` is generated rather than hand-edited, so: delete the old directory, re-pin, commit.
 7. **Publish**: `make transfer-push SRC=data/annotation/exports-frozen/<date> PREFIX=exports-frozen/<date>`. To check Blob without pulling, download the remote `MANIFEST.sha256` and diff it against a freshly computed local one - comparing push's own printed hash is circular.
 

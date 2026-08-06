@@ -18,7 +18,7 @@ flowchart LR
 
 ## Setup
 
-Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make setup` and fill in the local configuration. The full procedure is in the [implementation guide §3](docs/IMPLEMENTATION-GUIDE.md#3-prepare-the-repositories-and-configuration); variable definitions and file formats are in [Configuration](docs/configuration.md); and the pilot's own identifiers and env values are in the git-excluded `docs/deployment-inventory.local.md`.
+Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make venv-setup` and fill in the local configuration. The full procedure is in the [implementation guide §3](docs/IMPLEMENTATION-GUIDE.md#3-prepare-the-repositories-and-configuration); variable definitions and file formats are in [Configuration](docs/configuration.md); and the pilot's own identifiers and env values are in the git-excluded `docs/deployment-inventory.local.md`.
 
 ## Make targets
 
@@ -38,7 +38,7 @@ make annotation-setup          # provision Argilla workspaces + users (DOMAIN= r
 make annotation-import         # load one domain's dataset into Argilla (DOMAIN= required)
 make annotation-export         # export annotations to per-task CSVs (DOMAIN= to filter)
 make annotation-log            # append a snapshot to logs/annotation/log.jsonl
-make annotation-daily          # nightly logging: export -> log.jsonl
+make annotation-snapshot       # export + log one snapshot (what the cron runs)
 make annotation-freeze         # archive the export tree + pin it for the eval reports (DATE= RUN_AT= optional, derived)
 make annotation-backup         # status-preserving Argilla backup (dump)
 make annotation-restore        # restore a backup   (DIR= required; previews unless APPLY=1)
@@ -50,9 +50,10 @@ make annotation-report-pdf     # tables -> report.pdf                (needs pand
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
 # Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/report-deliverables.md)
-make eval-report               # annotation_operations, annotation_label_summary, retrieval_manifest
-make eval-score                # eval_metric_estimates.csv, via `pragmata eval score`
+make eval-tables               # annotation_operations, annotation_label_summary, retrieval_manifest
+make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
+make eval-deliverables         # all three of the above, the set a report refresh needs
 
 # Synthetic evaluators  (train + apply; GPU host - see docs/synthetic-evaluators.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
@@ -61,7 +62,8 @@ make eval-train                # train one evaluator (TASK= required; grounding 
 make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|corpus)
 make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=)
 make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv (POPULATION=)
-make eval-evaluator-report     # evaluator_metrics.csv  (PART=calibration for the other CSV)
+make eval-model-metrics        # evaluator_metrics.csv                        (CPU-only)
+make eval-model-calibration    # evaluator_calibration.csv                    (GPU host)
 
 # Data transport  (see docs/data-transport.md)
 make transfer-push             # push a tree to the Blob             (SRC= source, PREFIX= dest; both required)

@@ -33,9 +33,10 @@
 # See reproducibility/README.md for the bundle contract.
 #
 # Eval deliverables (reports/eval/<date>/, one CSV + its .provenance.json each):
-#   make eval-report                       # the two annotation tables + the retrieval manifest
-#   make eval-score                        # the corpus metric estimates
+#   make eval-tables                       # the two annotation tables + the retrieval manifest
+#   make eval-score-human                  # the corpus metric estimates from human labels
 #   make eval-catalog                      # the corpus catalog for the fairness audit
+#   make eval-deliverables                 # all three of the above
 # All three read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
 # docs/data-dictionary.md for what the columns mean.
@@ -50,7 +51,8 @@
 #   make eval-predict-inputs POPULATION=annotated       # -> data/eval-inputs/predict/annotated/
 #   make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
 #   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
-#   make eval-evaluator-report                          # -> evaluator_metrics.csv (PART=calibration for the other)
+#   make eval-model-metrics                             # -> evaluator_metrics.csv
+#   make eval-model-calibration                         # -> evaluator_calibration.csv (GPU)
 # See docs/synthetic-evaluators.md for the populations, the run order and the output layout.
 #
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
@@ -102,19 +104,20 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
 .PHONY: pipeline plan \
         querygen-run bot-run bot-probe combine-run \
         annotation-setup annotation-import \
-        annotation-log annotation-export annotation-daily annotation-freeze \
+        annotation-log annotation-export annotation-snapshot annotation-freeze \
         annotation-backup annotation-restore \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
-        eval-report eval-score eval-catalog \
+        eval-deliverables eval-tables eval-score-human eval-catalog \
         eval-train-inputs eval-train-seqlen eval-train \
-        eval-predict-inputs eval-predict eval-score-synthetic eval-evaluator-report \
+        eval-predict-inputs eval-predict eval-score-synthetic \
+        eval-model-metrics eval-model-calibration \
         transfer-push transfer-pull transfer-verify \
-        repro-pin repro-verify repro-reproduce setup help
+        repro-pin repro-verify repro-reproduce venv-setup docs-check help
 
 # --- setup ---
 
-setup: ## Create/refresh .venv from uv.lock, on the in-tree interpreter every user can read
+venv-setup: ## Create/refresh .venv from uv.lock, on the in-tree interpreter every user can read
 	uv sync --frozen
 	@$(PY) --version
 
@@ -156,7 +159,7 @@ annotation-log: ## Log an annotation snapshot -> logs/annotation/log.jsonl (--su
 annotation-export: ## Export current annotations to per-task CSVs (DOMAIN= to filter, default all)
 	bash scripts/annotation/export.sh $(DOMAIN)
 
-annotation-daily: ## Nightly logging: export -> log.jsonl (reporting is manual: make annotation-report)
+annotation-snapshot: ## Export + log one annotation snapshot -> log.jsonl; what the nightly cron runs (reporting is manual: make annotation-report)
 	bash scripts/daily.sh
 
 # Deliberately not part of annotation-export: the nightly cron re-exports every night, and a
@@ -191,11 +194,18 @@ annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date
 
 # --- eval deliverables (reports/eval/<date>/; OUT= to redirect) ---
 
-eval-report: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv, retrieval_manifest.csv
+# These three share their prerequisites - the frozen export, plus `az login` for the
+# catalog - so `eval-deliverables` runs them as the set a report refresh needs. The
+# model-side deliverables (eval-score-synthetic, eval-model-*) are deliberately
+# NOT in it: they need prediction trees under data/eval/, which only exist after a GPU
+# run and a transfer, so folding them in would give a target that half-fails on the CPU VM.
+eval-deliverables: eval-tables eval-score-human eval-catalog ## Eval: every deliverable the frozen export can produce (tables + human scores + catalog)
+
+eval-tables: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv, retrieval_manifest.csv
 	$(PY) scripts/eval/annotation_tables.py $(EVAL_ARGS)
 	$(PY) scripts/eval/retrieval_manifest.py $(EVAL_ARGS)
 
-eval-score: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)
+eval-score-human: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)
 	$(PY) scripts/eval/score_human_annotations.py $(EVAL_ARGS)
 
 eval-catalog: ## Eval: publikationsbot vector store -> corpus_catalog.csv (needs an active `az login`)
@@ -238,14 +248,14 @@ eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> d
 # RUN_ID is optional and should not be: the script defaults to the latest evaluator for the
 # task and says so, which is right for a scratch run and wrong for a published one. Pass it
 # for anything whose numbers leave the box.
-# POPULATION=testsplit is internal - `eval-evaluator-report PART=calibration` stages a run's
+# POPULATION=testsplit is internal - `eval-model-calibration` stages a run's
 # own held-out split and predicts it in one pass. It is accepted here so that pass can be
 # repeated by hand, which needs RUN_ID to name the run the split was staged from.
 eval-predict: ## Eval prediction: one evaluator over one population -> data/eval/prediction_outputs/<run_id>-<population>/ (TASK=, POPULATION=annotated|corpus|testsplit, RUN_ID=, BATCH_SIZE=)
 	@case "$(TASK)" in retrieval|grounding|generation) ;; *) \
 	  echo "usage: make eval-predict TASK=retrieval|grounding|generation POPULATION=annotated|corpus (testsplit is internal - see make help)"; exit 2 ;; esac
 	@case "$(POPULATION)" in annotated|corpus|testsplit) ;; *) \
-	  echo "usage: make eval-predict TASK=$(TASK) POPULATION=annotated|corpus, or testsplit with RUN_ID= (internal - staged by eval-evaluator-report PART=calibration)"; exit 2 ;; esac
+	  echo "usage: make eval-predict TASK=$(TASK) POPULATION=annotated|corpus, or testsplit with RUN_ID= (internal - staged by eval-model-calibration)"; exit 2 ;; esac
 	$(PY) scripts/eval/predict_evaluators.py predict $(TASK) --population $(POPULATION) \
 	  $(if $(RUN_ID),--evaluator-run-id $(RUN_ID),) $(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),)
 
@@ -253,16 +263,18 @@ eval-score-synthetic: ## Eval prediction: score one predicted population -> synt
 	$(PY) scripts/eval/score_synthetic_predictions.py \
 	  --population $(if $(POPULATION),$(POPULATION),annotated) $(EVAL_ARGS)
 
-# PART=metrics is CPU-only and is the Thursday deliverable; PART=calibration re-predicts each
-# run's own test split, so it needs the training venv the way eval-predict does.
-# RUN_IDS is a space-separated list of <task>=<run_id>, not a bare id: this target reports on
-# all three tasks at once.
-eval-evaluator-report: ## Eval prediction: evaluator quality -> evaluator_metrics.csv / evaluator_calibration.csv (PART=metrics|calibration, default metrics; RUN_IDS="retrieval=<id> ...", BATCH_SIZE= for calibration)
-	@case "$(if $(PART),$(PART),metrics)" in metrics|calibration) ;; *) \
-	  echo "usage: make eval-evaluator-report PART=metrics|calibration"; exit 2 ;; esac
-	$(PY) scripts/eval/evaluator_report.py $(if $(PART),$(PART),metrics) $(EVAL_ARGS) \
+# These two were one target behind PART=, which hid the fact that only one of them needs a
+# GPU. Split so the prerequisite is visible in the target name, as it is everywhere else.
+# RUN_IDS is a space-separated list of <task>=<run_id>, not a bare id: both report on all
+# three tasks at once.
+eval-model-metrics: ## Eval: each evaluator's quality on its own held-out split -> evaluator_metrics.csv (CPU-only; RUN_IDS="retrieval=<id> ...")
+	$(PY) scripts/eval/evaluator_report.py metrics $(EVAL_ARGS) \
+	  $(foreach pair,$(RUN_IDS),--run-id $(pair))
+
+eval-model-calibration: ## Eval: evaluator probability calibration -> evaluator_calibration.csv (GPU host - it re-predicts each run's test split; RUN_IDS= BATCH_SIZE=)
+	$(PY) scripts/eval/evaluator_report.py calibration $(EVAL_ARGS) \
 	  $(foreach pair,$(RUN_IDS),--run-id $(pair)) \
-	  $(if $(filter calibration,$(PART)),$(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),),)
+	  $(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),)
 
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---
