@@ -124,6 +124,10 @@ FROZEN_EXPORTS = ws.DATA_DIR / "annotation" / "exports-frozen" / FREEZE_DATE
 
 # The bot output that was actually curated into Argilla, so it joins to the annotations.
 CURATED_SUFFIX = "_combined.curated.jsonl"
+# The full generated probe set the curation selected from - everything querygen/publikationsbot
+# produced that combined cleanly (failures live in the .errors/.no_retrieval siblings). A
+# superset of the curated files; the `generated` prediction population reads these.
+COMBINED_SUFFIX = "_combined.jsonl"
 
 # Excluded from every report output, decided 2026-07-30: the programme was seeded in
 # Argilla (70 panels imported) but never staffed, so it has zero annotations in every
@@ -242,7 +246,7 @@ def resolve_exports(exports: Path) -> Path:
     )
 
 
-def resolve_corpus_dir(explicit: Path | None = None) -> Path:
+def resolve_corpus_dir(explicit: Path | None = None, suffix: str = CURATED_SUFFIX) -> Path:
     """The directory holding the curated per-programme corpus JSONL, wherever this box has it.
 
     The same two-place rule ``resolve_exports`` applies to the export tree, for the same
@@ -254,18 +258,18 @@ def resolve_corpus_dir(explicit: Path | None = None) -> Path:
         if not explicit.is_dir():
             raise SystemExit(f"no corpus directory at {explicit}")
         return explicit
-    if any(ws.OUT_DIR.glob(f"*{CURATED_SUFFIX}")):
+    if any(ws.OUT_DIR.glob(f"*{suffix}")):
         return ws.OUT_DIR
     staged = ws.DATA_DIR / "transfer" / "publikationsbot"
-    if any(staged.glob(f"*{CURATED_SUFFIX}")):
+    if any(staged.glob(f"*{suffix}")):
         print(
-            f"note: no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
+            f"note: no *{suffix} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
             f"pulled copy at {staged.relative_to(ws.ROOT)}",
             file=sys.stderr,
         )
         return staged
     raise SystemExit(
-        f"no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
+        f"no *{suffix} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
         f"  Nor a pulled copy at {staged.relative_to(ws.ROOT)}.\n"
         "  The curated corpus is produced on the CPU box; on the GPU host pull it first:\n"
         "    make transfer-pull PREFIX=publikationsbot"

@@ -12,8 +12,12 @@ Two populations answer the published questions, and a third is internal:
 - `annotated` - the same rows the human-label metrics were scored on, pooled from the frozen
   canonical export with the labels stripped. Predicting these is what makes evaluator output
   comparable against a human baseline at all.
-- `corpus` - the curated corpus, most of which nobody annotated. Predicting these gives
-  corpus-scale prevalence estimates, with no baseline to check them against.
+- `generated` - the full generated probe set (`*_combined.jsonl`), i.e. everything
+  querygen/publikationsbot produced that combined cleanly - a superset of the curated
+  selection the annotations were drawn from. Predicting these gives at-scale prevalence
+  estimates, with no baseline to check them against. (A `corpus` population - the
+  capacity-curated selection - existed through the pinned 2026-08-06 deliverables and
+  remains in that bundle; it was retired in favour of `generated`.)
 - `testsplit` - a run's own held-out split, staged by `evaluator_report.py calibration` rather
   than by `predict-inputs`, and re-predicted only for the per-item probabilities the
   reliability curves need. A manual re-run must name the run the split was staged from.
@@ -55,7 +59,7 @@ PREDICT_INPUTS = ws.DATA_DIR / "eval-inputs" / "predict"
 # Populations `predict-inputs` builds. `testsplit` is a third one that `predict` accepts but
 # this subcommand does not build: evaluator_report.py stages it per run from that run's own
 # held-out split, which is a property of a training run rather than of the corpus.
-STAGED_POPULATIONS = ("annotated", "corpus")
+STAGED_POPULATIONS = ("annotated", "generated")
 PREDICT_POPULATIONS = (*STAGED_POPULATIONS, "testsplit")
 
 # See train_evaluators.py's own note: set here rather than left to the Makefile so a direct
@@ -93,10 +97,10 @@ CORPUS_IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "generation": ("query_id",),
 }
 
-# The curation bundle whose pins the corpus JSONL is checked against. A match means the
-# prediction population is the same corpus the annotations were drawn from; a mismatch means
-# it is not, which is a fact about the numbers rather than an error. Either way it is
-# recorded - see _corpus_pin_records.
+# The curation bundle whose pins each source JSONL is checked against. The raw generated
+# files are not pinned there (pin_sha256 comes out null and the recorded sha256 is the
+# population's identity); a curated file, if ever staged again, would be compared for real.
+# Either way the outcome is recorded - see _corpus_pin_records.
 CURATION_PINS = (
     ws.ROOT / "reproducibility" / "2026-07-01-annotation-curation" / "pins.sha256"
 )
@@ -259,7 +263,7 @@ def stage_annotated(exports: Path) -> int:
     return 0
 
 
-# --- predict-inputs: the corpus population ---------------------------------------------
+# --- predict-inputs: the generated population ---------------------------------------------
 
 
 def _read_pins(path: Path) -> dict[str, str]:
@@ -311,8 +315,8 @@ def _corpus_pin_records(paths: list[Path]) -> list[dict]:
     return records
 
 
-def stage_corpus(corpus_dir: Path) -> int:
-    """Stage the curated corpus as unlabelled per-task CSVs.
+def stage_generated(corpus_dir: Path) -> int:
+    """Stage the full generated probe set as unlabelled per-task CSVs.
 
     The text columns are built the way pragmata builds the Argilla fields at annotation
     import, read out of its own `record_builder`: retrieval pairs the query with each CHUNK's
@@ -321,10 +325,10 @@ def stage_corpus(corpus_dir: Path) -> int:
     NOT something pragmata assembles out of the chunk texts, which is the one assumption here
     worth checking in the source rather than guessing at.
 
-    `record_uuid` comes from pragmata's own `derive_record_uuid`, so a corpus row and the
+    `record_uuid` comes from pragmata's own `derive_record_uuid`, so a generated row and the
     export row for the same pair carry the SAME identity. That is what makes the two
-    populations comparable, and it is also what makes corpus retrieval panels groupable at all:
-    every chunk of a pair is staged, so a corpus panel is complete by construction and
+    populations comparable, and it is also what makes generated retrieval panels groupable at all:
+    every chunk of a pair is staged, so a generated panel is complete by construction and
     `--skip-incomplete-panels` has nothing to drop.
 
     The population is "every curated record that satisfies pragmata's import contract", which
@@ -343,17 +347,17 @@ def stage_corpus(corpus_dir: Path) -> int:
         raise SystemExit(
             f"corpus staging needs pragmata's annotation import schema: {exc}\n"
             "  It imports argilla, which the GPU host's training venv does not install.\n"
-            "  Stage the corpus population on the CPU box and transfer the CSVs, or install\n"
+            "  Stage the generated population on the CPU box and transfer the CSVs, or install\n"
             "  argilla there. See docs/synthetic-evaluators.md."
         ) from exc
 
-    paths = sorted(corpus_dir.glob(f"*{ec.CURATED_SUFFIX}"))
+    paths = sorted(corpus_dir.glob(f"*{ec.COMBINED_SUFFIX}"))
     programmes = []
     rows: dict[str, list[dict]] = {task: [] for task in ec.TASKS}
     n_valid = n_invalid = 0
     used_paths = []
     for path in paths:
-        programme = path.name.removesuffix(ec.CURATED_SUFFIX)
+        programme = path.name.removesuffix(ec.COMBINED_SUFFIX)
         if programme in ec.EXCLUDED_PROGRAMMES:
             print(f"  {programme}: excluded", file=sys.stderr)
             continue
@@ -422,7 +426,7 @@ def stage_corpus(corpus_dir: Path) -> int:
                 f"{path}: not one of its {invalid} record(s) satisfies pragmata's import "
                 "contract.\n"
                 "  That is a source problem, not a filter: check the JSONL is the curated "
-                "corpus and not\n  an intermediate batch."
+                "generated probe set and not\n  an intermediate batch."
             )
         print(f"  {programme}: {valid} record(s), {invalid} rejected", file=sys.stderr)
         n_valid += valid
@@ -430,7 +434,7 @@ def stage_corpus(corpus_dir: Path) -> int:
 
     if not programmes:
         raise SystemExit(
-            f"no *{ec.CURATED_SUFFIX} under {corpus_dir} outside the excluded set."
+            f"no *{ec.COMBINED_SUFFIX} under {corpus_dir} outside the excluded set."
         )
 
     pin_records = _corpus_pin_records(used_paths)
@@ -461,11 +465,11 @@ def stage_corpus(corpus_dir: Path) -> int:
                 f"  {task}: dropped {before - len(frame)} duplicate item(s)",
                 file=sys.stderr,
             )
-        _check_text_columns(frame, task, f"{task} (corpus)")
+        _check_text_columns(frame, task, f"{task} (generated)")
         staged[task] = frame
 
     for task, frame in staged.items():
-        target = PREDICT_INPUTS / "corpus" / f"{task}.csv"
+        target = PREDICT_INPUTS / "generated" / f"{task}.csv"
         write_staged(
             target,
             frame,
@@ -473,7 +477,7 @@ def stage_corpus(corpus_dir: Path) -> int:
                 "inputs": used_paths,
                 "pragmata_src": src_root,
                 "task": task,
-                "population": "corpus",
+                "population": "generated",
                 "programmes": programmes,
                 "excluded_programmes": sorted(ec.EXCLUDED_PROGRAMMES),
                 "corpus_dir": str(
@@ -510,7 +514,7 @@ def staged_csv(task: str, population: str) -> tuple[Path, dict]:
     population, and the directory name alone is not evidence of what is in it.
 
     The freeze check applies to the annotated population only, because it is the only one
-    pooled from the export. The corpus population's own provenance is the per-source sha256s
+    pooled from the export. The generated population's own provenance is the per-source sha256s
     and the curation-pin comparison in its sidecar, which staging records and this echoes.
     `testsplit` is staged per run rather than by a make target, so its hint says so.
     """
@@ -585,7 +589,7 @@ def predict(
     guard of any kind: predicting a second population with the same evaluator OVERWRITES the
     first, silently, and pragmata's `pragmata_predict.meta.json` is rewritten to match, so
     afterwards nothing on disk says which population the numbers describe. Three populations
-    per evaluator (annotated, corpus, and each run's own test split) makes that a certainty
+    per evaluator (annotated, generated, and each run's own test split) makes that a certainty
     rather than a risk.
 
     So a successful run's output tree is MOVED to `prediction_outputs/<run_id>-<population>/`.
@@ -770,7 +774,7 @@ def main() -> int:
         choices=list(PREDICT_POPULATIONS),
         required=True,
         help=(
-            "annotated|corpus are staged by predict-inputs. testsplit is internal: "
+            "annotated|generated are staged by predict-inputs. testsplit is internal: "
             "evaluator_report.py calibration stages a run's own held-out split and predicts "
             "it in one pass, so a manual re-run must pass the --evaluator-run-id that split "
             "was staged from."
@@ -807,7 +811,9 @@ def main() -> int:
     if args.command == "predict-inputs":
         if args.population == "annotated":
             return stage_annotated(ec.resolve_exports(args.exports))
-        return stage_corpus(ec.resolve_corpus_dir(args.corpus_dir))
+        return stage_generated(
+            ec.resolve_corpus_dir(args.corpus_dir, suffix=ec.COMBINED_SUFFIX)
+        )
 
     predict(
         args.task,
