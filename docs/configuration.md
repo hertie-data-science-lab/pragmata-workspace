@@ -1,6 +1,6 @@
 # Configuration
 
-### Secrets
+## Secrets
 Secrets live in `.env` (gitignored). Copy `.env.example` and fill in. Required keys: 
 - `ARGILLA_API_URL`, `ARGILLA_API_KEY` (annotation import/setup); 
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (querygen);
@@ -12,23 +12,23 @@ For Azure, set `OPENAI_API_KEY` to your Azure key and `OPENAI_BASE_URL` to `http
 
 The scripts under `scripts/` load `.env` themselves (via `scripts/lib/common.sh`), but for ad-hoc `pragmata`/`make` commands typed directly, install [direnv](https://direnv.net) and add its hook to your shell rc (e.g. `eval "$(direnv hook bash)"`), then run `direnv allow` here - the committed `.envrc` auto-loads `.env` on `cd`.
 
-### Python dependencies
+## Python dependencies
 Python deps live in `pyproject.toml` + `uv.lock` - committed. `uv sync` reproduces the environment exactly, including pragmata itself (git-pinned to an exact SHA used in the pilot). The lock carries a `constraint-dependencies` freeze of the versions that produced the shipped report numbers; see the comment there before upgrading anything.
 
-### Operational tunables
+## Operational tunables
 These live in `configs/settings.conf` (queries-per-spec, bot concurrency, throttle, disk thresholds) - committed.
 
-### The canonical freeze pin
-This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Human annotation scoring](eval-human-annotation.md#the-three-pins).
+## The canonical freeze pin
+This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Human annotation scoring](report-deliverables.md#the-three-pins).
 
 
-### querygen runtime (model, reasoning effort, batching) 
+## querygen runtime
 These lives in `configs/annotation/querygen_specs/_runtime.yaml`, deep-merged with each per-spec YAML.
 
-### The domain list
+## The domain list
 Derived from `configs/annotation/domains/*.yaml` - add a domain by adding its config + spec, nothing else to update.
 
-# Domain deployment config
+## Domain deployment config
 
 One YAML per programme in `configs/annotation/domains/`, read by `annotation setup` and `annotation import`. 
 
@@ -55,7 +55,7 @@ One YAML per programme in `configs/annotation/domains/`, read by `annotation set
         tasks:
           generation: {}
 ```
-See the[Implementation Guide](implementation-guide.md#71-define-the-workspaces--dataset-shape) for further guidance.
+See the[Implementation Guide](IMPLEMENTATION-GUIDE.md#71-define-the-workspaces--dataset-shape) for further guidance.
 
 ## Annotator roster
 

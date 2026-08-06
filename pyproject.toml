@@ -14,7 +14,7 @@ requires-python = ">=3.12,<3.13"
 # The EVAL side runs a different pragmata commit and cannot be expressed here: two
 # versions of one package cannot coexist in one venv. It stays an environment pin
 # (PRAGMATA_EVAL_SRC in .env) shadowed onto PYTHONPATH at call time - see
-# scripts/lib/workspace.py:eval_pragmata() and docs/eval-human-annotation.md. Do not "simplify" it away.
+# scripts/lib/workspace.py:eval_pragmata() and docs/report-deliverables.md. Do not "simplify" it away.
 #
 # Extras: annotation -> argilla; querygen -> sentence-transformers; openai ->
 # langchain-openai (Azure OpenAI is reached through the OpenAI-compatible surface).

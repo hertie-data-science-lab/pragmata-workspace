@@ -74,7 +74,7 @@ The eval pin is a git checkout we provide at `pin/eval-report-2026-07` (as two c
 
 ### 3.2 Create the environment
 
-**On the primary CPU-backed VM**: from `pragmata-workspace` run `make setup` (requires `uv` on PATH), this creates the `.venv/`; python is also uv-managed (the version is fixed by `.python-version` (3.12.13)). As it covers every Python entry point in the repository, the single venv runs both stages ([why](eval-human-annotation.md#the-three-pins)). Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure CLI on PATH.
+**On the primary CPU-backed VM**: from `pragmata-workspace` run `make setup` (requires `uv` on PATH), this creates the `.venv/`; python is also uv-managed (the version is fixed by `.python-version` (3.12.13)). As it covers every Python entry point in the repository, the single venv runs both stages ([why](report-deliverables.md#the-three-pins)). Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure CLI on PATH.
 
 > Use the target rather than a bare `uv sync`: it wraps `uv sync --frozen` and keeps uv's interpreter and wheel cache in `.uv/` in the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. No practical difference on a single-user VM, but on a checkout shared between users by POSIX ACL (the GPU host) it is what makes `.venv` readable by all of them - uv writes those per-user paths mode 700/711. The `Makefile` carries the full reasoning; both paths are overridable from the environment.
 
@@ -96,8 +96,7 @@ Complete `.env` with the values from the deployment inventory. The variable defi
 
 The committed run settings live in:
 
-- [`configs/settings.conf`](../configs/settings.conf) - operational tunables, including the
-  querygen counts (`N_BASELINE`, `N_EDGECASE`) and the IAA bootstrap parameters
+- [`configs/settings.conf`](../configs/settings.conf) - operational tunables, including the querygen counts (`N_BASELINE`, `N_EDGECASE`) and the IAA bootstrap parameters
 - [`configs/annotation/querygen_specs/`](../configs/annotation/querygen_specs/) - per-domain query instructions, plus `_runtime.yaml` for model/batching/timeout
 - [`configs/annotation/domains/`](../configs/annotation/domains/) - the Argilla workspace/dataset structure, one YAML per domain
 
@@ -193,8 +192,7 @@ Reachability first - anything other than `200` here is a key, base-URL or networ
 
     curl -s -o /dev/null -w '%{http_code}\n' "$OPENAI_BASE_URL/models" -H "api-key: $OPENAI_API_KEY"
 
-Then run one domain with reduced counts (the committed defaults in `settings.conf` are
-production-sized):
+Then run one domain with reduced counts (the committed defaults in `settings.conf` are production-sized):
 
     N_BASELINE=5 N_EDGECASE=2 make pipeline TO=querygen-run FILTER=gesundheit
 
@@ -381,9 +379,7 @@ NB: the export tree is intended to be transient, as it is derived. The export ID
 
     make annotation-freeze 
 
-No arguments are needed: `DATE` derives from the export tree's own `created_at` (its UTC
-calendar date) and `RUN_AT` from the first log snapshot taken after it, since the run always
-exports before it logs. Override either on purpose:
+No arguments are needed: `DATE` derives from the export tree's own `created_at` (its UTC calendar date) and `RUN_AT` from the first log snapshot taken after it, since the run always exports before it logs. Override either on purpose:
 
     make annotation-freeze DATE=<YYYY-MM-DD> RUN_AT=<snapshot run_at>
 
@@ -441,10 +437,9 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
     make eval-score      # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog    # corpus_catalog.csv (needs an active `az login`)
 
-They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Human annotation scoring](eval-human-annotation.md), and every column of every CSV is defined in the [data dictionary](deliverables-data-dictionary.md).
+They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Human annotation scoring](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
 
-**Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.**
-`pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead the GPU box installs its own environment. 
+**Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.** `pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead the GPU box installs its own environment.
 
 For training, these workspace targets carry the recommended configuration per task, pool the frozen export into the staged input, and resolve the eval pragmata pin:
 
@@ -452,7 +447,7 @@ For training, these workspace targets carry the recommended configuration per ta
     make eval-train-seqlen                  # diagnostic: sequence-length truncation per task
     make eval-train TASK=retrieval          # then grounding (2+ hours), then generation
 
-The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Synthetic evaluators](eval-synthetic-evaluator.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
+The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Synthetic evaluators](synthetic-evaluators.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
 
 For prediction, these targets stage the unlabelled side, apply a chosen evaluator, and turn the result into deliverables. `eval-predict` and `eval-evaluator-report PART=calibration` need the same GPU environment training does; the other three are CPU-only:
 
@@ -462,7 +457,7 @@ For prediction, these targets stage the unlabelled side, apply a chosen evaluato
     make eval-score-synthetic POPULATION=annotated      # synthetic_metric_estimates.annotated.csv
     make eval-evaluator-report                          # evaluator_metrics.csv (PART=calibration for the other CSV)
 
-Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/`, not at the `<run_id>/` tlmtc would use: tlmtc overwrites that directory without warning, so predicting a second population with the same evaluator would silently replace the first. The populations, the run order, the transport prerequisites, and what each population's numbers may and may not be read as are in [Synthetic evaluators](eval-synthetic-evaluator.md). Read the evaluator-quality caveats there before quoting any corpus-scale synthetic number.
+Prediction output is filed as `data/eval/prediction_outputs/<run_id>-<population>/`, not at the `<run_id>/` tlmtc would use: tlmtc overwrites that directory without warning, so predicting a second population with the same evaluator would silently replace the first. The populations, the run order, the transport prerequisites, and what each population's numbers may and may not be read as are in [Synthetic evaluators](synthetic-evaluators.md). Read the evaluator-quality caveats there before quoting any corpus-scale synthetic number.
 
 The final report is assembled from these outputs in a separate private repository, outside the scope of this guide.
 
@@ -480,7 +475,7 @@ On the CPU VM:
     make transfer-pull PREFIX=predictions
     make transfer-pull PREFIX=checkpoints
 
-A pull lands under `data/transfer/`, which `sync.sh` enforces. Both trees have to be copied into `data/eval/prediction_outputs/` and `data/eval/train_outputs/` before they can be scored or reported on, because that is where pragmata resolves them - see [Synthetic evaluators](eval-synthetic-evaluator.md#getting-the-data-in-and-out).
+A pull lands under `data/transfer/`, which `sync.sh` enforces. Both trees have to be copied into `data/eval/prediction_outputs/` and `data/eval/train_outputs/` before they can be scored or reported on, because that is where pragmata resolves them - see [Synthetic evaluators](synthetic-evaluators.md#getting-the-data-in-and-out).
 
 ### 11.2 Archive the completed run
 

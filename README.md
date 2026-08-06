@@ -15,13 +15,13 @@ flowchart LR
   tr --> rep
 ```
 
-> **Start here: [Implementation Guide](docs/implementation-guide.md)**.
+> **Start here: [Implementation Guide](docs/IMPLEMENTATION-GUIDE.md)**.
 >
 > Walks the whole pipeline end to end - produce, annotate and evaluate a dataset from a fresh machine. Includes both generic overview of how the run the pipeline on a fresh RAG system, as well as pilot-specific implementation & reproducibility details.
 
 ## Setup
 
-Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make setup` and fill in the local configuration. The full procedure is in the [implementation guide §3](docs/implementation-guide.md#3-prepare-the-repositories-and-configuration); variable definitions and file formats are in [Configuration](docs/configuration.md); and the pilot's own identifiers and env values are in the git-excluded `docs/deployment-inventory.local.md`.
+Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), then `make setup` and fill in the local configuration. The full procedure is in the [implementation guide §3](docs/IMPLEMENTATION-GUIDE.md#3-prepare-the-repositories-and-configuration); variable definitions and file formats are in [Configuration](docs/configuration.md); and the pilot's own identifiers and env values are in the git-excluded `docs/deployment-inventory.local.md`.
 
 ## Make targets
 
@@ -53,12 +53,12 @@ make annotation-report-tables  # tables only -> report.md
 make annotation-report-pdf     # tables -> report.pdf                (needs pandoc + xelatex)
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
-# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/eval-human-annotation.md)
+# Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/report-deliverables.md)
 make eval-report               # annotation_operations, annotation_label_summary, retrieval_manifest
 make eval-score                # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
 
-# Synthetic evaluators  (train + apply; GPU host - see docs/eval-synthetic-evaluator.md)
+# Synthetic evaluators  (train + apply; GPU host - see docs/synthetic-evaluators.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
 make eval-train-seqlen         # diagnostic: sequence-length truncation per task
 make eval-train                # train one evaluator (TASK= required; grounding is 2+ hours)
@@ -77,17 +77,20 @@ make repro-verify              # check every bundle's pins            (PIN= for 
 make repro-pin                 # start a new dated bundle            (NAME= PATHS= required)
 make repro-reproduce           # replay a lineage bundle              (PIN= required, MODE= APPLY=)
 
+make docs-check                # this list matches the Makefile + every doc link resolves
 make help                      # list every target
 ```
 
+`make docs-check` is what keeps the list above honest: it compares the target names here against the Makefile's own `##` help lines in both directions, so a target added and left undocumented fails, and so does a line here naming a target that no longer exists. It checks every relative doc link and `#heading` anchor at the same time.
+
 ## Documentation
 
-> **[IMPLEMENTATION GUIDE](docs/implementation-guide.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
+> **[IMPLEMENTATION GUIDE](docs/IMPLEMENTATION-GUIDE.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
 
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting, backup/restore.
-- [Human annotation scoring](docs/eval-human-annotation.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
-- [Synthetic evaluators](docs/eval-synthetic-evaluator.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
-- [Deliverables data dictionary](docs/deliverables-data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
+- [Human annotation scoring](docs/report-deliverables.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
+- [Synthetic evaluators](docs/synthetic-evaluators.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
+- [Deliverables data dictionary](docs/data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
 - [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
 - [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data & secrets.

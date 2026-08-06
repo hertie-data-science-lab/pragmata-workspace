@@ -5,7 +5,7 @@ The workspace side of `pragmata eval predict-labels`. Stages the unlabelled per-
 then runs one evaluator over one population and files its output under a name that says which
 population it describes. Inference needs the same environment training does, so `predict` runs
 on the GPU box; the staging subcommand is CPU-only. See
-[Synthetic evaluators](../../docs/eval-synthetic-evaluator.md).
+[Synthetic evaluators](../../docs/synthetic-evaluators.md).
 
 Two populations answer the published questions, and a third is internal:
 
@@ -344,7 +344,7 @@ def stage_corpus(corpus_dir: Path) -> int:
             f"corpus staging needs pragmata's annotation import schema: {exc}\n"
             "  It imports argilla, which the GPU host's training venv does not install.\n"
             "  Stage the corpus population on the CPU box and transfer the CSVs, or install\n"
-            "  argilla there. See docs/eval-synthetic-evaluator.md."
+            "  argilla there. See docs/synthetic-evaluators.md."
         ) from exc
 
     paths = sorted(corpus_dir.glob(f"*{ec.CURATED_SUFFIX}"))
@@ -563,7 +563,7 @@ def _predict(eval_api, **kwargs):
             "  Inference runs the same stack training does (pragmata[eval] -> tlmtc), which\n"
             "  is deliberately NOT in this workspace's uv.lock - it pulls a CUDA torch build,\n"
             "  and the lock freezes the environment behind the published human-label numbers.\n"
-            "  The install steps are in docs/eval-synthetic-evaluator.md."
+            "  The install steps are in docs/synthetic-evaluators.md."
         ) from exc
 
 
@@ -688,7 +688,7 @@ def predict(
     # or corpus pins behind the input, or the commit of this workspace that filed it - and the
     # directory name is this workspace's invention, so it has to be explained from inside. The
     # `.workspace.` infix is load-bearing: data/eval/ is pragmata's tool tree by the ownership
-    # rule in docs/eval-human-annotation.md, so a file this workspace wrote there has to say so in its name.
+    # rule in docs/report-deliverables.md, so a file this workspace wrote there has to say so in its name.
     record = ws.provenance(
         script="scripts/eval/predict_evaluators.py",
         inputs=[csv_path],

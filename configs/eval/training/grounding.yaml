@@ -1,5 +1,5 @@
 # Grounding evaluator - trainable only with two unusable labels dropped and a long sequence.
-# Deep-merged over _common.yaml. See docs/eval-synthetic-evaluator.md.
+# Deep-merged over _common.yaml. See docs/synthetic-evaluators.md.
 #
 # The two-label drop (support_present, source_cited) is NOT configured here: pragmata's
 # EvalTrainSettings forbids extra keys, and narrowing the label set means reassigning

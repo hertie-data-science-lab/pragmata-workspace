@@ -1,5 +1,5 @@
 # Retrieval evaluator - the strongest result of the three, and the only one to trust outright.
-# Deep-merged over _common.yaml. See docs/eval-synthetic-evaluator.md.
+# Deep-merged over _common.yaml. See docs/synthetic-evaluators.md.
 
 task: retrieval
 
