@@ -33,11 +33,12 @@
 # See reproducibility/README.md for the bundle contract.
 #
 # Eval deliverables (reports/eval/<date>/, one CSV + its .provenance.json each):
-#   make eval-tables                       # the two annotation tables + the retrieval manifest
+#   make eval-annotation-tables            # annotation counts + per-label prevalence
+#   make eval-retrieval-manifest           # what the retriever returned per query
 #   make eval-score-human                  # the corpus metric estimates from human labels
 #   make eval-catalog                      # the corpus catalog for the fairness audit
-#   make eval-deliverables                 # all three of the above
-# All three read the frozen canonical export and the log snapshot pinned in
+#   make eval-deliverables                 # all seven deliverable targets, in order
+# The first four read the frozen canonical export and the log snapshot pinned in
 # configs/eval/freeze.conf, which `make annotation-freeze` writes. See
 # docs/data-dictionary.md for what the columns mean.
 #
@@ -108,7 +109,8 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-backup annotation-restore \
         annotation-report annotation-report-tables annotation-report-pdf \
         annotation-report-plots \
-        eval-deliverables eval-tables eval-score-human eval-catalog \
+        eval-deliverables eval-annotation-tables eval-retrieval-manifest \
+        eval-score-human eval-catalog \
         eval-train-inputs eval-train-seqlen eval-train \
         eval-predict-inputs eval-predict eval-score-synthetic \
         eval-model-metrics eval-model-calibration \
@@ -194,15 +196,18 @@ annotation-report-plots: ## Render plots only (PNGs) -> reports/annotation/<date
 
 # --- eval deliverables (reports/eval/<date>/; OUT= to redirect) ---
 
-# These three share their prerequisites - the frozen export, plus `az login` for the
-# catalog - so `eval-deliverables` runs them as the set a report refresh needs. The
-# model-side deliverables (eval-score-synthetic, eval-model-*) are deliberately
-# NOT in it: they need prediction trees under data/eval/, which only exist after a GPU
-# run and a transfer, so folding them in would give a target that half-fails on the CPU VM.
-eval-deliverables: eval-tables eval-score-human eval-catalog ## Eval: every deliverable the frozen export can produce (tables + human scores + catalog)
+# One target per script, so each names its own output and its own prerequisites. The
+# umbrella runs all seven; it is the only target here that fans out. Later ones need
+# artefacts the GPU host produces (train_outputs/, prediction_outputs/) and the last needs
+# a GPU, so on a box without them the umbrella fails at that step and says why - rather
+# than a name implying a subset. The model *stages* (eval-train*, eval-predict*) are not
+# deliverables and stay out: they produce models, and one of them runs for two hours.
+eval-deliverables: eval-annotation-tables eval-retrieval-manifest eval-catalog eval-score-human eval-score-synthetic eval-model-metrics eval-model-calibration ## Eval: every report deliverable, in order (later ones need the GPU host's outputs)
 
-eval-tables: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv, retrieval_manifest.csv
+eval-annotation-tables: ## Eval: frozen export + pinned log snapshot -> annotation_operations.csv, annotation_label_summary.csv
 	$(PY) scripts/eval/annotation_tables.py $(EVAL_ARGS)
+
+eval-retrieval-manifest: ## Eval: curated corpus + annotation state -> retrieval_manifest.csv (the fairness audit's join key)
 	$(PY) scripts/eval/retrieval_manifest.py $(EVAL_ARGS)
 
 eval-score-human: ## Eval: frozen export -> eval_metric_estimates.csv (runs `pragmata eval score` from the eval pin; stages filtered CSVs in data/eval-inputs/)

@@ -50,10 +50,11 @@ make annotation-report-pdf     # tables -> report.pdf                (needs pand
 make annotation-report-plots   # plots only, PNGs                    (needs matplotlib)
 
 # Eval deliverables  (-> reports/eval/<date>/, OUT= to redirect; see docs/report-deliverables.md)
-make eval-tables               # annotation_operations, annotation_label_summary, retrieval_manifest
+make eval-annotation-tables    # annotation_operations, annotation_label_summary
+make eval-retrieval-manifest   # retrieval_manifest.csv, the fairness audit's join key
 make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
 make eval-catalog              # corpus_catalog.csv from the publikationsbot vector store (az login)
-make eval-deliverables         # all three of the above, the set a report refresh needs
+make eval-deliverables         # all seven deliverable targets, including the model side below
 
 # Synthetic evaluators  (train + apply; GPU host - see docs/synthetic-evaluators.md)
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/

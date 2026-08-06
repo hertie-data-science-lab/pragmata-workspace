@@ -400,10 +400,12 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
 
 **Scoring human-annotated labels runs on the CPU VM**. Three targets produce the report deliverables into `reports/eval/<date>/`, each CSV with a `.provenance.json` and the current data dictionary beside it:
 
-    make eval-deliverables    # all three below, in one go
-    make eval-tables          # annotation_operations, annotation_label_summary, retrieval_manifest
-    make eval-score-human     # eval_metric_estimates.csv, via `pragmata eval score`
-    make eval-catalog         # corpus_catalog.csv (needs an active `az login`)
+    make eval-annotation-tables    # annotation_operations, annotation_label_summary
+    make eval-retrieval-manifest   # retrieval_manifest.csv
+    make eval-score-human          # eval_metric_estimates.csv, via `pragmata eval score`
+    make eval-catalog              # corpus_catalog.csv (needs an active `az login`)
+
+`make eval-deliverables` runs these four plus the three model-side ones below, in order - use it once the GPU host's outputs are back.
 
 They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Report deliverables](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
 
