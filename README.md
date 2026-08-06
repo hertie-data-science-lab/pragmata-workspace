@@ -1,7 +1,6 @@
 # pragmata-workspace
 
-Operational glue for running the [pragmata](https://github.com/bertelsmannstift/pragmata) annotation pipeline against
-the BSt (Bertelsmann Stiftung) publikationsbot. 
+Operational glue for running the [pragmata](https://github.com/bertelsmannstift/pragmata) annotation pipeline against the BSt (Bertelsmann Stiftung) publikationsbot.
 
 Holds scripts, configs, and specs that are specific to the BSt operational setup. It does **not** hold data, logs or outputs (those stay local and gitignored, see [Data & secrets](docs/configuration.md#data--secrets)). The final report is assembled from the scored deliverables and the evaluator's predictions in a separate private repository, outside this workspace.
 
@@ -16,8 +15,6 @@ flowchart LR
 ```
 
 > **Start here: [Implementation Guide](docs/IMPLEMENTATION-GUIDE.md)**.
->
-> Walks the whole pipeline end to end - produce, annotate and evaluate a dataset from a fresh machine. Includes both generic overview of how the run the pipeline on a fresh RAG system, as well as pilot-specific implementation & reproducibility details.
 
 ## Setup
 
@@ -25,8 +22,7 @@ Clone, install [uv](https://docs.astral.sh/uv/getting-started/installation/), th
 
 ## Make targets
 
-`make help` prints this list. Every target is a thin wrapper over `scripts/` (each stays
-runnable directly), taking `VAR=value` overrides.
+`make help` prints this list. Every target is a thin wrapper over `scripts/` (each stays runnable directly), taking `VAR=value` overrides.
 
 ```
 # Dataset build pipeline  
@@ -88,9 +84,9 @@ make help                      # list every target
 > **[IMPLEMENTATION GUIDE](docs/IMPLEMENTATION-GUIDE.md) - start here.** The end-to-end handover walkthrough: produce, annotate and evaluate a new dataset from a fresh machine/RAG system. Everything below is reference detail it cross-references.
 
 - [Annotation pipeline](docs/annotation.md) - build flow, orchestrator, logging/reporting, backup/restore.
-- [Human annotation scoring](docs/report-deliverables.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
+- [Report deliverables](docs/report-deliverables.md) - the report deliverables, the three pins behind every number, the `data/eval/` ownership rule, and the runbook for cutting a new freeze.
 - [Synthetic evaluators](docs/synthetic-evaluators.md) - training the evaluators and applying them: the GPU environment, the recommended config per task, the two predicted populations, and what their numbers may and may not be read as.
-- [Deliverables data dictionary](docs/data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
+- [Data dictionary](docs/data-dictionary.md) - every column of every delivered CSV, and the caveats on reading them. Injected into each deliverable by hash.
 - [Data transport](docs/data-transport.md) - moving exports, the curated corpus, predictions and checkpoints between the CPU annotation box and the GPU eval box over Azure Blob.
 - [Reproducibility](docs/reproducibility.md) - the dated bundle convention + the `repro-*` targets.
 - [Configuration](docs/configuration.md) - secrets, tunables, annotator roster, data & secrets.

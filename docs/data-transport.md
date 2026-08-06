@@ -57,13 +57,13 @@ A `pull` **replaces** `data/transfer/<prefix>/` rather than downloading over the
 
 ## The staging boundary
 
-`sync.sh` **reads** pragmata's own tool trees (`data/annotation/`, `data/eval/`) in place but **writes only** under `data/transfer/`, never inside a tool's output tree - so a tool resetting its own directory cannot clobber received data. There is no destination knob: a `pull` always lands at `data/transfer/<prefix>/`.
+`sync.sh` **reads** pragmata's own tool trees (`data/annotation/`, `data/eval/`) in place but **writes only** under `data/transfer/`, never inside a tool's output tree - so a tool resetting its own directory cannot clobber received data.
 
 ## One-time setup on each box
 
 Neither box has to be an Azure VM. Each needs:
 
-1. **The `az` CLI** - a cross-platform HTTPS client, not an Azure-VM feature.
+1. **The `az` CLI**.
 2. **A `.env`** (copy `.env.example`) with the three `EVAL_BLOB_*` keys - see [Secrets](configuration.md#secrets).
 3. **A clone at the same commit** as the other box.
 
@@ -78,6 +78,6 @@ az storage blob list --account-name "$EVAL_BLOB_ACCOUNT" \
 
 ## Data sensitivity
 
-Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, rewritten from the username on every export by `scripts/annotation/pseudonymize_export.py`. The guarantee is in the code rather than in prose: `scripts/lib/check_pseudonymised.py` enforces it at both boundaries, and a username with no matching Argilla user (a renamed or deleted account) aborts the run rather than passing a real name through. As a second line of defence, `push` refuses any tree whose `annotator_id` values or `iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
+Exports carry `annotator_id` - the annotator's Argilla user id, a UUID, rewritten from the username on every export by `scripts/annotation/pseudonymize_export.py`. `scripts/lib/check_pseudonymised.py` enforces it at both boundaries, and a username with no matching Argilla user (a renamed or deleted account) aborts the run rather than passing a real name through. As a second line of defence, `push` refuses any tree whose `annotator_id` values or `iaa/report.json` pairwise keys are not UUIDs, so a tree that skipped the rewrite cannot leave the box; trees without those surfaces (predictions, checkpoints) pass untouched.
 
 Exports are still treated as PII: the free-text `notes` and `discard_notes` columns are annotator-authored and unreviewed. They ship into the private, IP-allowlisted container; the annotator roster (`configs/annotation/users.json`) never leaves the CPU box, and the GPU box never needs it - eval consumes label columns, not identities.

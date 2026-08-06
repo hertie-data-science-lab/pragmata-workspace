@@ -15,7 +15,7 @@ Per-task configuration lives in [`configs/eval/training/`](../configs/eval/train
 | `make eval-evaluator-report` | `evaluator_metrics.csv` | either box, CPU-only |
 | `make eval-evaluator-report PART=calibration` | `evaluator_calibration.csv` - re-predicts, so it needs a GPU | GPU host |
 
-**Prediction has no YAML configs, deliberately.** Training's parameters are committed as data because they are pins behind published numbers. Prediction's two choices - which population, which evaluator run - are CLI arguments, because a prediction is a *use* of a pinned model rather than a new pin. What each run used is recorded per run instead, in `predict_provenance.workspace.json`.
+**Prediction has no YAML configs.** Training's parameters are committed as data because they are pins behind published numbers; prediction's two choices - which population, which evaluator run - are CLI arguments, recorded per run in `predict_provenance.workspace.json`.
 
 ## The environment
 
@@ -57,9 +57,9 @@ Every grounding item was being cut off at the default - the model never saw a co
 
 ## The two populations
 
-They answer different questions, and that is the whole point of having both.
+They answer different questions.
 
-**`annotated`** is the frozen export with the labels stripped - the same rows `eval_metric_estimates.csv` describes, pooled exactly as training pools them, so each synthetic metric reads straight beside its human counterpart. Two things differ from the training staging, both forced. Every label column is dropped, because pragmata's `validate_eval_predict_frame` does not merely ignore the task's labels, it *rejects* them - rightly, since an input carrying the answers invites scoring a model against its own input. And rows are reduced to one per item: the export carries one row per annotator, and with the labels gone those are exact duplicates. The grain is the one pragmata consolidates to anyway, so the population is unchanged and only the redundancy is - landing on the same 1,561 / 447 / 713 items `eval-train-seqlen` reports.
+**`annotated`** is the frozen export with the labels stripped - the same rows `eval_metric_estimates.csv` describes, pooled exactly as training pools them, so each synthetic metric reads straight beside its human counterpart. Two things differ from the training staging, both forced. Every label column is dropped, because pragmata's `validate_eval_predict_frame` does not merely ignore the task's labels, it *rejects* them. And rows are reduced to one per item: the export carries one row per annotator, and with the labels gone those are exact duplicates. The grain is the one pragmata consolidates to anyway, so the population is unchanged and only the redundancy is - landing on the same 1,561 / 447 / 713 items `eval-train-seqlen` reports.
 
 **`corpus`** is the curated corpus, `data/publikationsbot/*_combined.curated.jsonl` - a superset of what was ever annotated. Its text columns are built by pragmata's own import code, so they match the Argilla fields exactly: retrieval pairs the query with each *chunk's* text, grounding pairs the answer with `context_set`, generation pairs the query with the answer. Note `context_set` is a field of the import record carried through verbatim, not assembled from the chunk texts.
 
@@ -69,9 +69,9 @@ A third population, **`testsplit`**, is not staged by `eval-predict-inputs`: `ev
 
 ## The output layout, and why it is not pragmata's
 
-**tlmtc names its prediction directory after the evaluator run id, and overwrites it** - no refusal, no versioning, no guard. Predicting a second population with the same evaluator silently replaces the first, and `pragmata_predict.meta.json` is rewritten to match, so afterwards nothing on disk says which population the numbers describe. With three populations per evaluator that is a certainty, not a risk.
+**tlmtc names its prediction directory after the evaluator run id, and overwrites it** - no refusal, no versioning, no guard. Predicting a second population with the same evaluator silently replaces the first, and `pragmata_predict.meta.json` is rewritten to match, so afterwards nothing on disk says which population the numbers describe.
 
-So `eval-predict` **moves** a completed run's output to `data/eval/prediction_outputs/<run_id>-<population>/`. The one constraint that scheme had to satisfy is that the result still scores, and it does: `eval score --prediction-id X` resolves the meta file by directory name alone and never checks it against the `run_id` recorded inside, so that field keeps naming the *evaluator* - the more useful of the two things it could say. The staging directory is cleaned *before* a run rather than after, so a leftover `prediction_outputs/<run_id>/` can only be an interrupted run; a completed one always moves. Re-predicting the same (evaluator, population) needs `--overwrite`.
+So `eval-predict` **moves** a completed run's output to `data/eval/prediction_outputs/<run_id>-<population>/`. The result still scores: `eval score --prediction-id X` resolves the meta file by directory name alone and never checks it against the `run_id` recorded inside, so that field keeps naming the *evaluator*. The staging directory is cleaned *before* a run rather than after, so a leftover `prediction_outputs/<run_id>/` can only be an interrupted run; a completed one always moves. Re-predicting the same (evaluator, population) needs `--overwrite`.
 
 ## Run order
 
@@ -137,7 +137,7 @@ make transfer-pull PREFIX=checkpoints && cp -a data/transfer/checkpoints/.  data
 make transfer-pull PREFIX=predictions && cp -a data/transfer/predictions/. data/eval/prediction_outputs/
 ```
 
-Copying pragmata's own output into pragmata's own tool tree does not break the [ownership rule](report-deliverables.md#ownership) - these files *were* written by pragmata, on the other box - but the manual step is a rough edge rather than a design.
+This does not break the [ownership rule](report-deliverables.md#ownership): these files *were* written by pragmata, on the other box.
 
 ## Reading the numbers
 

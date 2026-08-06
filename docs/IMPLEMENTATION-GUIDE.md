@@ -30,7 +30,7 @@ flowchart TD
   export --> train --> report
 ```
 
-The `pragmata-workspace` repository implements the full pipeline and the transfer of data between the annotation (CPU-backed) and evaluation (GPU-backed) machines. NB: the synthetic evaluator fine-tuning and prediction are implemented in `pragmata` (`pragmata eval train-evaluator|predict-labels`, backed by `tlmtc`); assembling the final report happens in a separate repository and is out of scope here.
+NB: the synthetic evaluator fine-tuning and prediction are implemented in `pragmata` (`pragmata eval train-evaluator|predict-labels`, backed by `tlmtc`); assembling the final report happens in a separate repository and is out of scope here.
 
 ## 2. How the system is arranged
 
@@ -76,13 +76,13 @@ The eval pin is a git checkout we provide at `pin/eval-report-2026-07` (as two c
 
 **On the primary CPU-backed VM**: from `pragmata-workspace` run `make setup` (requires `uv` on PATH), this creates the `.venv/`; python is also uv-managed (the version is fixed by `.python-version` (3.12.13)). As it covers every Python entry point in the repository, the single venv runs both stages ([why](report-deliverables.md#the-three-pins)). Outside Python, the scripts expect `/bin/bash`, `make`, `jq` and the Azure CLI on PATH.
 
-> Use the target rather than a bare `uv sync`: it wraps `uv sync --frozen` and keeps uv's interpreter and wheel cache in `.uv/` in the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. No practical difference on a single-user VM, but on a checkout shared between users by POSIX ACL (the GPU host) it is what makes `.venv` readable by all of them - uv writes those per-user paths mode 700/711. The `Makefile` carries the full reasoning; both paths are overridable from the environment.
+> Use the target rather than a bare `uv sync`: it wraps `uv sync --frozen` and keeps uv's interpreter and wheel cache in `.uv/` in the checkout instead of `~/.local/share/uv` and `~/.cache/uv`. No practical difference on a single-user VM, but on a checkout shared between users by POSIX ACL (the GPU host) it is what makes `.venv` readable by all of them - uv writes those per-user paths mode 700/711. Both paths are overridable from the environment.
 
 > NB: for exact pilot reproducibility, a GitHub SSH key with read access to `bertelsmannstift/pragmata` (the annotation pin is a `git+ssh://` dependency) is also required. 
 > 
 > Here ends the exact reproducibility divergence. The rest of the setup is is the same as if for generally re-running the pipeline.
 
-**The GPU host does not need the venv:** everything it runs from this repository is in `scripts/transfer/sync.sh`: pull and verify are `bash` + Azure CLI + `sha256sum`, and push adds only the system `python3` for the pseudonymisation guard. Nothing there touches `.venv`. 
+**The GPU host does not need the venv:** everything it runs from this repository is in `scripts/transfer/sync.sh`: pull and verify are `bash` + Azure CLI + `sha256sum`, and push adds only the system `python3` for the pseudonymisation guard. 
 
 ### 3.3 Create the local configuration
 
@@ -102,7 +102,7 @@ The committed run settings live in:
 
 ### 3.4 Bring up the Argilla instance
 
-Argilla is not a hosted service in this deployment - it is a Docker Compose stack running on the CPU VM itself, and it has to be up before §5 onwards. Nothing in `pragmata-workspace` starts, stops or configures it: the workspace scripts are HTTP clients that read `ARGILLA_API_URL` and `ARGILLA_API_KEY` out of `.env` and talk to whatever is listening there. The stack itself is owned by `pragmata`.
+Argilla is not a hosted service in this deployment - it is a Docker Compose stack running on the CPU VM itself, and it has to be up before §5 onwards. Nothing in `pragmata-workspace` starts, stops or configures it: the workspace scripts are HTTP clients that read `ARGILLA_API_URL` and `ARGILLA_API_KEY` out of `.env` and talk to whatever is listening there.
 
 ```mermaid
 flowchart LR
@@ -142,7 +142,7 @@ That brings up five containers: the Argilla server (v2.8.0) on port 6900, an Arg
 
 The shipped values are dev defaults: replace all three before the first `up` on any real deployment. The server keeps the bootstrap key it was first started with, so changing it afterwards is not a value edit - it needs the volumes destroyed and the stack rebuilt (`make docker-down-clean`, `make docker-up`. On the workspace side, set `ARGILLA_API_URL` to this stack's address: `http://localhost:6900` when the two sit on the same VM, as they do here.
 
-**Lifecycle, and what holds the data.** State lives in named Docker volumes on the VM's OS disk - `annotation_argilladata`, `annotation_postgresdata`, `annotation_elasticdata`, `annotation_redisdata`, the prefix being the Compose project name (taken from the compose file's directory, hence `annotation`).
+**Lifecycle, and what holds the data.** State lives in named Docker volumes on the VM's OS disk - `annotation_argilladata`, `annotation_postgresdata`, `annotation_elasticdata`, `annotation_redisdata`.
 
 | Command | Effect |
 | --- | --- |
@@ -171,7 +171,7 @@ Before running anything, confirm the tree is clean:
     ls data/publikationsbot      # should hold only .gitkeep
     make plan                    # should list the full stage sequence for every domain in scope
 
-On a fresh deployment this is already true and there is nothing to do here. If an earlier run's output is still in the tree, archive and clear it first ([§11.2](#112-archive-the-completed-run)) - and do not delete an earlier run until its data, configuration, logs and checksums are archived and that archive has been verified.
+If an earlier run's output is still in the tree, archive and clear it first ([§11.2](#112-archive-the-completed-run)) - and do not delete an earlier run until its data, configuration, logs and checksums are archived and that archive has been verified.
 
 ## 5. Test the deployment
 
@@ -247,7 +247,7 @@ The driver caps the usable CUDA version (§2.1), so a `False` here is usually an
 ## 6. Generate and review the candidate dataset
 
 
-The orchestrator (`scripts/pipeline.sh`) runs the five stages (querygen-run → bot-run → combine-run → annotation-setup → annotation-import) with optional stage and domain filters, a lock file, and continue-on-error with a final summary. This can be reached via the `make pipeline` target. 
+The orchestrator (`scripts/pipeline.sh`) runs the five stages (querygen-run → bot-run → combine-run → annotation-setup → annotation-import) with optional stage and domain filters, a lock file, and continue-on-error with a final summary. 
 
 `make pipeline` with no arguments runs all five stages for every domain, end to end (possible args are `FROM=`/`TO=`/`ONLY=` - same as the underlying script). 
 
@@ -315,7 +315,7 @@ Argilla nests **workspace → dataset → record**, and this file fixes the firs
 
 Both dataset names are unconditional - a task always gets both - so a zero `calibration_fraction` gives an empty calibration dataset rather than none.
 
-To add further future runs, use **`dataset_id`**. When empty (as in every shipped pilot domain) the datasets are named `retrieval_production` and `retrieval_calibration`, so a second import lands in the *same* datasets as the last run. Set it - `dataset_id: "2026-08"` - and the same import creates `retrieval_production_2026-08` beside the old ones. That is the difference between adding to an existing dataset and standing up a new one, and it is decided here, before the import, not afterwards.
+To add further future runs, use **`dataset_id`**. When empty (as in every shipped pilot domain) the datasets are named `retrieval_production` and `retrieval_calibration`, so a second import lands in the *same* datasets as the last run. Set it - `dataset_id: "2026-08"` - and the same import creates `retrieval_production_2026-08` beside the old ones.
 
 One workspace per task, and the annotation item differs by task. Grounding and generation have one item per record; retrieval has one per (record, chunk). That is why panels exist for retrieval alone, and why `panel_complete` is a retrieval-only condition (§8.1).
 
@@ -351,7 +351,7 @@ Monitoring during annotation ([Annotation pipeline](annotation.md#logging--repor
 
 ### 8.1 When annotation counts as done
 
-Argilla itself holds the threshold, and `pragmata` reads it live. There is no completion target in `configs/` - `min_submitted` lives in each dataset's Argilla settings (`dataset.settings.distribution`). Read it with:
+There is no completion target in `configs/` - `min_submitted` lives in each dataset's Argilla settings (`dataset.settings.distribution`), which `pragmata` reads live. Read it with:
 
     .venv/bin/pragmata annotation status                    # all tasks, all workspaces
     .venv/bin/pragmata annotation status --by-dataset       # per dataset
@@ -388,16 +388,14 @@ No arguments are needed: `DATE` derives from the export tree's own `created_at` 
     exports/<domain>/          transient, overwritten on every export, gitignored
     exports-frozen/<date>/     the archive: dated, write-protected, pushed to Blob
 
-`make annotation-freeze` also guards the following: a clean working tree (the provenance files cite a commit), no freeze under that date already, a `RUN_AT` that pairs with the export, derived or explicit (rather than merely existing in `logs/annotation/log.jsonl` - one that predates the export or lags it implausibly is refused), and no real names left in `exports/`. It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + the reproducibility bundle created by `make repro-pin`).
+It then writes the pin to `configs/eval/freeze.conf` and prints the follow-ups (git commit + `make repro-pin`). The guards it applies before copying are listed in [Report deliverables](report-deliverables.md#cutting-a-new-freeze).
 
 > NB: The freeze and the reproducibility bundle are twinned but separate artefacts. The freeze is the *bytes* - an immutable copy, not in git (`/data/` is gitignored), preserved off-box by `transfer-push`. The bundle is the *checksums* - `pins.sha256` and a README, committed, preserved by git.
 
 
 ## 9. Transfer the export to the GPU host
 
-The CPU VM is used to run the pipeline from query generation through to exporting human annotated datasets. 
-
-For fine-tuning a synthetic evaluator based on human annotation - and running inference - a GPU-enabled device is required. Data transfer for the pilot was handled as follows:
+Data transfer for the pilot was handled as follows:
 
 ```mermaid
 flowchart LR
@@ -412,9 +410,7 @@ flowchart LR
   ret --> rep
 ```
 
-The Blob container (within the same Bertelsmann sub-net as the CPU VM) is the only thing both machines touch: the CPU VM pushes the export tree and pulls the results back; the GPU host pulls the export and pushes what it produces. 
-
->NB: this split was an expedient choice given resource constraints and differing time requirements (the CPU VM is needed to be running over long periods for annotation to occur; the GPU device is only needed intermeittently to train and run inference). These two devices could be on the same network, or even within the same device, depending on chosen setup.
+The Blob container (within the same Bertelsmann sub-net as the CPU VM) is the only thing both machines touch.
 
 To transfer data securely:
 
@@ -437,7 +433,7 @@ Every push writes a SHA-256 manifest and prints a snapshot pin; every pull re-ve
     make eval-score      # eval_metric_estimates.csv, via `pragmata eval score`
     make eval-catalog    # corpus_catalog.csv (needs an active `az login`)
 
-They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Human annotation scoring](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
+They read pinned inputs (the `make annotation-freeze` outputs), never the live export tree. The pin model and the refresh procedure are in [Report deliverables](report-deliverables.md), and every column of every CSV is defined in the [data dictionary](data-dictionary.md).
 
 **Evaluator training and prediction are implemented in `pragmata` and run on the GPU host.** `pragmata eval train-evaluator` fine-tunes a supervised evaluator through `tlmtc` and writes a run directory, a model directory and a run-metadata file; `pragmata eval predict-labels` applies a chosen training run to an unlabelled CSV and writes probabilities and predictions. Both live behind the `eval` extra (`pragmata[eval]` → `tlmtc[train]`), which is *not* in this workspace's lock. Instead the GPU box installs its own environment.
 
@@ -447,7 +443,7 @@ For training, these workspace targets carry the recommended configuration per ta
     make eval-train-seqlen                  # diagnostic: sequence-length truncation per task
     make eval-train TASK=retrieval          # then grounding (2+ hours), then generation
 
-The per-task configurations, the install steps for the GPU host's own environment, and the list of things tested and found not to help are in [Synthetic evaluators](synthetic-evaluators.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
+The per-task configurations and the install steps for the GPU host's own environment are in [Synthetic evaluators](synthetic-evaluators.md). Read it before changing any training parameter: several obvious levers were tried and made results worse.
 
 For prediction, these targets stage the unlabelled side, apply a chosen evaluator, and turn the result into deliverables. `eval-predict` and `eval-evaluator-report PART=calibration` need the same GPU environment training does; the other three are CPU-only:
 

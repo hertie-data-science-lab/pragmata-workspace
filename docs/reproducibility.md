@@ -55,7 +55,7 @@ make repro-reproduce PIN=2026-07-01-annotation-curation MODE=responses BACKUP=<d
 ```
 
 Without `APPLY=1` nothing mutates: the preview reports the composed expectation and what a
-prune would delete, which doubles as the check that live still matches the lineage.
+prune would delete.
 `APPLY=1` requires a `MODE=`: the prune reduces a **superset** to the keep-lists, so
 applying without rebuilding one first would delete live records down to a state the
 lineage never described.

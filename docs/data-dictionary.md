@@ -1,10 +1,9 @@
-# Deliverables data dictionary
+# Data dictionary
 
 > **This file is injected into the metric-production pipeline as a schema contract; do not edit w/o editing corresponding pipeline code.** 
 
 > Here is the canonical record of definitions for the report data CSVs in `reports/eval/<date>/`. Each CSV ships with a `*.provenance.json` naming the code, inputs and parameters it came from; that file pins *this* one by SHA256, so a CSV can always be paired with the schema & definitions that were current when it was written.
 
-> 3 points in the pipeline depend on this md by path and by hash - see the [Appendix](#appendix---implications-for-editing-this-doc-pipeline-deps).
 
 ## Vocabulary
 
@@ -16,10 +15,7 @@
 | **panel** | Retrieval only: the *k* chunk-records of one query. *Complete* means every chunk in it has a submitted response. |
 | **query group** | One query + response across all three tasks: its panel, plus its grounding record and its generation record. |
 
-A **query group owns four content artefacts** - the `query`, the bot's `response`, the
-retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks
-rendered as one block) - and each task's records are a *projection* of them, which is why
-"record" holds different content per task:
+A **query group owns four content artefacts** - the `query`, the bot's `response`, the retrieved `chunks` (each with its own text and rank), and the `context_set` (those chunks rendered as one block) - and each task's records are a *projection* of them, which is why "record" holds different content per task:
 
 ```
 query group ── query ── response ── chunks (k, each with text + rank) ── context_set
@@ -30,10 +26,7 @@ query group ── query ── response ── chunks (k, each with text + rank
 
 > Consequence for counting: one query group with k=5 projects into 7 records (1x grounding, 1x generation, 5x retrieval).
 
-**Calibration** records are deliberately overlapped so several annotators see the same
-thing; they are the only population inter-annotator agreement is computed on. They are
-*pooled with production* in `annotation_operations.csv` and *kept in* the scored corpus (pragmata's majority consolidation
-coalesces their extra responses into one item, exactly as it does when passing data for training its synthetic data generation models).
+**Calibration** records are deliberately overlapped so several annotators see the same thing; they are the only population inter-annotator agreement is computed on. They are *pooled with production* in `annotation_operations.csv` and *kept in* the scored corpus (pragmata's majority consolidation coalesces their extra responses into one item, exactly as it does when passing data for training its synthetic data generation models).
 
 ---
 
@@ -62,11 +55,7 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 **Caveats.**
 
-- The gap columns come from the Argilla REST API, not the export: the export's `created_at`
-  is the *record's* `updated_at` and is identical across a record's annotators. Gaps longer
-  than the session threshold are excluded as breaks (overnight, lunch), so these describe
-  active pace, not elapsed time. The threshold is in the `*-provenance.json`
-  (`session_gap_threshold_s`).
+- The gap columns come from the Argilla REST API, not the export: the export's `created_at` is the *record's* `updated_at` and is identical across a record's annotators. Gaps longer than the session threshold are excluded as breaks (overnight, lunch), so these describe active pace, not elapsed time. The threshold is in the `*-provenance.json` (`session_gap_threshold_s`).
 
 ## `annotation_label_summary.csv`
 
@@ -87,29 +76,13 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 **Caveats.**
 
-- `n_items` / `n_true` are the *pooled production+calibration* prevalence over items; `alpha`,
-  `pct_agree` and `n_items_calibration` describe the *calibration overlap only*. 
-- **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient
-  to compute one - too few annotators saw the same records.
-- `alpha`, `pct_agree`, `n_items_calibration` and the interval are **recomputed from the
-  frozen export CSVs** as the report is built, with pragmata's own IAA implementation - not
-  read out of the export's `iaa/report.json`. That file records no seed, and a re-export
-  overwrites the CSVs beside it without regenerating it, so its interval could neither be
-  re-derived nor be trusted to describe the rows in this table.
-- `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only
-  `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with seed 0 at the
-  0.95 level (all three recorded in the `*-provenance.json`). So the point estimate moves
-  only when the underlying calibration data does, while the bounds also move if those
-  parameters change - and, being seeded, they re-derive exactly from the same tree.
-- **`alpha = 1.0` with `degenerate_calibration = True` is not evidence of reliability.**
-  Alpha is `1 - Do/De` and is undefined when expected disagreement is zero (the label never
-  varies in the overlap); pragmata returns 1.0 there by convention.
-- Consolidation is pragmata's own `consolidate_labels_by_majority` - the function eval
-  scoring ingests through - so these counts are eval's by construction. A label with a
-  strict majority (> half positive) is decided independently; a tied label (a 1-of-2 split)
-  takes its value from the row that matches every strict-majority label, and only from the
-  group's first row in file order when no row does. Either way a tie is settled by row
-  selection rather than by the data.
+- `n_items` / `n_true` are the *pooled production+calibration* prevalence over items; `alpha`, `pct_agree` and `n_items_calibration` describe the *calibration overlap only*.
+- **A blank `alpha` is not a low alpha.** It means the calibration overlap was insufficient to compute one - too few annotators saw the same records.
+- `alpha`, `pct_agree`, `n_items_calibration` and the interval are **recomputed from the frozen export CSVs** as the report is built, with pragmata's own IAA implementation - not read out of the export's `iaa/report.json`. That file records no seed, and a re-export overwrites the CSVs beside it without regenerating it, so its interval could neither be re-derived nor be trusted to describe the rows in this table.
+- `alpha` itself is **analytic** (`1 - Do/De` off the coincidence matrix); only `alpha_ci_low` / `alpha_ci_high` are bootstrapped, at 1000 resamples with seed 0 at the 0.95 level (all three recorded in the `*-provenance.json`). So the point estimate moves only when the underlying calibration data does, while the bounds also move if those parameters change - and, being seeded, they re-derive exactly from the same tree.
+- Consolidation is pragmata's own `consolidate_labels_by_majority` - the function eval scoring ingests through - so these counts are eval's by construction. A label with a strict majority (> half positive) is decided independently; a tied label (a 1-of-2 split) takes its value from the row that matches every strict-majority label, and only from the group's first row in file order when no row does. Either way a tie is settled by row selection rather than by the data.
+
+**Why `alpha = 1.0` is not always evidence of reliability** is in [Report deliverables](report-deliverables.md#reading-the-numbers).
 
 ## `eval_metric_estimates.csv`
 
@@ -137,12 +110,11 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 **Caveats.**
 
-- The intervals cover sampling uncertainty over queries only - not annotator
-  disagreement and not label error. A tight interval on a label with alpha at or below chance reads as precision that is not there; the `alpha_*` columns exist to stop that reading.
 - The `alpha_*` columns are the pooled alpha over every programme's calibration items.
 - `top_k` varies per query. It is `max(chunk_rank)`, not a configured K.
-- `n` counts the population that survived filtering (submitted responses; complete
-  retrieval panels only), not the corpus. Read it beside `n_panels_skipped`.
+- `n` counts the population that survived filtering (submitted responses; complete retrieval panels only), not the corpus.
+
+**What the intervals do and do not cover**, and what `n` has to be read beside, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
 
 ## `retrieval_manifest.csv`
 
@@ -166,19 +138,9 @@ coalesces their extra responses into one item, exactly as it does when passing d
 **Caveats.**
 
 - The source is the curated corpus, a superset of what was annotated - 464 of 1143 queries are annotated.
-- `panel_started` and `n_chunks_annotated` are the only columns here derived from
-  annotation state; every other column comes from the curated corpus. They exist because the join that would reproduce them is not available from this bundle: the exports carry no
-  `query_id`, and this file carries no query text. (TODO-DEFERRED - fix this in pragmata)
-- **Row fan-out is per retrieved passage, one per document.** Because `chunk_id` is
-  `<doc_id>-c1`, document *frequency* means counting rows and distinct *documents* means
-  deduplicating on `(query_id, doc_id)` - identical to deduplicating on `(query_id,
-  chunk_id)`. Avoid joining on `doc_id`/`chunk_id` alone: 739 of the 1092 retrieved
-  documents are returned for more than one query (one for 72 of them), so a document-only
-  join multiplies rows across unrelated queries.
-- Joining to the annotation exports. They carry no `query_id`, only `record_uuid` (TODO-DEFERRED - fix this in pragmata). Join
-  on the **query text**, which is verified 1:1 with `query_id` (1143 texts, 1143 ids, both
-  directions), or on `(query_id, chunk_id)` once the query is resolved. Join to
-  `corpus_catalog.csv` on `doc_id`. 
+- `panel_started` and `n_chunks_annotated` are the only columns here derived from annotation state; every other column comes from the curated corpus. They exist because the join that would reproduce them is not available from this bundle: the exports carry no `query_id`, only `record_uuid`, and this file carries no query text. (TODO-DEFERRED - fix this in pragmata)
+
+**How to join this file**, and the row fan-out that makes a naive join wrong, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
 
 ## `corpus_catalog.csv`
 
@@ -218,40 +180,20 @@ coalesces their extra responses into one item, exactly as it does when passing d
 
 **Caveats.**
 
-- **Gender is inferred from a first-name dictionary (`gender-guesser` 0.4.0)**, is not recorded in the corpus, and is not a measure of how anyone identifies. It is weaker on non-Western names - the `_raw` columns keep `andy` (ambiguous) distinct from `unknown` (absent from the dictionary) so that coverage stays visible.
-- `author_gender_collapsed = 'unknown'` merges two populations: docs with no recorded author at all, and docs whose authors the dictionary cannot classify.
-- **Do not collapse the slots into a single list.** Two documents (`52109`, `53806`) record
-  `verf1` and `verf3` with no `verf2`; a list of only the classified authors closes that hole
-  and presents `verf3`'s verdict as the second author's. Cut by slot, or count across slots -
-  never by list position.
-- Aggregate counts are one line off the slots: authors classified is the count of slots whose
-  `_raw` is in {`female`, `mostly_female`, `male`, `mostly_male`}, and "any female author" is
-  whether any slot's `_raw` is in {`female`, `mostly_female`}.
-- "Majority" is over *recorded* authors: the metadata holds at most three, so a
-  twelve-author volume is judged on three.
 - The corpus is a live database with no version of its own, so the `*-provenance.json` pins it by row count plus a checksum over the per-document chunk counts rather than by file hash. Either changing means the corpus moved under the catalog.
-- **What the store holds but this catalog does not.** Of its 22 metadata keys, 13 are rolled
-  up here. Left out deliberately: `url_doi` (it is `https://doi.org/` + `doi`), `mediengrp`
-  (the constant `"G"` on all 544,692 chunks), `mediennr` (a second document id),
-  `filename`/`filepath_internal`/`source` (internal paths), and the per-chunk `headline` -
-  a section heading has no document-grain meaning, and `retrieval_manifest.csv` cannot join
-  to it either, because its `chunk_id` is the pipeline's own `<doc_id>-c1` rather than a key
-  this store holds.
+- **What the store holds but this catalog does not.** Of its 22 metadata keys, 13 are rolled up here. Left out deliberately: `url_doi` (it is `https://doi.org/` + `doi`), `mediengrp` (the constant `"G"` on all 544,692 chunks), `mediennr` (a second document id), `filename`/`filepath_internal`/`source` (internal paths), and the per-chunk `headline` - a section heading has no document-grain meaning, and `retrieval_manifest.csv` cannot join to it either, because its `chunk_id` is the pipeline's own `<doc_id>-c1` rather than a key this store holds.
+
+**What the inferred gender columns can and cannot support**, and how to count across the author slots without misreading them, is in [Report deliverables](report-deliverables.md#reading-the-numbers).
 
 
 ## `synthetic_metric_estimates.csv`
 
 Written as `synthetic_metric_estimates.<population>.csv`, one file per predicted population.
 
-- **Purpose:** the same corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a
-  *synthetic evaluator's* predictions instead of on human labels. Produced by the same
-  `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of
-  `--path`.
+- **Purpose:** the same corpus metric taxonomy as `eval_metric_estimates.csv`, scored on a *synthetic evaluator's* predictions instead of on human labels. Produced by the same `pragmata eval score` CLI, from the same eval pin, with `--prediction-id` in place of `--path`.
 - **Grain:** one row per task x metric, over one predicted population.
 
-Every column means exactly what it means in
-[`eval_metric_estimates.csv`](#eval_metric_estimatescsv) - the row builder is literally shared -
-with two differences and three additions:
+Every column means exactly what it means in [`eval_metric_estimates.csv`](#eval_metric_estimatescsv) - the row builder is literally shared - with two differences and three additions:
 
 | Column | Definition |
 |---|---|
@@ -267,24 +209,20 @@ with two differences and three additions:
 
 ## `evaluator_metrics.csv`
 
-- **Purpose:** how good each synthetic evaluator is, per label. The file to read beside any
-  `synthetic_metric_estimates.*.csv` number.
+- **Purpose:** how good each synthetic evaluator is, per label. The file to read beside any `synthetic_metric_estimates.*.csv` number.
 - **Grain:** one row per task x label x training run, on **that run's own held-out test split**.
 
 | Column | Definition |
 |---|---|
 | `task` | `retrieval`, `grounding` or `generation`. |
 | `label` | One of the task's label columns - but only the ones this run actually trained. |
-| `training` | The evaluator training run id (e.g. `a1b33eec8c9c41f181c61cbd8400913a`). Opaque on purpose: it is the join key to that run's own records - `train_provenance.workspace.json` beside its checkpoints, and the prediction directories named after it - where a friendly name would identify a configuration rather than the run that produced these numbers. |
+| `training` | The evaluator training run id (e.g. `a1b33eec8c9c41f181c61cbd8400913a`). The join key to that run's own records - `train_provenance.workspace.json` beside its checkpoints, and the prediction directories named after it. |
 | `roc_auc` | Area under the ROC curve for this label, as `tlmtc` reported it. Threshold-independent, where `f1`/`precision`/`recall` all depend on the run's decision threshold. |
 | `accuracy` | Fraction of test rows classified correctly. **Derived, not persisted** - see below. Blank on degenerate labels. |
 | `f1`, `precision`, `recall` | At the run's own persisted decision threshold, as `tlmtc` reported them. |
 | `n` | Rows in the run's held-out test split (`data/test.parquet`) - 409 retrieval, 112 grounding, 183 generation. The same value on every row of a task, because every label is scored on the same split. |
 
-**How `accuracy` is derived.** `tlmtc` persists `f1`, `precision`, `recall`, `roc_auc`,
-`pr_auc`, `true_prevalence` and `pred_prevalence` per label, and *not* accuracy. Three of
-those (`true_prevalence`, `recall`, `pred_prevalence`), with the split size `n`, pin the
-whole 2x2 table, so the reconstruction is exact rather than approximate:
+**How `accuracy` is derived.** `tlmtc` persists `f1`, `precision`, `recall`, `roc_auc`, `pr_auc`, `true_prevalence` and `pred_prevalence` per label, and *not* accuracy. Three of those (`true_prevalence`, `recall`, `pred_prevalence`), with the split size `n`, pin the whole 2x2 table, so the reconstruction is exact rather than approximate:
 
 ```
 P  = true_prevalence * n      TP = recall * P       PP = pred_prevalence * n
@@ -292,11 +230,7 @@ FP = PP - TP                  FN = P - TP           TN = n - TP - FP - FN
 accuracy = (TP + TN) / n
 ```
 
-Every one of those is a count of test rows and must come out whole; each is checked to within
-0.01 rows and the run **aborts** on a miss, because publishing a plausible accuracy derived from
-the wrong model of these metrics is worse than failing. The derivation and the tolerance are also
-written into the `*.provenance.json`, since a derived column that appears in no input is the one
-thing a reader of the CSV cannot check.
+Every one of those is a count of test rows and must come out whole; each is checked to within 0.01 rows and the run **aborts** on a miss, because publishing a plausible accuracy derived from the wrong model of these metrics is worse than failing. The derivation and the tolerance are also written into the `*.provenance.json`, since a derived column that appears in no input is the one thing a reader of the CSV cannot check.
 
 **When a value is blank or a row is absent.**
 
@@ -307,17 +241,14 @@ thing a reader of the CSV cannot check.
 
 ## `evaluator_calibration.csv`
 
-- **Purpose:** whether an evaluator's stated probabilities mean what they say - the reliability
-  data behind a calibration curve.
-- **Grain:** one row per task x label x probability bin, on **that run's own held-out test
-  split**. Bins with no rows in them are omitted, so a task x label has at most 10 rows and
-  usually fewer.
+- **Purpose:** whether an evaluator's stated probabilities mean what they say - the reliability data behind a calibration curve.
+- **Grain:** one row per task x label x probability bin, on **that run's own held-out test split**. Bins with no rows in them are omitted, so a task x label has at most 10 rows and usually fewer.
 
 | Column | Definition |
 |---|---|
 | `task` | `retrieval`, `grounding` or `generation`. |
 | `label` | One of the run's trained labels (grounding: three of five, as above). |
-| `prob_bin` | One of ten fixed-width bins over the predicted probability: `[0.0,0.1)`, `[0.1,0.2)`, ... `[0.9,1.0]`. Fixed rather than quantile bins, because the question is whether a stated probability is accurate - a claim about the value, not about its rank - and because fixed edges let two runs' rows line up. The top bin is closed so a probability of exactly 1.0 has somewhere to go. |
+| `prob_bin` | One of ten fixed-width bins over the predicted probability: `[0.0,0.1)`, `[0.1,0.2)`, ... `[0.9,1.0]`. The top bin is closed so a probability of exactly 1.0 has somewhere to go. |
 | `mean_pred` | Mean predicted probability of the rows in this bin. Plot against `frac_true`; a perfectly calibrated model puts every point on the diagonal. |
 | `frac_true` | Fraction of rows in this bin whose held-out label is actually positive. |
 | `n` | Rows in this bin. **Load-bearing - see the caveat.** |

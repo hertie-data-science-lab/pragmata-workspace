@@ -19,7 +19,7 @@ Python deps live in `pyproject.toml` + `uv.lock` - committed. `uv sync` reproduc
 These live in `configs/settings.conf` (queries-per-spec, bot concurrency, throttle, disk thresholds) - committed.
 
 ## The canonical freeze pin
-This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Human annotation scoring](report-deliverables.md#the-three-pins).
+This lives in `configs/eval/freeze.conf` (`FREEZE_DATE` `CANONICAL_SNAPSHOT_RUN_AT`) - committed, same `KEY=VALUE` format and same "existing environment wins" loader. Written by `make annotation-freeze`, read by the eval report scripts; it is what makes a published number cite one export tree and one log snapshot. See [Report deliverables](report-deliverables.md#the-three-pins).
 
 
 ## querygen runtime
