@@ -60,7 +60,7 @@ make eval-deliverables         # all seven deliverable targets, including the mo
 make eval-train-inputs         # pool the frozen export per task -> data/eval-inputs/training/
 make eval-train-seqlen         # diagnostic: sequence-length truncation per task
 make eval-train                # train one evaluator (TASK= required; grounding 2+ hours; GPU host)
-make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|corpus)
+make eval-predict-inputs       # stage the unlabelled side  (POPULATION=annotated|all-items)
 make eval-predict              # apply one evaluator (TASK= POPULATION= RUN_ID= BATCH_SIZE=; GPU host)
 make eval-score-synthetic      # synthetic_metric_estimates.<population>.csv  (POPULATION=; CPU box)
 make eval-model-metrics        # evaluator_metrics.csv                        (CPU-only)

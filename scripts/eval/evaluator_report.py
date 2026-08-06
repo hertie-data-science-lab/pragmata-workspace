@@ -2,10 +2,10 @@
 """How good the synthetic evaluators are - the two deliverable CSVs about the models.
 
 Columns and caveats are defined in `docs/data-dictionary.md` (`evaluator_metrics.csv`,
-`evaluator_calibration.csv`). These describe the EVALUATORS, not the corpus: the corpus
-estimates are `eval_metric_estimates.csv` (human labels) and
+`evaluator_calibration.csv`). These describe the EVALUATORS, not the populations they judge:
+the curated-corpus estimates are `eval_metric_estimates.csv` (human labels) and
 `synthetic_metric_estimates.csv` (the evaluators applied to a population). Read those two
-beside this one - a corpus rate from a model with an AUC near chance is not a measurement.
+beside this one - an all-items rate from a model with an AUC near chance is not a measurement.
 
 Both are computed on each run's OWN held-out test split, the split tlmtc cut and reported on,
 so they are the same population the training run's own metrics describe.

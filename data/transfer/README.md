@@ -9,7 +9,7 @@ code; this carries data).
 data/transfer/
 ├── exports/                annotation exports pulled on the GPU box (input to eval)
 ├── exports-frozen/<date>/  the pinned export tree behind published numbers
-├── publikationsbot/        the curated corpus the `corpus` prediction population is staged from
+├── publikationsbot/        the curated corpus the `all-items` prediction population is staged from
 ├── predictions/            per-row model predictions pulled back on the CPU box
 └── checkpoints/            trained evaluator checkpoints pulled off the GPU before teardown
 ```

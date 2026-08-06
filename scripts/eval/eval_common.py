@@ -581,7 +581,7 @@ def require_fresh_staged_csv(
       it; training has one pooled CSV per task and no such key.
     - ``check_freeze``. Every training input is pooled from the frozen export, so a moved
       pin always makes it the previous dataset; on the prediction side only the annotated
-      population is, the corpus population being pinned by the per-source sha256s and the
+      population is, the all-items population being pinned by the per-source sha256s and the
       curation-pin comparison in its own sidecar instead.
     """
     if not path.exists():

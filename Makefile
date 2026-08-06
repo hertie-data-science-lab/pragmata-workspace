@@ -55,7 +55,9 @@
 #   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
 #   make eval-model-metrics                             # -> evaluator_metrics.csv
 #   make eval-model-calibration                         # -> evaluator_calibration.csv (GPU)
-# See docs/synthetic-evaluators.md for the populations, the run order and the output layout.
+# The two staged populations are `annotated` and `all-items`; the last three land in
+# reports/eval/<date>/synthetic-evaluator/. See docs/synthetic-evaluators.md for the
+# populations, the run order and the output layout.
 #
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
 # it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
@@ -246,9 +248,9 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 # There are no YAML configs here on purpose - population and evaluator run id are arguments,
 # because until the final run nothing is published for a pin to stand behind.
 
-eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> data/eval-inputs/predict/<population>/ (POPULATION=annotated|corpus; EXPORTS=/CORPUS_DIR= to override the source)
-	@case "$(POPULATION)" in annotated|corpus) ;; *) \
-	  echo "usage: make eval-predict-inputs POPULATION=annotated|corpus"; exit 2 ;; esac
+eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> data/eval-inputs/predict/<population>/ (POPULATION=annotated|all-items; EXPORTS=/CORPUS_DIR= to override the source)
+	@case "$(POPULATION)" in annotated|all-items) ;; *) \
+	  echo "usage: make eval-predict-inputs POPULATION=annotated|all-items"; exit 2 ;; esac
 	$(PY) scripts/eval/predict_evaluators.py predict-inputs --population $(POPULATION) \
 	  $(if $(EXPORTS),--exports $(EXPORTS),) $(if $(CORPUS_DIR),--corpus-dir $(CORPUS_DIR),)
 
@@ -258,15 +260,15 @@ eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> d
 # POPULATION=testsplit is internal - `eval-model-calibration` stages a run's
 # own held-out split and predicts it in one pass. It is accepted here so that pass can be
 # repeated by hand, which needs RUN_ID to name the run the split was staged from.
-eval-predict: ## Eval prediction: one evaluator over one population -> data/eval/prediction_outputs/<run_id>-<population>/ (TASK=, POPULATION=annotated|corpus|testsplit, RUN_ID=, BATCH_SIZE=)
+eval-predict: ## Eval prediction: one evaluator over one population -> data/eval/prediction_outputs/<run_id>-<population>/ (TASK=, POPULATION=annotated|all-items|testsplit, RUN_ID=, BATCH_SIZE=)
 	@case "$(TASK)" in retrieval|grounding|generation) ;; *) \
-	  echo "usage: make eval-predict TASK=retrieval|grounding|generation POPULATION=annotated|corpus (testsplit is internal - see make help)"; exit 2 ;; esac
-	@case "$(POPULATION)" in annotated|corpus|testsplit) ;; *) \
-	  echo "usage: make eval-predict TASK=$(TASK) POPULATION=annotated|corpus, or testsplit with RUN_ID= (internal - staged by eval-model-calibration)"; exit 2 ;; esac
+	  echo "usage: make eval-predict TASK=retrieval|grounding|generation POPULATION=annotated|all-items (testsplit is internal - see make help)"; exit 2 ;; esac
+	@case "$(POPULATION)" in annotated|all-items|testsplit) ;; *) \
+	  echo "usage: make eval-predict TASK=$(TASK) POPULATION=annotated|all-items, or testsplit with RUN_ID= (internal - staged by eval-model-calibration)"; exit 2 ;; esac
 	$(PY) scripts/eval/predict_evaluators.py predict $(TASK) --population $(POPULATION) \
 	  $(if $(RUN_ID),--evaluator-run-id $(RUN_ID),) $(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),)
 
-eval-score-synthetic: ## Eval prediction: score one predicted population -> synthetic_metric_estimates.<population>.csv (POPULATION=annotated|corpus, default annotated)
+eval-score-synthetic: ## Eval prediction: score one predicted population -> synthetic-evaluator/synthetic_metric_estimates.<population>.csv (POPULATION=annotated|all-items, default annotated)
 	$(PY) scripts/eval/score_synthetic_predictions.py \
 	  --population $(if $(POPULATION),$(POPULATION),annotated) $(EVAL_ARGS)
 

@@ -31,7 +31,7 @@ Each is a top-level prefix, pinned by its own `MANIFEST.sha256`:
 | Prefix | Direction | What |
 | --- | --- | --- |
 | `exports/` | CPU → GPU | annotation exports, the input to eval |
-| `publikationsbot/` | CPU → GPU | the curated corpus the `corpus` prediction population is staged from - not part of the frozen export, so it travels separately |
+| `publikationsbot/` | CPU → GPU | the curated corpus the `all-items` prediction population is staged from - not part of the frozen export, so it travels separately |
 | `predictions/` | GPU → CPU | the whole `data/eval/prediction_outputs/` tree, one directory per (evaluator, population) |
 | `checkpoints/` | GPU → CPU | trained evaluator checkpoints - **push these off the GPU box before it is torn down** (see [Getting the data in and out](synthetic-evaluators.md#getting-the-data-in-and-out)) |
 

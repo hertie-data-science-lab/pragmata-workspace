@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Corpus metrics from the synthetic evaluators' predictions - the twin of the human scorer.
+"""Curated-corpus metrics from the synthetic evaluators' predictions - the human scorer's twin.
 
 Columns and caveats are defined in `docs/data-dictionary.md`
 (`synthetic_metric_estimates.csv`). Its twin, `score_human_annotations.py`, scores the human
@@ -16,13 +16,14 @@ Two populations, and the caveat differs:
 
 - `annotated` - the rows the human metrics were scored on, so each metric can be read beside
   its `eval_metric_estimates.csv` counterpart.
-- `corpus` - corpus scale, no human baseline at all. Read only with the evaluator's own test
-  metrics in hand: for grounding and generation those are weak enough that the corpus numbers
-  are directional at best (see docs/synthetic-evaluators.md).
+- `all-items` - every curated query-response item, so corpus scale with no human baseline at
+  all. Read only with the evaluator's own test metrics in hand: for grounding and generation
+  those are weak enough that the numbers are directional at best (see
+  docs/synthetic-evaluators.md).
 
 Usage:
   scripts/eval/score_synthetic_predictions.py                       # the annotated population
-  scripts/eval/score_synthetic_predictions.py --population corpus
+  scripts/eval/score_synthetic_predictions.py --population all-items
   scripts/eval/score_synthetic_predictions.py --prediction-id <dir> # pin them explicitly
 """
 
@@ -169,8 +170,8 @@ def unscoreable_labels(prediction_dir: Path, task: str) -> list[str]:
     an explicit n=0 row per affected metric saying the evaluator does not cover the label -
     which is a finding about the evaluator, and one the eval report already documents.
     """
-    # One line, not read_text(): a corpus predictions.csv carries every chunk's text and runs
-    # to tens of MB, and only the header is wanted. Label columns are appended by tlmtc and are
+    # One line, not read_text(): an all-items predictions.csv carries every chunk's text and
+    # runs to tens of MB, and only the header is wanted. Label columns are appended by tlmtc and are
     # bare identifiers, so splitting the header on commas is safe where splitting a data row
     # would not be.
     with (prediction_dir / "predictions.csv").open(encoding="utf-8") as handle:
@@ -203,7 +204,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
         "--population",
-        choices=["annotated", "corpus"],
+        choices=["annotated", "all-items"],
         default="annotated",
         help="Which predicted population to score (default: annotated).",
     )

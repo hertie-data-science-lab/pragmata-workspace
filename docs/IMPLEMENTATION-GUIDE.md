@@ -422,7 +422,7 @@ Training:
 Prediction, and the deliverables that come off it - `eval-predict` and `eval-model-calibration` need the training venv inside the GPU container, the rest run CPU-side:
 
     make eval-predict-inputs POPULATION=annotated       # frozen export, labels stripped -> data/eval-inputs/predict/annotated/
-    make eval-predict-inputs POPULATION=corpus          # curated corpus -> data/eval-inputs/predict/corpus/
+    make eval-predict-inputs POPULATION=all-items       # curated corpus -> data/eval-inputs/predict/all-items/
     make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
     make eval-score-synthetic POPULATION=annotated      # synthetic_metric_estimates.annotated.csv
     make eval-model-metrics                             # evaluator_metrics.csv
