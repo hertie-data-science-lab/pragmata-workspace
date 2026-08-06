@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Corpus metrics from the synthetic evaluators' predictions - the twin of the human scorer.
 
-Columns and caveats are defined in `docs/eval-data-dictionary.md`
+Columns and caveats are defined in `docs/data-dictionary.md`
 (`synthetic_metric_estimates.csv`). Its twin, `score_human_annotations.py`, scores the human
 labels; the two share the metric vocabulary and the CLI they call, so the numbers are
 comparable by construction rather than by coincidence.
@@ -18,7 +18,7 @@ Two populations, and the caveat differs:
   its `eval_metric_estimates.csv` counterpart.
 - `corpus` - corpus scale, no human baseline at all. Read only with the evaluator's own test
   metrics in hand: for grounding and generation those are weak enough that the corpus numbers
-  are directional at best (see docs/eval-training.md).
+  are directional at best (see docs/synthetic-evaluators.md).
 
 Usage:
   scripts/eval/score_synthetic_predictions.py                       # the annotated population
@@ -159,7 +159,7 @@ def unscoreable_labels(prediction_dir: Path, task: str) -> list[str]:
 
     This is grounding, concretely. It trains on three of its five labels - `support_present`
     and `source_cited` have too few negative items for any split to give tlmtc class support,
-    see docs/eval-training.md - so its predictions.csv has three label columns. pragmata's
+    see docs/synthetic-evaluators.md - so its predictions.csv has three label columns. pragmata's
     GROUNDING_SCORE_SCHEMA requires all five, built from LABEL_COLUMNS_BY_TASK at module
     IMPORT time, so the narrowing that makes training possible cannot reach it and the score
     CLI rejects the frame outright.

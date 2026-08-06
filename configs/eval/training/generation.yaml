@@ -1,6 +1,6 @@
 # Generation evaluator - the best config found, and still NOT a trustworthy evaluator.
 # Kept for reproducibility, not recommended for use. Deep-merged over _common.yaml.
-# See docs/eval-training.md.
+# See docs/synthetic-evaluators.md.
 #
 # Majority-class collapse persists on proper_action and response_on_topic regardless of what
 # is set here: they read F1 0.94 and 0.88 while their AUC sits at 0.55-0.57, i.e. the model is

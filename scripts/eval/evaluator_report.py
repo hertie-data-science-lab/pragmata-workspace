@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How good the synthetic evaluators are - the two deliverable CSVs about the models.
 
-Columns and caveats are defined in `docs/eval-data-dictionary.md` (`evaluator_metrics.csv`,
+Columns and caveats are defined in `docs/data-dictionary.md` (`evaluator_metrics.csv`,
 `evaluator_calibration.csv`). These describe the EVALUATORS, not the corpus: the corpus
 estimates are `eval_metric_estimates.csv` (human labels) and
 `synthetic_metric_estimates.csv` (the evaluators applied to a population). Read those two
@@ -229,7 +229,7 @@ def metrics(run_ids: dict[str, str], out_dir: Path | None) -> int:
         if not_trained[task]:
             print(
                 f"  {task}: no rows for {', '.join(not_trained[task])} - not trained "
-                "(see docs/eval-training.md)",
+                "(see docs/synthetic-evaluators.md)",
                 file=sys.stderr,
             )
 

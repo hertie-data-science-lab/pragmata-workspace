@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The two human-annotation tables: label agreement, and annotation operations.
 
-Columns and caveats are defined in `docs/eval-data-dictionary.md`
+Columns and caveats are defined in `docs/data-dictionary.md`
 (`annotation_label_summary.csv`, `annotation_operations.csv`).
 
 Inputs. Agreement is recomputed here from the frozen export CSVs with pragmata's own IAA

@@ -16,7 +16,7 @@
 #       -r /workspace/configs/eval/train-requirements.txt
 #
 # torch goes FIRST and from the cu128 index: installing tlmtc[train] first pulls the default
-# PyPI torch, which is a cu130 build the driver cannot use. See docs/eval-training.md.
+# PyPI torch, which is a cu130 build the driver cannot use. See docs/synthetic-evaluators.md.
 #
 # On the CUDA build: the GPU host's driver is 535.309.01, i.e. CUDA 12.2 native. cu128 wheels
 # run on it through CUDA 12.x minor-version compatibility - verified on ds01, including a real

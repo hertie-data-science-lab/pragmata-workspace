@@ -469,7 +469,7 @@ def domains() -> list[str]:
 # which every .provenance.json pins by hash — one authored explanation, not a copy per
 # artifact —
 # so a CSV can always be paired with the wording that was current when it was written.
-DATA_DICTIONARY = ROOT / "docs" / "eval-data-dictionary.md"
+DATA_DICTIONARY = ROOT / "docs" / "data-dictionary.md"
 
 
 def sha256_file(path: Path) -> str:

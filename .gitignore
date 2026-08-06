@@ -8,7 +8,9 @@ configs/annotation/users.json
 *.local.md
 
 # --- python virtualenv ---
-.venv/
+# No trailing slash: a bare `.venv/` matches a directory only, so a `.venv` that is a
+# symlink slips through and gets committed (it did, in #80, pointing at itself).
+.venv
 # uv's interpreter + wheel cache, kept in-tree so a checkout shared between users
 # does not depend on any one user's home (see the exports in the Makefile).
 .uv/
@@ -28,7 +30,7 @@ tmp/
 .pipeline.lock
 # Shared by export.sh and freeze.sh, so a freeze cannot copy a tree mid-export.
 .export.lock
-# GPU-container idle-timeout keep-alive; docs/eval-training.md tells operators to create it.
+# GPU-container idle-timeout keep-alive; docs/synthetic-evaluators.md tells operators to create it.
 .keep-alive
 
 # --- python caches ---
@@ -55,7 +57,7 @@ build/
 .ruff_cache/
 .coverage
 htmlcov/
-.venv/
+.venv
 venv/
 
 # Environment

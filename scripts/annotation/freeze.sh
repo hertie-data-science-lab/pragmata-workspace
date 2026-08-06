@@ -12,13 +12,13 @@
 # editorial decision, not a cron side effect.
 #
 # It stops one step short of done. The pin it writes only becomes canonical once COMMITTED,
-# and a script must not make that commit: docs/eval.md step 1 forbids rewriting history
+# and a script must not make that commit: docs/report-deliverables.md step 1 forbids rewriting history
 # after provenance files name a commit, so the operator owns it. The follow-ups — that
 # commit, the regeneration, and the bundle re-pin — are printed at the end.
 #
 # Everything before the copy is a guard, and every guard is here because the mistake it
 # catches is expensive: a freeze is immutable, published, and cited by report numbers. See
-# docs/eval.md ("Cutting a new freeze") for the surrounding procedure.
+# docs/report-deliverables.md ("Cutting a new freeze") for the surrounding procedure.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 cd_root
@@ -53,7 +53,7 @@ PIN="configs/eval/freeze.conf"
   || fatal "already frozen: ${FROZEN_ROOT#"$WORKSPACE_ROOT"/}/$DATE — pick another DATE"
 
 # A freeze cut from a dirty tree has no citable lineage of its own: every .provenance.json
-# records the workspace commit it was generated at (docs/eval.md step 1).
+# records the workspace commit it was generated at (docs/report-deliverables.md step 1).
 [[ -z "$(git status --porcelain)" ]] \
   || fatal "working tree is dirty — commit or stash first, so the freeze can cite a commit"
 
@@ -144,7 +144,7 @@ cat > "$PIN" <<'PINEOF'
 # the pin that produced it is in git.
 #
 # Written by `make annotation-freeze` — commit the change it makes. Editing by hand works
-# but skips that command's guards; see docs/eval.md.
+# but skips that command's guards; see docs/report-deliverables.md.
 #
 # The snapshot is pinned by timestamp rather than taken as "the latest": the nightly cron
 # appends one every night, so a report re-run months later must still read the line it was
@@ -162,7 +162,7 @@ cat >&2 <<EOF
      git add $PIN && git commit -m 'chore(eval): pin the $DATE freeze'
 
 2. Regenerate the deliverables on the clean tree:
-     make eval-report eval-score eval-catalog
+     make eval-deliverables
 
 3. Re-pin the reproducibility bundle, which can only happen now: it pins the frozen
    inputs AND the report outputs together, and the outputs did not exist until step 2.
@@ -172,5 +172,5 @@ cat >&2 <<EOF
      make repro-pin KIND=freeze NAME=eval-report \\
        PATHS="data/annotation/exports-frozen/$DATE reports/eval/<report-date>"
 
-Publishing (transfer-push) is a separate decision — see docs/eval.md.
+Publishing (transfer-push) is a separate decision — see docs/report-deliverables.md.
 EOF

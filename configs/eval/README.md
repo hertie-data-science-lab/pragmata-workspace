@@ -4,7 +4,7 @@ Evaluation-stage configs. Mirrors `configs/annotation/`.
   `make annotation-freeze` and read by `scripts/eval/eval_common.py`.
 - `training/` — one YAML per task for `make eval-train`, plus a shared `_common.yaml`
   deep-merged underneath it, exactly as `annotation/querygen_specs/_runtime.yaml` composes
-  with each spec. See [eval training](../../docs/eval-training.md).
+  with each spec. See [synthetic evaluators](../../docs/synthetic-evaluators.md).
 
 **How much of this is validated, exactly.** The merged mapping is passed to
 `pragmata.api.eval.train_evaluator` as keyword arguments, so the two levels behave differently:
@@ -42,4 +42,4 @@ for a file here to stand behind. Adding one would freeze a choice nobody has mad
 run actually used is recorded per run instead, in `predict_provenance.workspace.json` inside the
 prediction directory - population, evaluator run id and whether it was given or resolved, the
 staged input CSV with its sha256, and the freeze date or curated-corpus pin outcomes behind it.
-See [eval prediction](../../docs/eval-prediction.md).
+See [synthetic evaluators](../../docs/synthetic-evaluators.md).

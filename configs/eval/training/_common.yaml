@@ -6,7 +6,7 @@
 #
 # These are pins, not operator knobs: every published metric was produced at these values.
 # Changing one invalidates comparison with the numbers in the eval report, so change it
-# deliberately and re-run all three tasks. See docs/eval-training.md.
+# deliberately and re-run all three tasks. See docs/synthetic-evaluators.md.
 
 # Base model. mmBERT is pragmata's own default and beat answerdotai/ModernBERT-base on every
 # task tested, most sharply on grounding, where it was part of what made training possible at
