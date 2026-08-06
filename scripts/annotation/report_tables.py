@@ -134,10 +134,10 @@ def _uid(u: str) -> str:
     return u[:8] if u else "-"
 
 
-def _table(headers: list[str], aligns: list[str], rows: list[list[str]]) -> str:
-    # All columns left-aligned (aligns retained for per-column intent but unused for now).
-    # Markdown applies one alignment per column to header + cells together, so the header
-    # can't be centred independently of left-aligned values.
+def _table(headers: list[str], rows: list[list[str]]) -> str:
+    # All columns left-aligned. Markdown applies one alignment per column to header +
+    # cells together, so the header can't be centred independently of left-aligned
+    # values; a table that needs per-column alignment uses _html_table().
     out = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join(":---" for _ in headers) + "|",
@@ -196,7 +196,6 @@ def overall_counts(total: dict) -> str:
     )
     table = _table(
         ["Split", "Total", "Subm.", "Compl.", "Pending", "% Compl.", "Panels Compl."],
-        ["l", "r", "r", "r", "r", "r", "r"],
         rows,
     )
     note = _note(
@@ -207,19 +206,21 @@ def overall_counts(total: dict) -> str:
 
 
 def progress_by_domain(domains: dict, total: dict) -> str:
-    """Per-domain progress in one table: record-level counts (items submitted, records
-    completed) with the retrieval panel-completeness columns appended. A panel is one
+    """Per-domain progress in one table: record counts and the responses submitted
+    against them, with the retrieval panel-completeness columns appended. A panel is one
     query's k-chunk set, complete only when every chunk is annotated (stricter than a
     record); panel cells are '-' for domains the snapshot carries no completeness for."""
     items = sorted(
         domains.items(), key=lambda kv: (-kv[1]["count"]["submitted_responses"], kv[0])
     )
-    # A vertical divider (_SEP) opens each column group - items | records | panels | ann -
-    # and the per-group completion column is bolded as the figure that matters most.
+    # A vertical divider (_SEP) opens each column group - records | responses | panels |
+    # ann - and the per-group completion column is bolded as the figure that matters most.
+    # The units are the glossary's: `total_records`/`completed_records` count records,
+    # `submitted_responses` counts responses (one annotator's submission on one record).
     headers = [
         "Domain",
-        ("Total (items)", _SEP),
-        "Subm. (items)",
+        ("Total (records)", _SEP),
+        "Subm. (responses)",
         ("Compl. (records)", _SEP),
         "% Compl. (records)",
         ("Compl. (panels)", _SEP),
@@ -280,9 +281,7 @@ def per_task_counts(domains: dict) -> str:
                 ]
             )
     return _table(
-        ["Domain", "Task", "Total", "Subm.", "Compl.", "% Compl.", "Ann."],
-        ["l", "l", "r", "r", "r", "r", "r"],
-        rows,
+        ["Domain", "Task", "Total", "Subm.", "Compl.", "% Compl.", "Ann."], rows
     )
 
 
@@ -427,9 +426,7 @@ def label_distribution_totals(total: dict) -> str:
             rows += [[task, *r] for r in _label_rows(pl)]
     if not rows:
         return ""
-    return _table(
-        ["Task", "Label", "# true", "n", "Prev.*"], ["l", "l", "r", "r", "r"], rows
-    )
+    return _table(["Task", "Label", "# true", "n", "Prev.*"], rows)
 
 
 def label_distribution_by_domain(domains: dict) -> str:
@@ -442,11 +439,7 @@ def label_distribution_by_domain(domains: dict) -> str:
                 rows += [[name, task, *r] for r in _label_rows(lab["per_label"])]
     if not rows:
         return ""
-    return _table(
-        ["Domain", "Task", "Label", "# true", "n", "Prev.*"],
-        ["l", "l", "l", "r", "r", "r"],
-        rows,
-    )
+    return _table(["Domain", "Task", "Label", "# true", "n", "Prev.*"], rows)
 
 
 def discards(domains: dict, total: dict) -> str:
@@ -481,11 +474,7 @@ def discards(domains: dict, total: dict) -> str:
         )
     if not rows:
         return ""
-    return _table(
-        ["Domain", "Subm.", "Discarded", "Rate", "Reasons"],
-        ["l", "r", "r", "r", "l"],
-        rows,
-    )
+    return _table(["Domain", "Subm.", "Discarded", "Rate", "Reasons"], rows)
 
 
 def constraint_violations(domains: dict, total: dict) -> str:
@@ -506,7 +495,7 @@ def constraint_violations(domains: dict, total: dict) -> str:
         )
     if not rows:
         return ""
-    return _table(["Domain", "Violations", "By constraint"], ["l", "r", "l"], rows)
+    return _table(["Domain", "Violations", "By constraint"], rows)
 
 
 BIAS_FLAG_PP = (
@@ -635,7 +624,6 @@ def per_annotator_timing(total: dict) -> str:
             "Gaps",
             "Pace (rec/h)",
         ],
-        ["l", "r", "r", "r", "r", "r"],
         [r[1] for r in rows],
     )
 
@@ -652,9 +640,7 @@ def domain_pace(domains: dict) -> str:
     rows = [[name, _f(gap, 1), str(ngaps), str(n)] for name, gap, ngaps, n in timed]
     if untimed:
         rows.append([" / ".join(sorted(n for n, *_ in untimed)), "-", "-", "0"])
-    return _table(
-        ["Domain", "Median gap (s)", "Gaps", "Annotators"], ["l", "r", "r", "r"], rows
-    )
+    return _table(["Domain", "Median gap (s)", "Gaps", "Annotators"], rows)
 
 
 def task_pace(domains: dict, total: dict) -> str:
@@ -692,7 +678,6 @@ def task_pace(domains: dict, total: dict) -> str:
     rows.sort(key=lambda r: r[0])
     return _table(
         ["Task", "Median gap (s)", "Gaps", "Weighted mean (s)", "Annotators"],
-        ["l", "r", "r", "r", "r"],
         [r[1] for r in rows],
     )
 
@@ -710,18 +695,20 @@ def task_x_domain_pace(domains: dict) -> str:
         [name, task, _f(gap, 1), str(ngaps), str(n)]
         for name, task, gap, ngaps, n in timed
     ]
-    return _table(
-        ["Domain", "Task", "Median gap (s)", "Gaps", "Annotators"],
-        ["l", "l", "r", "r", "r"],
-        rows,
-    )
+    return _table(["Domain", "Task", "Median gap (s)", "Gaps", "Annotators"], rows)
 
 
 # ---- driver -----------------------------------------------------------------
 
 
 def render(snap: dict) -> str:
-    total, domains = snap["total"], snap["domains"]
+    total = snap["total"]
+    # A domain log.py could not read is recorded as {"error": …} and skipped, by design, so
+    # the snapshot's domain blocks are not all the same shape. Drop those once here rather
+    # than in each of the ten tables below, which index count/tasks/timing directly. The
+    # totals need no filtering: a failed domain never reaches log.py's rollup either.
+    domains = {name: v for name, v in snap["domains"].items() if "error" not in v}
+    failed = {name: v["error"] for name, v in snap["domains"].items() if "error" in v}
     parts = [
         f"**Snapshot:** run at **{ws.local_dt(snap['run_at']):%Y-%m-%d %H:%M %Z}**",
         (
@@ -738,6 +725,18 @@ def render(snap: dict) -> str:
             "- a **query group** is one query-answer pair across all three tasks: its "
             "panel plus its grounding and generation records.</small>"
         ),
+    ]
+    if failed:
+        # Named, not silently dropped: every number below is over the domains that did
+        # read, so a partial run must not be readable as a complete one.
+        parts.append(
+            _note(
+                "**Domains missing from this snapshot** (log.py could not read them; every "
+                "figure below excludes them): "
+                + "; ".join(f"`{name}` - {err}" for name, err in sorted(failed.items()))
+            )
+        )
+    parts += [
         "## Overall counts\n\n" + overall_counts(total),
         # Per-domain progress: record-level counts with retrieval panel completeness
         # columns appended (panel data is dropped per-domain when the snapshot lacks it).
@@ -867,7 +866,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--jsonl",
-        default=ws.LOGS_DIR / "log.jsonl",
+        default=ws.SNAPSHOT_LOG,
         type=Path,
         help="history file to read (default: logs/annotation/log.jsonl)",
     )

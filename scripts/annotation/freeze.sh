@@ -26,6 +26,15 @@ cd_root
 DATE="${1:-}"
 RUN_AT="${2:-}"
 
+# One export or freeze at a time. daily.sh's 02:00 cron rewrites data/annotation/exports/
+# in place and pseudonymises it afterwards, so a freeze that overlapped it could copy a
+# half-rewritten or not-yet-pseudonymised tree into an immutable dated directory. Held
+# before the guards below, because they read that same tree. Same mechanism and same
+# lock file as export.sh (and pipeline.sh's own): flock on a held fd, released by the
+# kernel however the process dies.
+exec 9>".export.lock"
+flock -n 9 || fatal "an export or freeze is already running" 3
+
 SRC="$DATA_DIR/annotation/exports"
 FROZEN_ROOT="$DATA_DIR/annotation/exports-frozen"
 PIN="configs/eval/freeze.conf"
@@ -107,9 +116,22 @@ mkdir -p "$FROZEN_ROOT"
 # another user while still being group-writable to us.
 [[ -w "$FROZEN_ROOT" ]] || chmod u+w "$FROZEN_ROOT" 2>/dev/null \
   || fatal "cannot write into ${FROZEN_ROOT#"$WORKSPACE_ROOT"/}: not writable, and owned by $(stat -c %U "$FROZEN_ROOT")"
-cp -r "$SRC" "$DEST" || { chmod a-w "$FROZEN_ROOT" 2>/dev/null; fatal "copy failed: $SRC -> $DEST"; }
-# The new tree first, then the parent.
-chmod -R a-w "$DEST" || warn "could not write-protect ${DEST#"$WORKSPACE_ROOT"/}"
+# Anything that goes wrong between here and the write-protection leaves a $DEST that the
+# "already frozen" guard would read as a real freeze on the next run — blocking the retry
+# with a message that is simply untrue. So the partial tree goes, and the parent is
+# re-locked, before we bail. chmod first: cp carries the source modes across, and rm needs
+# write permission on the directories it descends.
+abort_partial_freeze() {
+  chmod -R u+w "$DEST" 2>/dev/null
+  rm -rf "$DEST"
+  chmod a-w "$FROZEN_ROOT" 2>/dev/null
+  fatal "$1"
+}
+cp -r "$SRC" "$DEST" || abort_partial_freeze "copy failed: $SRC -> $DEST"
+# The new tree first, then the parent. Fatal on the tree, because write-protection is the
+# whole immutability guarantee a freeze makes — a writable dated copy is not a freeze.
+chmod -R a-w "$DEST" \
+  || abort_partial_freeze "could not write-protect ${DEST#"$WORKSPACE_ROOT"/} — a writable copy is not a freeze"
 chmod a-w "$FROZEN_ROOT" 2>/dev/null \
   || warn "${FROZEN_ROOT#"$WORKSPACE_ROOT"/} stays writable (owned by $(stat -c %U "$FROZEN_ROOT")) — a stray copy could still land beside this freeze"
 log "froze $(find "$DEST" -type f | wc -l) files into ${DEST#"$WORKSPACE_ROOT"/} (read-only)"

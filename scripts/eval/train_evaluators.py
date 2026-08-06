@@ -84,62 +84,6 @@ GROUNDING_TRAIN_LABELS = (
 )
 
 
-def _pragmata_eval():
-    """The pragmata eval API, from wherever this environment has it.
-
-    Two environments reach this, and they supply eval differently:
-
-    - The CPU VM has ONE venv running both stages, where the installed pragmata is the
-      annotation pin - a frozen commit with no eval module at all. Eval therefore comes from
-      the PRAGMATA_EVAL_SRC checkout, shadowed onto sys.path; the in-process equivalent of the
-      PYTHONPATH score_human_annotations.py hands its subprocess.
-    - The GPU host trains inside a container against its own venv, where pragmata[eval] is
-      installed outright from configs/eval/train-requirements.txt. There is only one
-      pragmata there, so there is nothing to shadow, and PRAGMATA_EVAL_SRC generally does not
-      even exist inside the container - only the workspace is mounted.
-
-    So try the plain import first and shadow only if it has no eval module. Which one answered
-    is printed rather than inferred, and returned as well, so a run's own provenance record can
-    pin it: silently training against a different commit than the one a run claims is the
-    failure this ordering could otherwise hide.
-
-    Imported through here rather than at module scope so `--help` and `combine` cost nothing.
-    """
-    try:
-        import pragmata.api.eval as eval_api
-        from pragmata.core.schemas.annotation_task import Task
-    except ImportError:
-        # The failed attempt left the ANNOTATION pin's `pragmata` package cached in
-        # sys.modules. Adding the eval src to sys.path cannot dislodge it - the retry would
-        # resolve against the stale package object and fail identically - so drop the
-        # partially-imported tree first.
-        for name in [
-            n for n in sys.modules if n == "pragmata" or n.startswith("pragmata.")
-        ]:
-            del sys.modules[name]
-        pin = ws.eval_pragmata()
-        src = str(pin.src)
-        if sys.path[0] != src:
-            sys.path.insert(0, src)
-        try:
-            import pragmata.api.eval as eval_api
-            from pragmata.core.schemas.annotation_task import Task
-        except ImportError as exc:
-            raise SystemExit(
-                f"cannot import the eval API from {pin.src}: {exc}\n"
-                "  On the GPU host, install pragmata[eval] from\n"
-                "  configs/eval/train-requirements.txt instead - see docs/eval-training.md."
-            ) from exc
-
-    package_dir = Path(eval_api.__file__).parent.parent
-    print(f"pragmata eval API: {package_dir}", file=sys.stderr)
-    # Its parent is <checkout>/src when shadowed and site-packages when installed - the same
-    # value score_human_annotations.py records from the pin, and the shape ws.provenance's
-    # `pragmata_src` expects, since that git-describes the directory ABOVE it. The installed
-    # case has no repo above it, so the sha comes out null rather than borrowed from elsewhere.
-    return eval_api, Task, package_dir.parent
-
-
 def _task_config(task: str) -> dict:
     """_common.yaml deep-merged with <task>.yaml, task values winning.
 
@@ -208,7 +152,7 @@ def _narrow_grounding_labels(task: str) -> tuple[str, ...] | None:
 
     Shared by `train` and `check-sequence-length` so the diagnostic consolidates over the same
     label set the run will, rather than over all five. Callers must have gone through
-    _pragmata_eval() first, so that the import below resolves the same pragmata the run uses.
+    ec.pragmata_eval() first, so that the import below resolves the same pragmata the run uses.
     """
     if task != "grounding":
         return None
@@ -226,85 +170,21 @@ def _narrow_grounding_labels(task: str) -> tuple[str, ...] | None:
 def _training_csv(task: str) -> tuple[Path, dict]:
     """The staged pooled CSV for a task and its provenance sidecar, checked against the pin.
 
-    Existence is not enough, and that gap is a silent one. `combine` pools whatever freeze the
-    pin named when it ran; the pin then moves, and nothing downstream re-reads the CSV's origin
-    - a run would train on the previous export and say nothing. So the sidecar is required, its
-    freeze_date must be the freeze this process resolved, and its recorded sha256 must match
-    the bytes on disk. The last check also catches a half-written CSV from an interrupted
-    staging run, and a hand-edited one.
+    Existence is not enough, and that gap is a silent one: `combine` pools whatever freeze the
+    pin named when it ran, and nothing downstream re-reads the CSV's origin afterwards.
+    ec.require_fresh_staged_csv owns that rule and its reasoning; this names the layout and
+    the target that rebuilds it. The freeze check is unconditional, because every training
+    input is pooled from the frozen export - a moved pin always makes this CSV the previous
+    dataset.
 
     Applied to the diagnostic as well as to training: `check-sequence-length` exists to say
     what the next run will tokenise, and a stale CSV makes that answer wrong in the same way.
     """
     path = TRAINING_INPUTS / f"{task}.csv"
-    sidecar_path = path.with_suffix(".csv.provenance.json")
-    rebuild = "  Run `make eval-train-inputs` - it pools the frozen export per task."
-    if not path.exists():
-        raise SystemExit(f"no training CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")
-    if not sidecar_path.exists():
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} has no {sidecar_path.name} beside it, so which\n"
-            f"  export it was pooled from cannot be established.\n{rebuild}"
-        )
-    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-
-    staged_freeze = sidecar.get("freeze_date")
-    if staged_freeze != ec.FREEZE_DATE:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} was pooled from freeze {staged_freeze!r}, but\n"
-            f"  configs/eval/freeze.conf now pins {ec.FREEZE_DATE!r}. Training it would\n"
-            f"  publish the previous dataset under the current pin.\n{rebuild}"
-        )
-
-    recorded = sidecar.get("output_sha256")
-    actual = ws.sha256_file(path)
-    if recorded != actual:
-        raise SystemExit(
-            f"{path.relative_to(ws.ROOT)} does not match its sidecar.\n"
-            f"  recorded {recorded}\n"
-            f"  on disk  {actual}\n"
-            f"  The file changed after staging, or the staging run did not finish.\n{rebuild}"
-        )
-    return path, sidecar
-
-
-def _resolve_exports(exports: Path) -> Path:
-    """The export tree to pool from, allowing for the GPU box holding it somewhere else.
-
-    `transfer-pull` writes only under data/transfer/ - it refuses any destination that would
-    escape it - so on the GPU host the canonical freeze arrives at
-    data/transfer/exports-frozen/<date>/, not at the data/annotation/exports-frozen/<date>/
-    that eval_common defaults to. Both are the same freeze: the date comes from the committed
-    pin either way, so there is no question of picking up different data, only of where it
-    physically sits.
-
-    Falls back rather than guessing: an explicit --exports is honoured untouched, and the
-    fallback says which tree it settled on, because "which bytes did this train on" is the
-    one thing a training run must not leave implicit.
-    """
-    if exports.is_dir():
-        return exports
-    # Only the DEFAULT falls back. An explicitly named tree that is absent is an error: the
-    # caller asked for particular bytes, and quietly training on different ones instead is
-    # worse than failing.
-    if exports.resolve() != ec.FROZEN_EXPORTS.resolve():
-        raise SystemExit(f"no export tree at {exports}")
-    staged = ws.DATA_DIR / "transfer" / "exports-frozen" / ec.FREEZE_DATE
-    if staged.is_dir():
-        # --exports may be relative, so relative_to alone would raise: same guard as
-        # ws.provenance uses on its hashed inputs.
-        shown = exports.resolve()
-        shown = shown.relative_to(ws.ROOT) if shown.is_relative_to(ws.ROOT) else shown
-        print(
-            f"note: {shown} is absent; using the pulled tree at "
-            f"{staged.relative_to(ws.ROOT)}",
-            file=sys.stderr,
-        )
-        return staged
-    raise SystemExit(
-        f"no export tree at {exports}.\n"
-        f"  Nor a pulled copy at {staged}.\n"
-        f"  On the GPU host: make transfer-pull PREFIX=exports-frozen/{ec.FREEZE_DATE}"
+    return path, ec.require_fresh_staged_csv(
+        path,
+        rebuild="  Run `make eval-train-inputs` - it pools the frozen export per task.",
+        check_freeze=True,
     )
 
 
@@ -377,9 +257,10 @@ def combine(exports: Path) -> int:
         # and the code that built it. output_sha256 is the CSV's own bytes rather than its
         # inputs', which is what lets `train` refuse a CSV that has drifted from the record
         # beside it - see _training_csv. contributing_programmes is narrower than programmes
-        # for the same reason: ws.provenance silently drops an input path that does not exist,
-        # so a programme with no rows for this task would otherwise be listed as if it had
-        # supplied some.
+        # for a related reason: `inputs` names every per-programme CSV that was looked for
+        # (a missing one is recorded as such, not dropped), and an export that exists but
+        # holds no submitted rows for this task is not distinguishable there at all - so
+        # the programmes that actually supplied rows are listed separately.
         prov = ws.provenance(
             script="scripts/eval/train_evaluators.py",
             inputs=[exports / p / f"{task}.csv" for p in programmes],
@@ -391,7 +272,7 @@ def combine(exports: Path) -> int:
             row_filter="submitted",
             output_sha256=ws.sha256_file(target),
         )
-        target.with_suffix(".csv.provenance.json").write_text(
+        ec.sidecar_path(target).write_text(
             json.dumps(prov, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
 
@@ -443,7 +324,7 @@ def check_sequence_length() -> int:
     from transformers import AutoTokenizer
 
     # Task is pragmata's own enum; the binding keeps its class name deliberately.
-    _eval_api, Task, _src_root = _pragmata_eval()
+    _eval_api, Task, _src_root = ec.pragmata_eval()
     from pragmata.core.eval.imports import import_eval_train_frame
     from pragmata.core.eval.transforms import (
         build_tlmtc_frame,
@@ -507,40 +388,6 @@ def check_sequence_length() -> int:
     return 0
 
 
-def _require_gpu(config: dict) -> None:
-    """Refuse to start a run whose interpreter cannot see a GPU.
-
-    Checked here rather than left to fail later, because every way of getting this wrong
-    surfaces a long way from its cause:
-
-    - Inside the container the `make` default is `.venv/bin/python`, which is the HOST's venv
-      on the mounted workspace. Its torch is a cu130 build the driver cannot use, so
-      is_available() is False even though nvidia-smi shows four A100s. Pass
-      PY=<training venv>/bin/python.
-    - On the host itself, GPU compute is disabled by site policy (CUDA_VISIBLE_DEVICES is
-      blanked), so no interpreter there can train regardless of its torch.
-
-    Left to itself, the first symptom is a CUDA error raised inside tlmtc's Trainer setup -
-    for grounding, potentially after a long tokenisation pass. `use_cpu: true` is honoured as
-    a deliberate escape hatch, though nothing in configs/eval/training/ sets it.
-    """
-    if config.get("train_kwargs", {}).get("use_cpu"):
-        return
-    import torch
-
-    if torch.cuda.is_available():
-        return
-    raise SystemExit(
-        f"this interpreter cannot see a GPU: torch {torch.__version__}, "
-        f"cuda.is_available() False.\n"
-        f"  CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')!r}\n"
-        "  Inside the training container, point make at the training venv:\n"
-        "    make eval-train TASK=<task> PY=~/train-venv/bin/python\n"
-        "  On the GPU host outside a container, compute is disabled by site policy - launch a\n"
-        "  container first. See docs/eval-training.md."
-    )
-
-
 def train(task: str, threshold_type: str | None = None) -> int:
     """Train one task's evaluator at its committed configuration.
 
@@ -561,7 +408,7 @@ def train(task: str, threshold_type: str | None = None) -> int:
     is the likelier mistake and reporting it as a GPU problem sends the reader to the wrong
     machine.
     """
-    eval_api, Task, src_root = _pragmata_eval()
+    eval_api, Task, src_root = ec.pragmata_eval()
     config = _task_config(task)
 
     if threshold_type is not None:
@@ -593,7 +440,7 @@ def train(task: str, threshold_type: str | None = None) -> int:
         file=sys.stderr,
     )
 
-    _require_gpu(config)
+    ec.require_gpu(use_cpu=bool(config.get("train_kwargs", {}).get("use_cpu")))
     narrowed = _narrow_grounding_labels(task)
 
     print(
@@ -671,7 +518,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "combine":
-        return combine(_resolve_exports(args.exports))
+        return combine(ec.resolve_exports(args.exports))
     if args.command == "check-sequence-length":
         return check_sequence_length()
     return train(args.task, args.threshold_type)

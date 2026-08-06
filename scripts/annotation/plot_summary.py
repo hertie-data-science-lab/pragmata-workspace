@@ -121,6 +121,11 @@ def plot_progress(snaps: list[dict], out: Path) -> bool:
     return True
 
 
+# Local rather than imported, deliberately. pragmata has this same interval as
+# `core.annotation.uncertainty.wilson_interval`, but only on the EVAL pin: the installed
+# annotation pin (94e8219) carries no uncertainty module at all, and PRAGMATA_EVAL_SRC is
+# scoped to scripts/eval/ (see .env.example), so importing it here would make an annotation
+# plot depend on the eval checkout. Revisit when the annotation pin moves past 2684b1e.
 def _wilson_ci(n_true: int, n: int, z: float = 1.96) -> tuple[float, float]:
     """95% Wilson score interval for a binomial proportion. Robust at the
     extreme prevalences (near 0/1) where the labels of interest actually sit,
@@ -270,17 +275,25 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--jsonl", default=ws.LOGS_DIR / "log.jsonl", type=Path)
+    ap.add_argument("--jsonl", default=ws.SNAPSHOT_LOG, type=Path)
     ap.add_argument("--line", default=-1, type=int)
     ap.add_argument("--out-dir", type=Path, default=None)
     args = ap.parse_args()
     ws.load_env()  # for REPORT_TZ (local-date out-dir, matches report_tables)
 
     # The whole history for the burn-up/burn-down series, which only reads counts and so
-    # spans every schema version; the single --line snapshot the other panels describe is
-    # checked, and an incompatible one exits rather than rendering silently.
+    # spans every schema version. The single --line snapshot the other panels describe is
+    # taken from that same parse - the log runs to tens of MB, and select_snapshot would
+    # read and split it a second time - and still checked, so an incompatible one exits
+    # rather than rendering silently.
     snaps = ws.read_snapshots(args.jsonl)
-    snap = ws.select_snapshot(args.jsonl, args.line)
+    try:
+        snap = snaps[args.line]
+    except IndexError:
+        raise SystemExit(
+            f"line {args.line} out of range ({len(snaps)} snapshots)"
+        ) from None
+    ws.check_snapshot(snap)
     if args.out_dir:
         out = args.out_dir
         out.mkdir(parents=True, exist_ok=True)

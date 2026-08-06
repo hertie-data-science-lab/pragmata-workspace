@@ -22,6 +22,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -31,6 +32,26 @@ import workspace as ws
 ws.load_env()  # configs/settings.conf + .env; existing env wins
 
 TASKS = ("retrieval", "grounding", "generation")
+
+# pragmata's own eval tool tree. Named here rather than per script because three stages now
+# read it - training writes train_outputs/, prediction writes prediction_outputs/, scoring
+# writes scores/ - and the ownership rule in docs/eval.md is that this tree holds only what
+# pragmata put there. Workspace-produced inputs live under data/eval-inputs/.
+EVAL_TOOL_ROOT = ws.DATA_DIR / "eval"
+TRAIN_OUTPUTS = EVAL_TOOL_ROOT / "train_outputs"
+PREDICTION_OUTPUTS = EVAL_TOOL_ROOT / "prediction_outputs"
+
+# The (text, text_pair) column pair per task, mirroring pragmata's TEXT_COLUMNS_BY_TASK
+# (core/schemas/eval_input.py). Duplicated for the same reason LABELS is: the staging
+# subcommands build CSVs from exports and JSONL and must not need pragmata just to name
+# columns. tlmtc sees these renamed to text/text_pair, which is why a prediction CSV read
+# back through `eval score --prediction-id` has to be un-renamed again (pragmata's
+# _restore_pragmata_text_columns does it).
+TEXT_COLUMNS: dict[str, tuple[str, str]] = {
+    "retrieval": ("query", "chunk"),
+    "grounding": ("answer", "context_set"),
+    "generation": ("query", "answer"),
+}
 
 # Label columns per task, mirroring pragmata's LABEL_COLUMNS_BY_TASK
 # (core/schemas/eval_input.py). Duplicated deliberately: these scripts read exported
@@ -55,8 +76,9 @@ LABELS: dict[str, tuple[str, ...]] = {
 
 # The columns identifying one ITEM — one record's responses majority-consolidated, the
 # grain eval ingests. Matches pragmata's _DUPLICATE_KEY_COLUMNS_BY_TASK
-# (core/eval/transforms.py). A retrieval record is one chunk, so a query's panel fans out
-# into one row per chunk; a grounding or generation record is one query.
+# (core/eval/transforms.py). `record_uuid` is the QUERY (for retrieval, its whole panel),
+# so a retrieval item is one (record_uuid, chunk_id) pair and a query's panel fans out
+# into one row per chunk; a grounding or generation item is one query.
 ITEM_KEYS: dict[str, tuple[str, ...]] = {
     "retrieval": ("record_uuid", "chunk_id"),
     "grounding": ("record_uuid",),
@@ -111,12 +133,12 @@ CURATED_SUFFIX = "_combined.curated.jsonl"
 EXCLUDED_PROGRAMMES = frozenset({"zentrum-fuer-datenmanagement"})
 
 
-def add_common_args(parser, *, default_exports: Path | None = None) -> None:
+def add_common_args(parser) -> None:
     """Register the arguments every eval report script shares."""
     parser.add_argument(
         "--exports",
         type=Path,
-        default=default_exports or FROZEN_EXPORTS,
+        default=FROZEN_EXPORTS,
         help="Annotation export tree to read (default: the frozen canonical export).",
     )
     parser.add_argument(
@@ -134,15 +156,6 @@ def add_snapshot_arg(parser) -> None:
         default=CANONICAL_SNAPSHOT_RUN_AT,
         help="run_at of the log snapshot to read (default: the canonical one).",
     )
-
-
-def out_dir(explicit: Path | None) -> Path:
-    """Resolve the eval report output directory, creating it.
-
-    Thin alias over ws.stage_report_dir so corpus_catalog.py, which cannot import this
-    pandas-dependent module, still resolves the same directory from the same clock.
-    """
-    return ws.stage_report_dir("eval", explicit)
 
 
 FREEZE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -178,7 +191,7 @@ def check_freeze_current() -> None:
     old date.
     """
     newest = newest_freeze()
-    if newest is None or newest == FREEZE_DATE:
+    if newest == FREEZE_DATE:
         return
     raise SystemExit(
         f"stale freeze pin: {FREEZE_CONF.relative_to(ws.ROOT)} names {FREEZE_DATE}, but "
@@ -186,6 +199,76 @@ def check_freeze_current() -> None:
         "  A report built from the older tree would publish the previous dataset. Either\n"
         "  move the pin (`make annotation-freeze` writes it - and commit it), or pass\n"
         "  --exports explicitly to read a non-canonical tree on purpose."
+    )
+
+
+def resolve_exports(exports: Path) -> Path:
+    """The export tree to read, allowing for the GPU box holding it somewhere else.
+
+    `transfer-pull` writes only under data/transfer/ - it refuses any destination that would
+    escape it - so on the GPU host the canonical freeze arrives at
+    data/transfer/exports-frozen/<date>/, not at the data/annotation/exports-frozen/<date>/
+    that this module defaults to. Both are the same freeze: the date comes from the committed
+    pin either way, so there is no question of picking up different data, only of where it
+    physically sits.
+
+    Falls back rather than guessing: an explicit --exports is honoured untouched, and the
+    fallback says which tree it settled on, because "which bytes was this built from" is the
+    one thing a training or prediction input must not leave implicit.
+    """
+    if exports.is_dir():
+        return exports
+    # Only the DEFAULT falls back. An explicitly named tree that is absent is an error: the
+    # caller asked for particular bytes, and quietly using different ones instead is worse
+    # than failing.
+    if exports.resolve() != FROZEN_EXPORTS.resolve():
+        raise SystemExit(f"no export tree at {exports}")
+    staged = ws.DATA_DIR / "transfer" / "exports-frozen" / FREEZE_DATE
+    if staged.is_dir():
+        # --exports may be relative, so relative_to alone would raise: same guard as
+        # ws.provenance uses on its hashed inputs.
+        shown = exports.resolve()
+        shown = shown.relative_to(ws.ROOT) if shown.is_relative_to(ws.ROOT) else shown
+        print(
+            f"note: {shown} is absent; using the pulled tree at "
+            f"{staged.relative_to(ws.ROOT)}",
+            file=sys.stderr,
+        )
+        return staged
+    raise SystemExit(
+        f"no export tree at {exports}.\n"
+        f"  Nor a pulled copy at {staged}.\n"
+        f"  On the GPU host: make transfer-pull PREFIX=exports-frozen/{FREEZE_DATE}"
+    )
+
+
+def resolve_corpus_dir(explicit: Path | None = None) -> Path:
+    """The directory holding the curated per-programme corpus JSONL, wherever this box has it.
+
+    The same two-place rule ``resolve_exports`` applies to the export tree, for the same
+    reason: the curated corpus is produced on the CPU box under ``data/publikationsbot/`` and
+    reaches the GPU box through the Blob, where ``transfer-pull`` can only land it at
+    ``data/transfer/publikationsbot/``. An explicit path is honoured untouched.
+    """
+    if explicit is not None:
+        if not explicit.is_dir():
+            raise SystemExit(f"no corpus directory at {explicit}")
+        return explicit
+    if any(ws.OUT_DIR.glob(f"*{CURATED_SUFFIX}")):
+        return ws.OUT_DIR
+    staged = ws.DATA_DIR / "transfer" / "publikationsbot"
+    if any(staged.glob(f"*{CURATED_SUFFIX}")):
+        print(
+            f"note: no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}; using the "
+            f"pulled copy at {staged.relative_to(ws.ROOT)}",
+            file=sys.stderr,
+        )
+        return staged
+    raise SystemExit(
+        f"no *{CURATED_SUFFIX} under {ws.OUT_DIR.relative_to(ws.ROOT)}.\n"
+        f"  Nor a pulled copy at {staged.relative_to(ws.ROOT)}.\n"
+        "  The curated corpus is produced on the CPU box; on the GPU host pull it first:\n"
+        "    make transfer-pull PREFIX=publikationsbot"
     )
 
 
@@ -213,10 +296,12 @@ def programmes(exports: Path) -> list[str]:
 
 
 # Columns every filter and metric below depends on. Asserted once at read time so a
-# rename upstream fails loudly here, instead of being absorbed by each filter's
-# "column absent -> pass everything through" guard. That failure mode is the dangerous
-# one: a missing `panel_complete` would silently score partial retrieval panels, which
-# is the exact defect this pipeline exists to prevent.
+# rename upstream fails loudly here rather than one filter at a time. The dangerous one
+# is `n_retrieved_chunks`: it carries the query's true K, and it is what pragmata's
+# --skip-incomplete-panels compares the distinct labelled chunk_ids against, so losing it
+# would silently score partial retrieval panels — the exact defect this pipeline exists
+# to prevent. (`panel_complete` is deliberately NOT here: the export writes the flag, but
+# nothing downstream reads it — pragmata derives completeness itself.)
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
         "record_uuid",
@@ -226,24 +311,23 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "chunk_id",
         "chunk_rank",
         "n_retrieved_chunks",
-        "panel_complete",
     ),
     "grounding": ("record_uuid", "annotator_id", "response_status", "calibration"),
     "generation": ("record_uuid", "annotator_id", "response_status", "calibration"),
 }
 
-# Columns the filters read as booleans, which must also be non-null. A blank cell makes
-# pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to TRUE,
-# because bool(nan) is truthy - silently, with no error. The consequences invert the
-# filters: a blank `calibration` marks a production query as calibration and drops it
-# from the corpus, and a blank `panel_complete` lets an incomplete panel through the
-# STRICT filter. Labels are deliberately NOT here: a discarded response legitimately
-# has none.
+# Columns the filters read as booleans or counts, which must also be non-null. A blank
+# cell makes pandas type the column `object`, and a bare `.astype(bool)` then maps NaN to
+# TRUE, because bool(nan) is truthy - silently, with no error. The consequence inverts
+# the filter: a blank `calibration` marks a production query as calibration and drops it
+# from the corpus. A blank `n_retrieved_chunks` is the same shape of problem one layer
+# down - pragmata cannot compare a panel's labelled chunks against an unknown K, so the
+# panel escapes the completeness check. Labels are deliberately NOT here: a discarded
+# response legitimately has none.
 NON_NULL_COLUMNS: dict[str, tuple[str, ...]] = {
     "retrieval": (
         "response_status",
         "calibration",
-        "panel_complete",
         "n_retrieved_chunks",
     ),
     "grounding": ("response_status", "calibration"),
@@ -328,25 +412,6 @@ def panel_totals(exports: Path, programme: str) -> tuple[int, int]:
     return int(summary.get("n_panels", 0)), int(summary.get("n_complete", 0))
 
 
-def load_iaa(exports: Path, programme: str) -> dict[tuple[str, str], dict]:
-    """(task, label) -> agreement stats from a programme's ``iaa/report.json``.
-
-    Every entry describes CALIBRATION items only: pragmata's IAA runner keeps
-    ``calibration == True`` submitted rows and drops production, because agreement is
-    only meaningful on overlapped records. So an alpha attached to a production metric
-    is evidence about the labelling scheme, not about those specific rows.
-    """
-    path = exports / programme / "iaa" / "report.json"
-    if not path.exists():
-        return {}
-    report = json.loads(path.read_text())
-    return {
-        (block["task"], label["label"]): label
-        for block in report.get("tasks", [])
-        for label in block.get("labels", [])
-    }
-
-
 def submitted(frame: pd.DataFrame) -> pd.DataFrame:
     """Keep only submitted responses.
 
@@ -354,14 +419,14 @@ def submitted(frame: pd.DataFrame) -> pd.DataFrame:
     discarded rows: exports run with include_discarded=true, a discarded response is
     an abstention with no labels, and a null label would silently poison a mean.
     """
-    if frame.empty or "response_status" not in frame.columns:
+    if frame.empty:
         return frame
     return frame[frame["response_status"] == "submitted"]
 
 
 def keep_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
     """Keep calibration ROWS only — the population every IAA alpha describes."""
-    if frame.empty or "calibration" not in frame.columns:
+    if frame.empty:
         return frame.iloc[0:0]
     return frame[frame["calibration"].astype(bool)]
 
@@ -369,30 +434,55 @@ def keep_calibration_rows(frame: pd.DataFrame) -> pd.DataFrame:
 def drop_calibration_queries(frame: pd.DataFrame) -> pd.DataFrame:
     """Drop queries that are ENTIRELY calibration. The correct filter for scoring.
 
-    ``calibration`` is a per-record flag, and at retrieval grain a record is one
-    *chunk*, not one query — so calibration marks which chunks were given extra
-    annotators for overlap. Panels are routinely mixed: every programme has 16-30
-    retrieval panels holding both, e.g. a demokratie panel with K=7 where ranks 1-6
-    are production and rank 7 is double-annotated calibration.
+    ``calibration`` is a per-record flag, and a retrieval record is one *chunk* of a
+    query's panel — ``record_uuid`` names the query, ``chunk_id`` the chunk within it —
+    so calibration marks which chunks were given extra annotators for overlap. Panels
+    are routinely mixed: every programme has 16-30 retrieval panels holding both, e.g. a
+    demokratie panel with K=7 where ranks 1-6 are production and rank 7 is
+    double-annotated calibration.
 
     Filtering calibration at ROW grain therefore deletes individual chunks out of
     otherwise-complete panels and silently breaks the @K denominators — a mixed panel
-    would score precision over 6 of 7 chunks. Filtering at QUERY grain instead keeps
+    would score precision over 6 of 7 chunks. Grouping on ``record_uuid`` instead keeps
     every panel whole and only removes queries that are wholly calibration (0-13 per
     programme), which are the genuine calibration items.
 
     Grounding and generation carry one record per query, so their records are never
     mixed and this reduces to the plain row filter — one rule covers all three tasks.
     """
-    if (
-        frame.empty
-        or "calibration" not in frame.columns
-        or "record_uuid" not in frame.columns
-    ):
+    if frame.empty:
         return frame
     calibration = frame["calibration"].astype(bool)
     all_calibration = calibration.groupby(frame["record_uuid"]).transform("all")
     return frame[~all_calibration]
+
+
+_CONSOLIDATE: tuple | None = None
+
+
+def _pragmata_consolidate() -> tuple:
+    """pragmata's majority consolidator and its Task enum, cached.
+
+    Resolved through pragmata_eval() - the ONE shadow-import dance this module has -
+    and then imported plainly, because whichever pragmata answered that call is the one
+    sys.modules now holds. Cached separately because every eval script imports this
+    module for its vocabulary, importing pragmata costs seconds, and only the one
+    caller below needs it.
+
+    Shadowing swaps the whole `pragmata` package for the rest of the process. That is
+    safe for the one script that gets here: annotation_tables.py binds the annotation
+    pin's IAA primitives at module import, before any row is read, and those bound
+    objects keep working. A caller that imported pragmata lazily AFTER consolidating
+    would silently get the other pin.
+    """
+    global _CONSOLIDATE
+    if _CONSOLIDATE is not None:
+        return _CONSOLIDATE
+    _eval_api, Task, _src_root = pragmata_eval()
+    from pragmata.core.eval.transforms import consolidate_labels_by_majority
+
+    _CONSOLIDATE = (consolidate_labels_by_majority, Task)
+    return _CONSOLIDATE
 
 
 def consolidated_prevalence(
@@ -400,22 +490,33 @@ def consolidated_prevalence(
 ) -> tuple[int, int]:
     """(n_items, n_true) for one label, majority-consolidated per item.
 
-    Follows pragmata's consolidate_labels_by_majority: a strict majority decides the
-    item's label; an exact tie falls back to the first row's value in file order. So the
-    count is of annotated items, not of responses, and n_true counts items whose
-    consolidated label is true - the same numbers eval score would ingest. Named
-    `n_items` in the label table and `n_items_annotated` in the operations table (the
+    Consolidation IS pragmata's `consolidate_labels_by_majority` — the same function eval
+    train and score ingestion run — rather than a local restatement of it, so these are the
+    numbers eval would ingest by construction rather than by resemblance. The count is
+    therefore of annotated items, not of responses, and n_true counts items whose
+    consolidated label is true.
+
+    Ties are pragmata's semantics because pragmata decides them: a strict majority (> half
+    positive) sets a label independently; an exact 50/50 takes the value from the row that
+    matches every strict-majority label, falling back to the group's first row only when no
+    row does. A reimplementation that took the first row's value unconditionally agrees on
+    every tie in the 2026-07-30 freeze and is free to diverge on the next export.
+
+    Named `n_items` in the label table and `n_items_annotated` in the operations table (the
     same count at the same grain); see the data dictionary.
     """
-    if frame.empty or label not in frame.columns:
+    if frame.empty:
         return 0, 0
-    keys = list(ITEM_KEYS[task])
-    grouped = frame.groupby(keys, sort=False)[label].agg(["sum", "count", "first"])
-    positive = grouped["sum"] * 2
-    consolidated = (positive > grouped["count"]) | (
-        (positive == grouped["count"]) & grouped["first"].astype(bool)
-    )
-    return len(grouped), int(consolidated.sum())
+    consolidate, Task = _pragmata_consolidate()
+    # Int labels are the contract, not a workaround: eval score coerces them through
+    # pandera and eval train casts them outright, both before consolidating. The export
+    # CSVs spell them True/False, which pandas reads as bool - and writing a resolved 0
+    # back into a bool column is a hard TypeError in pandas 3. Cast, and let a null label
+    # in a submitted response fail here rather than be silently counted.
+    labelled = frame.astype({column: "int64" for column in LABELS[task]})
+    # One row per item out, in first-occurrence order.
+    consolidated = consolidate(labelled, task=Task(task))
+    return len(consolidated), int(consolidated[label].sum())
 
 
 def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
@@ -431,3 +532,356 @@ def pooled_agreement(snapshot: dict) -> dict[tuple[str, str], dict]:
         for task, labels in per_task.items()
         for label, stats in (labels.get("per_label") or {}).items()
     }
+
+
+# --- staged inputs: the freshness guard both model stages apply --------------------------
+
+
+def sidecar_path(csv_path: Path) -> Path:
+    """The provenance sidecar beside a staged CSV: ``<name>.csv.provenance.json``.
+
+    Named once, here, because the writers and the guard below have to agree on it: a
+    sidecar written under a name the guard does not look for would read as a missing
+    sidecar, and one looked for under a name nothing writes would refuse every file.
+    """
+    return csv_path.with_suffix(".csv.provenance.json")
+
+
+def require_fresh_staged_csv(
+    path: Path,
+    *,
+    rebuild: str,
+    population: str | None = None,
+    check_freeze: bool,
+) -> dict:
+    """Refuse a staged CSV that has drifted from its sidecar or the pin; return the sidecar.
+
+    Shared by both model stages - train_evaluators._training_csv and
+    predict_evaluators.staged_csv are thin wrappers naming their own layout - because the
+    gap is the same one on either side, and it is a silent one. Staging pools whatever
+    freeze the pin named when it ran; the pin then moves, and nothing downstream re-reads
+    the CSV's origin, so a run would train or predict on the previous export and say
+    nothing. Hence: the sidecar is required, it must name the population asked for where
+    there is one, its freeze_date must be the freeze this process resolved, and its
+    recorded sha256 must match the bytes on disk. That last check also catches a
+    half-written CSV from an interrupted staging run, and a hand-edited one.
+
+    The order is deliberate: the sha256 is the only check that reads the whole file (the
+    training CSVs run to tens of MB), so it is reached only by a CSV that is otherwise in
+    order.
+
+    Three things are the caller's rather than this function's, because they differ by
+    stage rather than by rule:
+
+    - ``rebuild``, the hint appended to every refusal. It names the command that would
+      restage THIS file; a guard that says only "stale" leaves the operator to work out
+      which staging target owns the path.
+    - ``population``, checked against the sidecar when given. Prediction stages one
+      directory per population and the directory name alone is not evidence of what is in
+      it; training has one pooled CSV per task and no such key.
+    - ``check_freeze``. Every training input is pooled from the frozen export, so a moved
+      pin always makes it the previous dataset; on the prediction side only the annotated
+      population is, the corpus population being pinned by the per-source sha256s and the
+      curation-pin comparison in its own sidecar instead.
+    """
+    if not path.exists():
+        raise SystemExit(f"no staged CSV at {path.relative_to(ws.ROOT)}.\n{rebuild}")
+    sidecar_file = sidecar_path(path)
+    if not sidecar_file.exists():
+        raise SystemExit(
+            f"{path.relative_to(ws.ROOT)} has no {sidecar_file.name} beside it, so what it\n"
+            f"  was staged from cannot be established.\n{rebuild}"
+        )
+    sidecar = json.loads(sidecar_file.read_text(encoding="utf-8"))
+
+    if population is not None:
+        staged_population = sidecar.get("population")
+        if staged_population != population:
+            raise SystemExit(
+                f"{path.relative_to(ws.ROOT)} was staged as population "
+                f"{staged_population!r}, not {population!r}.\n"
+                "  The directory and its sidecar disagree, so neither names the rows.\n"
+                f"{rebuild}"
+            )
+
+    if check_freeze:
+        staged_freeze = sidecar.get("freeze_date")
+        if staged_freeze != FREEZE_DATE:
+            raise SystemExit(
+                f"{path.relative_to(ws.ROOT)} was pooled from freeze {staged_freeze!r}, but\n"
+                f"  configs/eval/freeze.conf now pins {FREEZE_DATE!r}. Using it would\n"
+                f"  publish the previous dataset under the current pin.\n{rebuild}"
+            )
+
+    recorded = sidecar.get("output_sha256")
+    actual = ws.sha256_file(path)
+    if recorded != actual:
+        raise SystemExit(
+            f"{path.relative_to(ws.ROOT)} does not match its sidecar.\n"
+            f"  recorded {recorded}\n"
+            f"  on disk  {actual}\n"
+            f"  The file changed after staging, or the staging run did not finish.\n"
+            f"{rebuild}"
+        )
+    return sidecar
+
+
+# --- the pragmata eval side: which module answers, which pin, which GPU, which run -------
+#
+# Shared by the three model-stage scripts (train_evaluators, predict_evaluators,
+# score_synthetic_predictions) plus evaluator_report. They live here rather than in one of
+# them because all four have to make the same choice the same way, and the choice is about
+# the environment rather than about a task's data.
+
+
+def pragmata_eval():
+    """The pragmata eval API, from wherever this environment has it.
+
+    Two environments reach this, and they supply eval differently:
+
+    - The CPU VM has ONE venv running both stages, where the installed pragmata is the
+      annotation pin - a frozen commit with no eval module at all. Eval therefore comes from
+      the PRAGMATA_EVAL_SRC checkout, shadowed onto sys.path; the in-process equivalent of the
+      PYTHONPATH score_human_annotations.py hands its subprocess.
+    - The GPU host trains and predicts inside a container against its own venv, where
+      pragmata[eval] is installed outright from configs/eval/train-requirements.txt. There is
+      only one pragmata there, so there is nothing to shadow, and PRAGMATA_EVAL_SRC generally
+      does not even exist inside the container - only the workspace is mounted.
+
+    So try the plain import first and shadow only if it has no eval module. Which one answered
+    is printed rather than inferred, and returned as well, so a run's own provenance record can
+    pin it: silently training or predicting against a different commit than the one a run claims
+    is the failure this ordering could otherwise hide.
+
+    Callers import it through here rather than at module scope so `--help` and the staging
+    subcommands cost nothing.
+    """
+    try:
+        import pragmata.api.eval as eval_api
+        from pragmata.core.schemas.annotation_task import Task
+    except ImportError:
+        # The failed attempt left the ANNOTATION pin's `pragmata` package cached in
+        # sys.modules. Adding the eval src to sys.path cannot dislodge it - the retry would
+        # resolve against the stale package object and fail identically - so drop the
+        # partially-imported tree first.
+        for name in [
+            n for n in sys.modules if n == "pragmata" or n.startswith("pragmata.")
+        ]:
+            del sys.modules[name]
+        pin = ws.eval_pragmata()
+        src = str(pin.src)
+        if sys.path[0] != src:
+            sys.path.insert(0, src)
+        try:
+            import pragmata.api.eval as eval_api
+            from pragmata.core.schemas.annotation_task import Task
+        except ImportError as exc:
+            raise SystemExit(
+                f"cannot import the eval API from {pin.src}: {exc}\n"
+                "  On the GPU host, install pragmata[eval] from\n"
+                "  configs/eval/train-requirements.txt instead - see docs/eval-training.md."
+            ) from exc
+
+    package_dir = Path(eval_api.__file__).parent.parent
+    print(f"pragmata eval API: {package_dir}", file=sys.stderr)
+    # Its parent is <checkout>/src when shadowed and site-packages when installed - the same
+    # value score_human_annotations.py records from the pin, and the shape ws.provenance's
+    # `pragmata_src` expects, which asks git which checkout that tree belongs to. The
+    # installed case belongs to none (the workspace's own repo does not count), so the sha
+    # comes out null rather than borrowed from elsewhere.
+    return eval_api, Task, package_dir.parent
+
+
+def require_gpu(*, use_cpu: bool = False) -> None:
+    """Refuse to start a run whose interpreter cannot see a GPU.
+
+    Checked up front rather than left to fail later, because every way of getting this wrong
+    surfaces a long way from its cause:
+
+    - Inside the container the `make` default is `.venv/bin/python`, which is the HOST's venv
+      on the mounted workspace. Its torch is a cu130 build the driver cannot use, so
+      is_available() is False even though nvidia-smi shows four A100s. Pass
+      PY=<training venv>/bin/python.
+    - On the host itself, GPU compute is disabled by site policy (CUDA_VISIBLE_DEVICES is
+      blanked), so no interpreter there can train or predict regardless of its torch.
+
+    Left to itself, the first symptom is a CUDA error raised inside tlmtc - for training,
+    potentially after a long tokenisation pass. ``use_cpu`` is honoured as a deliberate escape
+    hatch: nothing in configs/eval/training/ sets it, and prediction takes it from a flag.
+    """
+    if use_cpu:
+        return
+    import torch
+
+    if torch.cuda.is_available():
+        return
+    raise SystemExit(
+        f"this interpreter cannot see a GPU: torch {torch.__version__}, "
+        f"cuda.is_available() False.\n"
+        f"  CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')!r}\n"
+        "  Inside the training container, point make at the training venv:\n"
+        "    make eval-train TASK=<task> PY=~/train-venv/bin/python\n"
+        "  On the GPU host outside a container, compute is disabled by site policy - launch a\n"
+        "  container first. See docs/eval-training.md."
+    )
+
+
+def require_clean_eval_pin(pin, *, allow_dirty: bool) -> dict:
+    """git_describe() of the eval pragmata pin, refusing one that pins nothing.
+
+    No SHA is worse than a dirty one: a dirty tree at least names the commit it drifted
+    from, whereas a pin git cannot describe at all pins nothing. Both refuse here, and
+    ``allow_dirty`` is the one deliberate way past either.
+
+    Shared by the two scoring scripts, which publish numbers that have to be re-derivable
+    from a commit of pragmata as well as of this workspace.
+    """
+    described = ws.git_describe(pin.repo)
+    if described["sha"] is None and not allow_dirty:
+        raise SystemExit(
+            f"the pragmata pin at {pin.src} is not inside a git checkout of its own - the\n"
+            f"numbers could not be reproduced from any SHA. Point PRAGMATA_EVAL_SRC at a\n"
+            f"checkout's src/, or pass --allow-dirty to score anyway."
+        )
+    if described["dirty"] and not allow_dirty:
+        raise SystemExit(
+            f"pragmata pin at {pin.repo} has uncommitted changes - the numbers would not be\n"
+            f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."
+        )
+    return described
+
+
+def run_score_cli(
+    pin, input_args: list[str], task: str, score_id: str, args, context: str
+) -> Path:
+    """Invoke `pragmata eval score` and return its report JSON path, freshness-checked.
+
+    Shared by both scoring scripts - the human one passes ``["--path", <csv>]``, the
+    synthetic one ``["--prediction-id", <id>]`` - so the load-bearing parts live exactly
+    once: the PYTHONPATH shadow (the workspace venv's CLI with the eval pin's src
+    shadowing the installed annotation pragmata, a frozen demo commit with no eval
+    module), the base_dir choice (pragmata's tool-root PARENT, so data/, matching the
+    existing data/annotation/ tree), and the mtime guard.
+
+    The guard: the report path below is reconstructed from pragmata's output layout
+    rather than reported by the CLI, and score_id is a slug reused run after run. If
+    that layout ever moves while the CLI still exits 0, the guessed path would resolve
+    to the PREVIOUS run's file and its stale numbers would be published under this
+    run's provenance. A file older than the subprocess cannot be its output, so the
+    clock is read before the run and the report must postdate it.
+    """
+    import subprocess
+    import time
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(pin.src)
+    command = [
+        str(pin.bin),
+        "eval",
+        "score",
+        *input_args,
+        "--task",
+        task,
+        "--base-dir",
+        str(ws.DATA_DIR),
+        "--score-id",
+        score_id,
+        "--ci",
+        str(args.ci),
+        "--n-resamples",
+        str(args.n_resamples),
+        "--seed",
+        str(args.seed),
+        # Panel completeness is pragmata's job (#305): skip records n_panels_skipped
+        # on the report; --all-panels accepts the bias instead.
+        "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
+    ]
+    started = time.time()
+    # check=False: the returncode is handled explicitly, to surface the CLI's own
+    # error tail rather than a bare CalledProcessError.
+    result = subprocess.run(
+        command, env=env, capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
+        raise SystemExit(f"eval score failed for {context}:\n  " + "\n  ".join(tail))
+    report_path = ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
+    if not report_path.exists() or report_path.stat().st_mtime < started:
+        why = "no such file" if not report_path.exists() else "it predates the run"
+        raise SystemExit(
+            f"eval score reported success for {context}, but the report it should\n"
+            f"  have written was not written by it ({why}):\n"
+            f"    {report_path}\n"
+            "  That path is reconstructed from pragmata's output layout, not reported by\n"
+            "  the CLI. If the layout has moved, fix run_score_cli() rather than\n"
+            "  publishing whatever file happens to sit there."
+        )
+    return report_path
+
+
+def _json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _evaluator_run(run_id: str, meta: dict) -> SimpleNamespace:
+    """One evaluator run's identity, from BOTH sidecars a completed run leaves behind.
+
+    The two say different things and callers need both. pragmata's
+    ``pragmata_train.meta.json`` carries run_id, task and a timestamp - which is what run
+    selection turns on. tlmtc's ``train_run_meta.json`` carries the model side, of which
+    ``label_names`` is the load-bearing field downstream: grounding trains on three of its five
+    labels, so what a prediction can possibly contain (and therefore whether it is scoreable at
+    all) is decided there rather than by the task. Absent rather than empty when the file is
+    missing, so a caller can tell "no labels" from "cannot say".
+    """
+    run_dir = TRAIN_OUTPUTS / run_id
+    tlmtc_meta_path = run_dir / "train_run_meta.json"
+    tlmtc_meta = _json(tlmtc_meta_path) if tlmtc_meta_path.is_file() else {}
+    return SimpleNamespace(
+        run_id=run_id,
+        run_dir=run_dir,
+        meta=meta,
+        tlmtc_meta=tlmtc_meta,
+        label_names=tlmtc_meta.get("label_names"),
+    )
+
+
+def resolve_evaluator_run(task: str, run_id: str | None = None) -> SimpleNamespace:
+    """The evaluator training run to use for a task: run_id, run_dir, both metas, label_names.
+
+    Reads ``pragmata_train.meta.json`` directly rather than through pragmata, so the
+    CPU-only consumers (evaluator_report's metrics table) need no eval module at all. It is
+    the same file and the same rule pragmata's ``resolve_eval_train_run_id`` applies - latest
+    by ``created_at`` with the run id as a deterministic tie-break, and an explicit run id
+    checked against the task it was trained for. ``predict_labels`` re-resolves it anyway, so
+    this is a pre-flight rather than a substitute: it lets a run print and record which
+    evaluator it settled on BEFORE loading a model.
+    """
+    if run_id is not None:
+        meta_path = TRAIN_OUTPUTS / run_id / "pragmata_train.meta.json"
+        if not meta_path.is_file():
+            raise SystemExit(
+                f"no evaluator run {run_id!r}: {meta_path} does not exist.\n"
+                "  Trained runs live under data/eval/train_outputs/<run_id>/; on the CPU box\n"
+                "  pull them first (make transfer-pull PREFIX=checkpoints)."
+            )
+        meta = _json(meta_path)
+        if meta.get("task") != task:
+            raise SystemExit(
+                f"evaluator {run_id!r} was trained for task={meta.get('task')!r}, not {task!r}."
+            )
+        return _evaluator_run(run_id, meta)
+
+    candidates = []
+    for meta_path in sorted(TRAIN_OUTPUTS.glob("*/pragmata_train.meta.json")):
+        meta = _json(meta_path)
+        if meta.get("task") == task:
+            candidates.append((meta.get("created_at", ""), meta_path.parent.name, meta))
+    if not candidates:
+        raise SystemExit(
+            f"no trained evaluator for task={task!r} under "
+            f"{TRAIN_OUTPUTS.relative_to(ws.ROOT)}.\n"
+            "  Train one (make eval-train TASK=<task>) or pull the checkpoints."
+        )
+    _created_at, resolved, meta = max(candidates)
+    return _evaluator_run(resolved, meta)

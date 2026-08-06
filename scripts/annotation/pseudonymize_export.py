@@ -100,7 +100,11 @@ def rewrite_iaa(path: Path, mapping: dict[str, str]) -> int:
                 before = pair.get(key, "")
                 pair[key] = pseudonym(before, mapping, path)
                 changed += pair[key] != before
-    path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    # Same temp-file-then-move as rewrite_csv, for the same reason: an interrupted run
+    # must not leave a half-written report that still holds some real names.
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    tmp.replace(path)
     return changed
 
 

@@ -46,6 +46,13 @@
 #   make eval-train TASK=retrieval         # train one evaluator (grounding is 2+ hours)
 # See docs/eval-training.md for the per-task config and what was tried and rejected.
 #
+# Eval prediction (applying the trained evaluators; same environment as training - GPU host):
+#   make eval-predict-inputs POPULATION=annotated       # -> data/eval-inputs/predict/annotated/
+#   make eval-predict TASK=retrieval POPULATION=annotated RUN_ID=<id>
+#   make eval-score-synthetic POPULATION=annotated      # -> synthetic_metric_estimates.*.csv
+#   make eval-evaluator-report                          # -> evaluator_metrics.csv (PART=calibration for the other)
+# See docs/eval-prediction.md for the populations, the run order and the output layout.
+#
 # Naming: every target is <namespace>-<operation>, the namespace being the tool or stage
 # it operates on — querygen-*, bot-*, combine-*, annotation-*, eval-*, transfer-*,
 # repro-*. Only the orchestrator (pipeline, plan) is bare. The stage targets share their
@@ -101,6 +108,7 @@ PIPELINE_ARGS := $(if $(ONLY),--only $(ONLY),) $(if $(FROM),--from $(FROM),) \
         annotation-report-plots \
         eval-report eval-score eval-catalog \
         eval-train-inputs eval-train-seqlen eval-train \
+        eval-predict-inputs eval-predict eval-score-synthetic eval-evaluator-report \
         transfer-push transfer-pull transfer-verify \
         repro-pin repro-verify repro-reproduce setup help
 
@@ -214,6 +222,48 @@ eval-train: ## Eval training: train one evaluator -> data/eval/train_outputs/<ru
 	  echo "usage: make eval-train TASK=retrieval|grounding|generation"; exit 2 ;; esac
 	$(PY) scripts/eval/train_evaluators.py train $(TASK) $(if $(THRESHOLD_TYPE),--threshold-type $(THRESHOLD_TYPE),)
 
+# --- eval prediction (applying the evaluators; see docs/eval-prediction.md) ---
+#
+# Same environment split as training: staging and scoring are CPU-only and run anywhere,
+# `eval-predict` needs the training venv inside the GPU container (PY=$$HOME/train-venv/bin/python).
+# There are no YAML configs here on purpose - population and evaluator run id are arguments,
+# because until the final run nothing is published for a pin to stand behind.
+
+eval-predict-inputs: ## Eval prediction: stage the unlabelled per-task CSVs -> data/eval-inputs/predict/<population>/ (POPULATION=annotated|corpus; EXPORTS=/CORPUS_DIR= to override the source)
+	@case "$(POPULATION)" in annotated|corpus) ;; *) \
+	  echo "usage: make eval-predict-inputs POPULATION=annotated|corpus"; exit 2 ;; esac
+	$(PY) scripts/eval/predict_evaluators.py predict-inputs --population $(POPULATION) \
+	  $(if $(EXPORTS),--exports $(EXPORTS),) $(if $(CORPUS_DIR),--corpus-dir $(CORPUS_DIR),)
+
+# RUN_ID is optional and should not be: the script defaults to the latest evaluator for the
+# task and says so, which is right for a scratch run and wrong for a published one. Pass it
+# for anything whose numbers leave the box.
+# POPULATION=testsplit is internal - `eval-evaluator-report PART=calibration` stages a run's
+# own held-out split and predicts it in one pass. It is accepted here so that pass can be
+# repeated by hand, which needs RUN_ID to name the run the split was staged from.
+eval-predict: ## Eval prediction: one evaluator over one population -> data/eval/prediction_outputs/<run_id>-<population>/ (TASK=, POPULATION=annotated|corpus|testsplit, RUN_ID=, BATCH_SIZE=)
+	@case "$(TASK)" in retrieval|grounding|generation) ;; *) \
+	  echo "usage: make eval-predict TASK=retrieval|grounding|generation POPULATION=annotated|corpus (testsplit is internal - see make help)"; exit 2 ;; esac
+	@case "$(POPULATION)" in annotated|corpus|testsplit) ;; *) \
+	  echo "usage: make eval-predict TASK=$(TASK) POPULATION=annotated|corpus, or testsplit with RUN_ID= (internal - staged by eval-evaluator-report PART=calibration)"; exit 2 ;; esac
+	$(PY) scripts/eval/predict_evaluators.py predict $(TASK) --population $(POPULATION) \
+	  $(if $(RUN_ID),--evaluator-run-id $(RUN_ID),) $(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),)
+
+eval-score-synthetic: ## Eval prediction: score one predicted population -> synthetic_metric_estimates.<population>.csv (POPULATION=annotated|corpus, default annotated)
+	$(PY) scripts/eval/score_synthetic_predictions.py \
+	  --population $(if $(POPULATION),$(POPULATION),annotated) $(EVAL_ARGS)
+
+# PART=metrics is CPU-only and is the Thursday deliverable; PART=calibration re-predicts each
+# run's own test split, so it needs the training venv the way eval-predict does.
+# RUN_IDS is a space-separated list of <task>=<run_id>, not a bare id: this target reports on
+# all three tasks at once.
+eval-evaluator-report: ## Eval prediction: evaluator quality -> evaluator_metrics.csv / evaluator_calibration.csv (PART=metrics|calibration, default metrics; RUN_IDS="retrieval=<id> ...", BATCH_SIZE= for calibration)
+	@case "$(if $(PART),$(PART),metrics)" in metrics|calibration) ;; *) \
+	  echo "usage: make eval-evaluator-report PART=metrics|calibration"; exit 2 ;; esac
+	$(PY) scripts/eval/evaluator_report.py $(if $(PART),$(PART),metrics) $(EVAL_ARGS) \
+	  $(foreach pair,$(RUN_IDS),--run-id $(pair)) \
+	  $(if $(filter calibration,$(PART)),$(if $(BATCH_SIZE),--batch-size $(BATCH_SIZE),),)
+
 # --- data transport (Blob, staged through data/transfer/; EVAL_BLOB_* env names are
 #     historical - the pipe is not eval-specific) ---
 
@@ -223,11 +273,11 @@ transfer-push: ## Push a tree to the transfer Blob (SRC= source tree, PREFIX= de
 
 transfer-pull: ## Pull a Blob prefix into data/transfer/<prefix>/ + verify (PREFIX= required)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-pull PREFIX=<prefix>"; exit 2; }
-	bash scripts/transfer/sync.sh pull $(PREFIX)
+	bash scripts/transfer/sync.sh pull "$(PREFIX)"
 
 transfer-verify: ## Re-verify an already-pulled tree against its manifest (PREFIX= under data/transfer/)
 	@test -n "$(PREFIX)" || { echo "usage: make transfer-verify PREFIX=<prefix>"; exit 2; }
-	bash scripts/transfer/sync.sh verify $(PREFIX)
+	bash scripts/transfer/sync.sh verify "$(PREFIX)"
 
 # --- reproducibility (dated bundles; see reproducibility/README.md for the contract) ---
 

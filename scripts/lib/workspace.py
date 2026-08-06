@@ -29,29 +29,13 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"  # pragmata base_dir; tools write DATA_DIR/<tool>
 SETTINGS = ROOT / "configs" / "settings.conf"  # workspace-global operational tunables
 
-
-def stage(tool: str) -> SimpleNamespace:
-    """Per-stage path bundle for a pipeline tool (annotation, eval, ...).
-
-    Mirrors pragmata's tool_root model: ``data`` is the pragmata tool dir
-    (DATA_DIR/<tool>); the others are the workspace-owned stage dirs.
-    """
-    return SimpleNamespace(
-        scripts=ROOT / "scripts" / tool,
-        configs=ROOT / "configs" / tool,
-        data=DATA_DIR / tool,
-        logs=ROOT / "logs" / tool,
-        reports=ROOT / "reports" / tool,
-    )
-
-
-# Annotation stage paths. The eval scripts resolve their own output dir through
-# stage_report_dir("eval") and read explicit paths otherwise, so they need no bundle here.
-_A = stage("annotation")
-DOMAINS_DIR = _A.configs / "domains"  # per-domain annotation task YAMLs
-LOGS_DIR = _A.logs  # log.jsonl + run logs (flat)
-REPORTS_DIR = _A.reports  # rendered tables + plots
-EXPORTS_DIR = _A.data / "exports"  # pragmata annotation tool: exports/imports
+# Annotation stage paths — the only stage with a fixed set of them. The eval scripts
+# resolve their output dir through stage_report_dir("eval") and read explicit paths
+# otherwise, so they need none here.
+DOMAINS_DIR = ROOT / "configs" / "annotation" / "domains"  # per-domain task YAMLs
+LOGS_DIR = ROOT / "logs" / "annotation"  # log.jsonl + run logs (flat)
+REPORTS_DIR = ROOT / "reports" / "annotation"  # rendered tables + plots
+EXPORTS_DIR = DATA_DIR / "annotation" / "exports"  # pragmata's exports/imports
 RUNS_DIR = DATA_DIR / "querygen" / "runs"  # querygen tool (pragmata sibling)
 OUT_DIR = DATA_DIR / "publikationsbot"  # workspace bot output (sibling)
 
@@ -94,8 +78,10 @@ def read_snapshots(path: Path | None = None) -> list[dict]:
 def select_snapshot(path: Path | None = None, line: int = -1) -> dict:
     """One checked snapshot by 0-based index, negative counting from the end.
 
-    Splits the log but parses only the selected line: the file is tens of MB and the
-    reporting scripts need a single snapshot out of it.
+    Reads the whole log — indexing needs the line count — but parses JSON for the
+    selected line only: the file is tens of MB and the reporting scripts need a single
+    snapshot out of it. Prefer find_snapshot() when the wanted ``run_at`` is known; that
+    one streams and stops at the match.
     """
     path = _snapshot_log(path)
     lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
@@ -207,21 +193,13 @@ def find_first_snapshot_after(
     operator-supplied timestamp.
     """
     after_dt = datetime.fromisoformat(after)
-    path = _snapshot_log(path)
-    with path.open(encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line:
-                continue
-            snapshot = json.loads(line)
-            run_at = snapshot.get("run_at")
-            if not run_at or datetime.fromisoformat(run_at) <= after_dt:
-                continue
-            check_snapshot(snapshot)
-            digest = hashlib.sha256(line.encode()).hexdigest()
-            return snapshot, {"run_at": run_at, "sha256": digest}
+    found = _first_snapshot_matching(
+        lambda at: datetime.fromisoformat(at) > after_dt, path
+    )
+    if found is not None:
+        return found
     raise SystemExit(
-        f"no snapshot after {after} in {path}.\n"
+        f"no snapshot after {after} in {_snapshot_log(path)}.\n"
         "The export finished but `make annotation-log` has not logged one since - run it, "
         "or pass RUN_AT explicitly to pin a different snapshot."
     )
@@ -232,27 +210,30 @@ def _resolve_run_at(created_at: str, run_at: str | None) -> str:
 
     A snapshot predating the export describes the Argilla instance BEFORE these labels
     were exported, not beside them; one lagging by more than _MAX_EXPORT_TO_SNAPSHOT_LAG is
-    implausibly far from a same-run pairing to be it by coincidence.
+    implausibly far from a same-run pairing to be it by coincidence. The lag guard applies
+    to the derived value too: "the first snapshot after the export" is only the export's
+    own snapshot if one was logged at all, and the next nightly run also comes after.
     """
+    created_dt = datetime.fromisoformat(created_at)
     if run_at is None:
         _snapshot, identity = find_first_snapshot_after(created_at)
-        return identity["run_at"]
-
-    _snapshot, identity = find_snapshot(run_at)
-    created_dt = datetime.fromisoformat(created_at)
-    run_dt = datetime.fromisoformat(identity["run_at"])
-    if run_dt <= created_dt:
+        origin = f"the first snapshot after the export (run_at={identity['run_at']})"
+    else:
+        _snapshot, identity = find_snapshot(run_at)
+        origin = f"RUN_AT={run_at}"
+        if datetime.fromisoformat(identity["run_at"]) <= created_dt:
+            raise SystemExit(
+                f"RUN_AT={run_at} predates the export (created_at={created_at}) - that "
+                "snapshot describes the Argilla instance before these labels were "
+                "exported, not beside them."
+            )
+    lag = datetime.fromisoformat(identity["run_at"]) - created_dt
+    if lag > _MAX_EXPORT_TO_SNAPSHOT_LAG:
         raise SystemExit(
-            f"RUN_AT={run_at} predates the export (created_at={created_at}) - that "
-            "snapshot describes the Argilla instance before these labels were exported, "
-            "not beside them."
-        )
-    if run_dt - created_dt > _MAX_EXPORT_TO_SNAPSHOT_LAG:
-        raise SystemExit(
-            f"RUN_AT={run_at} is {run_dt - created_dt} after the export "
-            f"(created_at={created_at}) - too far from a same-run pairing (the nightly "
-            "cron's gap is under a minute). Pass the run_at `make annotation-log` printed "
-            "for this export, or omit RUN_AT to derive it."
+            f"{origin} is {lag} after the export (created_at={created_at}) - too far from "
+            "a same-run pairing (the nightly cron's gap is under a minute). Pin the "
+            "snapshot `make annotation-log` printed for this export, or check that one "
+            "was logged for it at all."
         )
     return identity["run_at"]
 
@@ -266,8 +247,8 @@ def resolve_freeze_pin(
     programmes. DATE defaults to that moment's UTC calendar date, so a freeze cut a day
     late (or on a re-run export) is still named for the export it freezes, not for
     whenever the operator happened to run the command. RUN_AT defaults to the first log
-    snapshot taken after that moment, or is validated against it if given explicitly -
-    see ``_resolve_run_at``.
+    snapshot taken after that moment; derived or given, it is validated against the export
+    - see ``_resolve_run_at``.
     """
     created_at = export_created_at(export_dir)
     resolved_date = date or datetime.fromisoformat(created_at).date().isoformat()
@@ -315,7 +296,11 @@ def username_to_user_id(client=None) -> dict[str, str]:
 
 
 def eval_pragmata() -> SimpleNamespace:
-    """Resolve the eval-side pragmata pin: source tree, its repo, and the CLI to run it.
+    """Resolve the eval-side pragmata pin: source tree, its checkout, the CLI to run it.
+
+    ``repo`` is the git checkout the source tree belongs to, or None when it is not in
+    one — see pragmata_repo(); a caller that needs a SHA has to say what it does about
+    that rather than get a plausible-looking wrong one.
 
     The installed pragmata is git-pinned in ``pyproject.toml`` to a frozen demo commit
     that has no eval module at all, so eval needs its own pin. Kept separate (rather
@@ -341,7 +326,30 @@ def eval_pragmata() -> SimpleNamespace:
     binary = ROOT / ".venv" / "bin" / "pragmata"
     if not binary.exists():
         raise SystemExit(f"no pragmata CLI at {binary} — create the workspace venv.")
-    return SimpleNamespace(src=src_path, repo=src_path.parent, bin=binary)
+    return SimpleNamespace(src=src_path, repo=pragmata_repo(src_path), bin=binary)
+
+
+def pragmata_repo(src: Path) -> Path | None:
+    """The git checkout a pragmata source tree belongs to, or None if there is none.
+
+    Asked of git rather than assumed to be ``src.parent``: the documented layout is
+    ``<checkout>/src``, but a tree one level deeper (or a src dir sitting loose inside
+    another repo) would git-describe whatever repo happens to be above it and record that
+    SHA as pragmata's. The workspace itself is excluded for the same reason — an installed
+    pragmata under ``.venv/`` is inside THIS repo, and borrowing our own commit as the
+    pin's would be worse than recording no SHA at all.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(src), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    top = Path(out.stdout.strip())
+    return None if top == ROOT else top
 
 
 def load_dotenv(path: Path) -> None:
@@ -363,11 +371,11 @@ def load_dotenv(path: Path) -> None:
 
 
 def pragmata_pin() -> dict:
-    """The annotation pragmata pin: git URL and commit of the installed package.
+    """The annotation pragmata pin: ``{"sha": <commit of the installed package>}``.
 
     pragmata is a git dependency pinned to an exact SHA in pyproject.toml, so the
     authoritative record of what is installed is the wheel's own ``direct_url.json``
-    (PEP 610) rather than anything the environment claims. Returns empty strings if
+    (PEP 610) rather than anything the environment claims. ``sha`` is the empty string if
     pragmata was installed some other way - a caller writing provenance should notice.
     """
     try:
@@ -375,10 +383,7 @@ def pragmata_pin() -> dict:
     except importlib.metadata.PackageNotFoundError:
         raw = None
     info = json.loads(raw) if raw else {}
-    return {
-        "url": info.get("url", ""),
-        "sha": info.get("vcs_info", {}).get("commit_id", ""),
-    }
+    return {"sha": info.get("vcs_info", {}).get("commit_id", "")}
 
 
 def load_env() -> None:
@@ -476,12 +481,17 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def git_describe(repo: Path) -> dict:
+def git_describe(repo: Path | None) -> dict:
     """Commit SHA, branch and dirty flag for a git repo (all None if unavailable).
 
     ``dirty`` matters as much as the SHA: a number scored from a modified tree is
-    not reproducible from the SHA alone, so callers can refuse to run on True.
+    not reproducible from the SHA alone, so callers can refuse to run on True. A caller
+    that has no repo to describe (``None``) gets the same all-None shape, so the record
+    keeps its field either way — and a ``sha`` of None is no more reproducible than a
+    dirty one.
     """
+    if repo is None:
+        return {"sha": None, "branch": None, "dirty": None}
 
     def _git(*args: str) -> str | None:
         try:
@@ -506,6 +516,18 @@ def git_describe(repo: Path) -> dict:
     }
 
 
+def _input_record(path: Path) -> dict:
+    """One hashed input for a provenance record; a missing one is marked, never dropped.
+
+    Omitting it would read as "this artifact was built without that input", which is a
+    different (and untrue) claim from "the input it was built from is no longer there".
+    """
+    rel = str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path)
+    if not path.exists():
+        return {"path": rel, "sha256": None, "missing": True}
+    return {"path": rel, "sha256": sha256_file(path)}
+
+
 def provenance(
     *,
     script: str,
@@ -517,10 +539,12 @@ def provenance(
     """Provenance record for a generated artifact — identity, not explanation.
 
     ``inputs`` are hashed individually so a changed export is detectable without
-    re-deriving anything. ``snapshot`` is the ``{run_at, sha256}`` identity from
-    find_snapshot, for the artifacts derived from a log snapshot. ``extra`` carries the
-    caller's own parameters — filter policy, confidence level, seeds — which no generic
-    helper can infer.
+    re-deriving anything; one that does not exist is recorded as
+    ``{"path": ..., "sha256": null, "missing": true}`` rather than left out, so the list
+    always names every input the caller declared. ``snapshot`` is the ``{run_at, sha256}``
+    identity from find_snapshot, for the artifacts derived from a log snapshot. ``extra``
+    carries the caller's own parameters — filter policy, confidence level, seeds — which
+    no generic helper can infer.
 
     The data dictionary is pinned unconditionally rather than passed in: every eval
     artifact is read alongside it, so no script gets to omit it.
@@ -539,18 +563,13 @@ def provenance(
             "path": str(DATA_DICTIONARY.relative_to(ROOT)),
             "sha256": sha256_file(DATA_DICTIONARY),
         },
-        "inputs": [
-            {
-                "path": str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p),
-                "sha256": sha256_file(p),
-            }
-            for p in inputs
-            if p.exists()
-        ],
+        "inputs": [_input_record(p) for p in inputs],
     }
     if pragmata_src is not None:
-        # The pin is <checkout>/src, so the repo is its parent.
-        record["pragmata_git"] = git_describe(pragmata_src.parent)
+        # Which checkout the source tree belongs to is asked of git, not inferred from the
+        # path: an installed pragmata has no checkout of its own, and its sha comes out
+        # null rather than borrowed from whatever repo it happens to sit inside.
+        record["pragmata_git"] = git_describe(pragmata_repo(pragmata_src))
         record["pragmata_src"] = str(pragmata_src)
     if snapshot is not None:
         record["snapshot"] = snapshot
@@ -567,7 +586,7 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         for row in rows:
             writer.writerow({c: row.get(c, "") for c in columns})
@@ -579,8 +598,8 @@ def write_csv(path: Path, rows: list[dict], *, columns: list[str], prov: dict) -
     # handover folder is unreadable without the wording the pin refers to. Done here,
     # in the layer that already knows the output directory, so a direct script run and
     # a make run behave identically and no second clock resolves "today's dir".
-    if "data_dictionary" in prov:
-        (path.parent / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
+    # Unconditional: provenance() pins the dictionary in every record it builds.
+    (path.parent / DATA_DICTIONARY.name).write_bytes(DATA_DICTIONARY.read_bytes())
 
 
 def read_jsonl(path: Path) -> list[dict]:

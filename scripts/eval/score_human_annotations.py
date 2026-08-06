@@ -2,8 +2,9 @@
 """Corpus metrics from the human-labelled annotations.
 
 Columns and caveats are defined in `docs/eval-data-dictionary.md`
-(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, is reserved for
-the evaluator-model run and does not exist yet.
+(`eval_metric_estimates.csv`). Its twin, `score_synthetic_predictions.py`, scores the same
+metric taxonomy on an evaluator model's predictions and reuses this module's row builders, so
+the two CSVs stay column-for-column comparable.
 
 Pools the frozen canonical export across programmes, runs `pragmata eval score` once per
 task, and collects every per-metric estimate into one tidy CSV. Pooling is also what makes
@@ -16,20 +17,20 @@ would silently produce @K metrics over partial chunk sets. The filter is therefo
 here, explicitly and in version control: submitted responses only, and for retrieval
 `--skip-incomplete-panels` (pragmata #305), which records the drop as `n_panels_skipped`.
 Calibration items stay in — majority consolidation coalesces them exactly as when
-training; `--exclude-calibration` drops wholly-calibration queries at query grain.
+training; `--exclude-calibration` drops wholly-calibration queries at query grain, which
+keeps the calibration chunks of mixed retrieval panels (see `policy_name`).
 
 Usage:
   scripts/eval/score_human_annotations.py                        # the reportable policy
   scripts/eval/score_human_annotations.py --exclude-calibration  # production-only run
   scripts/eval/score_human_annotations.py --all-panels           # no completeness filter
-  scripts/eval/score_human_annotations.py --allow-dirty          # allow a dirty pin
+  scripts/eval/score_human_annotations.py --allow-dirty          # dirty/unpinned pragmata
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -117,7 +118,19 @@ FILTERED_ROOT = ws.DATA_DIR / "eval-inputs"
 
 
 def policy_name(args) -> str:
-    """Short slug naming the filter combination, used in paths and in every row."""
+    """Short slug naming the filter combination, used in paths and in every row.
+
+    ``prod-*`` is shorthand, not a guarantee of a calibration-free population. The filter
+    it names works at QUERY grain (see ec.drop_calibration_queries), so it removes only
+    wholly-calibration queries; the calibration CHUNKS of a mixed retrieval panel stay in,
+    because dropping them would break their panel's @K denominators. In the frozen
+    2026-07-30 tree that leaves 476 of 1836 submitted retrieval rows — roughly a quarter —
+    calibration even under ``prod-*``. Grounding and generation, one record per query, are
+    genuinely calibration-free there.
+
+    The slugs are published schema (the `policy` column, and the filename suffix), so they
+    are described rather than renamed.
+    """
     return "-".join(
         [
             "prod" if args.exclude_calibration else "calib",
@@ -168,52 +181,19 @@ def attach_alpha(row: dict, metric: str, task: str, alphas: dict) -> None:
 def run_score(pin, csv_path: Path, task: str, score_id: str, args) -> Path:
     """Invoke `pragmata eval score` on a filtered CSV; return the report JSON path.
 
-    Runs the workspace venv's own CLI with the eval pin's src on PYTHONPATH, which
-    shadows the installed annotation pragmata - a frozen demo commit with no eval
-    module. One venv serves both: pandera, the only thing the eval module needs
-    beyond the annotation side, is a workspace dependency in pyproject.toml.
+    The subprocess mechanics - PYTHONPATH shadow, base_dir, the stale-report mtime
+    guard - live in ec.run_score_cli, shared with the synthetic scorer. One venv
+    serves both pragmata halves: pandera, the only thing the eval module needs beyond
+    the annotation side, is a workspace dependency in pyproject.toml.
     """
-    import os
-
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(pin.src)
-    command = [
-        str(pin.bin),
-        "eval",
-        "score",
-        "--path",
-        str(csv_path),
-        "--task",
+    return ec.run_score_cli(
+        pin,
+        ["--path", str(csv_path)],
         task,
-        # base_dir defaults to the process cwd. It is pragmata's tool-root PARENT —
-        # tools write <base_dir>/{annotation,querygen,eval} as siblings — so this must
-        # be data/, matching the existing data/annotation/ tree. Passing the repo root
-        # instead scatters an eval/ tree beside the source.
-        "--base-dir",
-        str(ws.DATA_DIR),
-        "--score-id",
         score_id,
-        "--ci",
-        str(args.ci),
-        "--n-resamples",
-        str(args.n_resamples),
-        "--seed",
-        str(args.seed),
-        # Panel completeness is pragmata's job (#305): skip records n_panels_skipped
-        # on the report; --all-panels accepts the bias instead.
-        "--allow-incomplete-panels" if args.all_panels else "--skip-incomplete-panels",
-    ]
-    # check=False: the returncode is handled explicitly below, to surface the CLI's own
-    # error tail rather than a bare CalledProcessError.
-    result = subprocess.run(
-        command, env=env, capture_output=True, text=True, check=False
+        args,
+        context=f"{score_id}/{task}",
     )
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout).strip().splitlines()[-6:]
-        raise SystemExit(
-            f"eval score failed for {score_id}/{task}:\n  " + "\n  ".join(tail)
-        )
-    return ws.DATA_DIR / "eval" / "scores" / score_id / f"{task}_scores.json"
 
 
 def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list[dict]:
@@ -224,7 +204,10 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
             continue
         if value is None:
             # conditional_fabrication_rate is None when no query cited a source, i.e.
-            # the conditional is undefined rather than zero.
+            # the conditional is undefined rather than zero. source_labels is still
+            # filled: which labels the metric WOULD rest on is a property of the metric,
+            # not of this run, and empty_rows() fills it on its n=0 rows for the same
+            # reason. Blanking it here made one undefined row look different in kind.
             rows.append(
                 {
                     "task": task,
@@ -233,6 +216,7 @@ def rows_from_report(report: dict, task: str, policy: str, alphas: dict) -> list
                     "n_examples": report.get("n_examples", ""),
                     "ci_level": report.get("ci_level", ""),
                     "status": "undefined_no_denominator",
+                    "source_labels": ";".join(METRIC_LABELS.get(metric, ())),
                 }
             )
             continue
@@ -305,17 +289,12 @@ def main() -> int:
     ap.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="Score even if the pragmata pin has uncommitted changes.",
+        help="Score even if the pragmata pin is dirty or names no commit at all.",
     )
     args = ap.parse_args()
 
     pin = ws.eval_pragmata()
-    pragmata_git = ws.git_describe(pin.repo)
-    if pragmata_git.get("dirty") and not args.allow_dirty:
-        raise SystemExit(
-            f"pragmata pin at {pin.repo} has uncommitted changes — the numbers would not be\n"
-            f"reproducible from its SHA. Commit/stash there, or pass --allow-dirty."
-        )
+    ec.require_clean_eval_pin(pin, allow_dirty=args.allow_dirty)
 
     policy = policy_name(args)
     filtered_root = FILTERED_ROOT / policy
@@ -361,7 +340,9 @@ def main() -> int:
     # runs with different flags would otherwise overwrite each other at one path, and
     # the difference would only be visible inside the file.
     suffix = "" if policy == DEFAULT_POLICY else f".{policy}"
-    target = ec.out_dir(args.out_dir) / f"eval_metric_estimates{suffix}.csv"
+    target = (
+        ws.stage_report_dir("eval", args.out_dir) / f"eval_metric_estimates{suffix}.csv"
+    )
     ws.write_csv(
         target,
         rows,
@@ -377,7 +358,8 @@ def main() -> int:
             excluded_programmes=sorted(ec.EXCLUDED_PROGRAMMES),
             filters={
                 "response_status": "submitted",
-                "calibration": "excluded (query grain)"
+                "calibration": "wholly-calibration queries dropped (query grain); "
+                "calibration chunks inside mixed retrieval panels kept"
                 if args.exclude_calibration
                 else "included",
                 "retrieval_panels": (

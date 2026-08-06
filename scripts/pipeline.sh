@@ -126,6 +126,10 @@ stage_bot_run() {
 
 stage_combine_run() {
   mapfile -t doms < <(filter_domains)
+  # An empty array expands to no arguments at all, which build_combined.py reads as "every
+  # domain" - the exact opposite of what a filter matching nothing asked for. Skip instead,
+  # as the two while-read stages below already do by having nothing to loop over.
+  (( ${#doms[@]} > 0 )) || { log "combine-run: no domains matched --filter '$FILTER'; skipping"; return 0; }
   "$PY" scripts/annotation/build_combined.py "${doms[@]}"
 }
 

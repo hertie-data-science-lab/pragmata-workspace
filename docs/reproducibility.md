@@ -28,7 +28,9 @@ make repro-reproduce PIN=<bundle-dir>           # replay a lineage bundle (MODE=
 
 `ABSENT` is expected for artefacts held outside git (the corpus, Argilla dumps, the
 PII-carrying export tree); verify prints the bundle's `fetch:` line so you know where to
-get them. `MISMATCH` always means something is wrong.
+get them. `MISMATCH` always means something is wrong, and outranks any number of absences
+in other bundles - a whole-tree run exits 2 if a single pin anywhere mismatched. Verifying
+nothing is a failure too: no bundles at all, or a bundle with an empty `pins.sha256`.
 
 ## Replaying the lineage
 
@@ -54,3 +56,6 @@ make repro-reproduce PIN=2026-07-01-annotation-curation MODE=responses BACKUP=<d
 
 Without `APPLY=1` nothing mutates: the preview reports the composed expectation and what a
 prune would delete, which doubles as the check that live still matches the lineage.
+`APPLY=1` requires a `MODE=`: the prune reduces a **superset** to the keep-lists, so
+applying without rebuilding one first would delete live records down to a state the
+lineage never described.
